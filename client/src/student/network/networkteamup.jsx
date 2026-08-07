@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useNetworkState } from './NetworkContext'
+import demoIntroVideo from '../../assets/otherintroduction.mp4'
 
-const DEMO_VIDEO_URL = '/src/assets/otherintroduction.mp4'
+const DEMO_VIDEO_URL = demoIntroVideo
 
 const ALL_REQUESTS = [
   { id: 1, name: 'Aryan Mehta', college: 'IIT Kharagpur', role: 'Full-Stack Developer', skills: ['React', 'Node.js'], streak: 15, skillsByLevel: { Pro: ['React'], Intermediate: ['Node.js'], Beginner: [] }, title: 'Need a React teammate for startup landing page', type: 'Web Project', slots: '2/4 filled', trustScore: 880, avatar: 'A', availability: 'Open for startup projects', githubLink: [], projects: [{ name: 'Startup Dashboard', desc: 'React + Node.js SaaS dashboard with auth and analytics.', link: 'https://github.com/topics/react', demoLink: 'https://github.com/topics/react', saved: true }] },
@@ -103,10 +104,17 @@ function ProfileModal({ person, onClose }) {
   const [levelFilter, setLevelFilter] = useState('All')
   if (!person) return null
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return
     if (isPlaying) { videoRef.current.pause(); setIsPlaying(false) }
-    else { videoRef.current.play(); setIsPlaying(true) }
+    else {
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
+    }
   }
 
   const savedProjects = (person.projects || []).filter(p => p.saved)

@@ -103,10 +103,17 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, skills, githubLin
   const [isPlaying, setIsPlaying] = useState(false)
   const verifiedSkills = skills.filter(s => VERIFIED_SKILL_SET.has(s))
 
-  const toggle = () => {
+  const toggle = async () => {
     if (!videoRef.current) return
     if (isPlaying) { videoRef.current.pause(); setIsPlaying(false) }
-    else { videoRef.current.play(); setIsPlaying(true) }
+    else {
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
+    }
   }
 
   const savedProjects = projects.filter(p => p.saved)
@@ -275,10 +282,17 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
   const videoRef = useRef(null)
   const verifiedSkills = skills.filter(s => VERIFIED_SKILL_SET.has(s))
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return
     if (isPlaying) { videoRef.current.pause(); setIsPlaying(false) }
-    else { videoRef.current.play(); setIsPlaying(true) }
+    else {
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
+    }
   }
 
   const updateProject = (i, field, val) =>

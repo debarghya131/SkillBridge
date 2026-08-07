@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { useNetworkState } from './NetworkContext'
+import demoIntroVideo from '../../assets/otherintroduction.mp4'
 
 const VERIFIED_SKILL_SET = new Set(['React', 'Node.js', 'UI/UX Design'])
-const DEMO_VIDEO_URL = '/src/assets/otherintroduction.mp4'
+const DEMO_VIDEO_URL = demoIntroVideo
 
 const suggestedConnections = [
   {
@@ -219,14 +220,18 @@ function ProfileModal({ person, connectSent, teamUpSent, onClose, onConnect, onC
     ? (verifiedSkills.length > 0 ? verifiedSkills : person.skills)
     : (person.skillsByLevel?.[levelFilter] ?? [])
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return
     if (isPlaying) {
       videoRef.current.pause()
       setIsPlaying(false)
     } else {
-      videoRef.current.play()
-      setIsPlaying(true)
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildDefaultCompanyGigManagementState, mergeCompanyGigManagementState } from './companyGigDemoData'
+import profileIntroVideo from '../assets/otherintroduction.mp4'
 
 const statusMeta = {
   Hiring: { bg: '#D1FAE5', color: '#065F46' },
@@ -7,7 +8,7 @@ const statusMeta = {
   'In Progress': { bg: '#EDE9FE', color: '#7C3AED' },
 }
 
-const PROFILE_VIDEO_URL = '/src/assets/otherintroduction.mp4'
+const PROFILE_VIDEO_URL = profileIntroVideo
 const PROFILE_LEVEL_META = {
   Pro: { bg: '#F3E8FF', color: '#7C3AED' },
   Intermediate: { bg: '#EFF6FF', color: '#1D4ED8' },
@@ -347,15 +348,19 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
     ? applicant.skills
     : (applicant.skillsByLevel?.[levelFilter] || [])
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return
 
     if (isPlaying) {
       videoRef.current.pause()
       setIsPlaying(false)
     } else {
-      videoRef.current.play()
-      setIsPlaying(true)
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
     }
   }
 

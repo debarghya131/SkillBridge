@@ -29,10 +29,11 @@ import PaymentSection from './PaymentSection'
 import SetupBusinessProfile from './SetupBusinessProfile'
 import ProjectWorkspace from './ProjectWorkspace'
 import { toast } from '../ui/toast'
+import demoIntroVideo from '../assets/otherintroduction.mp4'
 
 const SKILL_LEVELS = ['All', 'Beginner', 'Intermediate', 'Pro']
 const VERIFIED_SKILL_SET = new Set(['React', 'Node.js', 'UI/UX Design', 'Python', 'SEO', 'Content Writing'])
-const DEMO_VIDEO_URL = '/src/assets/otherintroduction.mp4'
+const DEMO_VIDEO_URL = demoIntroVideo
 
 const LEVEL_META = {
   Pro: { bg: '#F3E8FF', color: '#7C3AED' },
@@ -80,14 +81,18 @@ function TalentProfileModal({ profile, onClose }) {
     ? (verifiedSkills.length > 0 ? verifiedSkills : profile.skills)
     : (profile.skillsByLevel?.[levelFilter] ?? [])
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!videoRef.current) return
     if (isPlaying) {
       videoRef.current.pause()
       setIsPlaying(false)
     } else {
-      videoRef.current.play()
-      setIsPlaying(true)
+      try {
+        await videoRef.current.play()
+        setIsPlaying(true)
+      } catch {
+        setIsPlaying(false)
+      }
     }
   }
 

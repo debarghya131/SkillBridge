@@ -1,5 +1,9 @@
 import studentIntroVideo from '../assets/studentintro.mp4'
 
+const LEGACY_STUDENT_VIDEO_URLS = new Set([
+  '/src/assets/studentintro.mp4',
+])
+
 export const DEFAULT_STUDENT_SKILLS = ['React', 'Node.js', 'UI/UX Design']
 
 export const DEFAULT_STUDENT_PROJECTS = [
@@ -38,6 +42,10 @@ export const DEFAULT_STUDENT_PROFILE = {
 }
 
 export function mergeStudentProfile(student = {}) {
+  const videoUrl = LEGACY_STUDENT_VIDEO_URLS.has(student.videoUrl)
+    ? studentIntroVideo
+    : student.videoUrl || DEFAULT_STUDENT_PROFILE.videoUrl
+
   return {
     name: student.name || DEFAULT_STUDENT_PROFILE.name,
     trustScore: Number.isFinite(student.trustScore) ? student.trustScore : DEFAULT_STUDENT_PROFILE.trustScore,
@@ -48,6 +56,6 @@ export function mergeStudentProfile(student = {}) {
     projects: Array.isArray(student.projects) && student.projects.length > 0
       ? student.projects
       : DEFAULT_STUDENT_PROFILE.projects.map(project => ({ ...project })),
-    videoUrl: student.videoUrl || DEFAULT_STUDENT_PROFILE.videoUrl,
+    videoUrl,
   }
 }
