@@ -7,7 +7,7 @@ import Earning from './earning/earning'
 import StudentNav from './studentNav'
 import StudentSidebar from './studentSidebar'
 import { clearStudentSessionToken, fetchCurrentStudent, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
-import { mergeStudentProfile } from './studentProfileDefaults'
+import { isBundledStudentIntroVideoUrl, mergeStudentProfile } from './studentProfileDefaults'
 import { toast } from '../ui/toast'
 
 const NAV_ITEMS = [
@@ -842,7 +842,7 @@ export default function StudentDashboard() {
         githubLink,
         contactInfo,
         projects,
-        videoUrl,
+        videoUrl: isBundledStudentIntroVideoUrl(videoUrl) ? null : videoUrl,
       }).catch(() => {})
     }, 350)
 

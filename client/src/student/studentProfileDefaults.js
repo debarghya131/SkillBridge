@@ -1,8 +1,25 @@
 import studentIntroVideo from '../assets/studentintro.mp4'
 
-const LEGACY_STUDENT_VIDEO_URLS = new Set([
-  '/src/assets/studentintro.mp4',
-])
+export function isBundledStudentIntroVideoUrl(videoUrl) {
+  if (typeof videoUrl !== 'string' || !videoUrl.trim()) {
+    return false
+  }
+
+  const rawValue = videoUrl.trim()
+  const pathname = (() => {
+    try {
+      return new URL(rawValue, 'https://skillbridge.local').pathname
+    } catch {
+      return rawValue.split(/[?#]/)[0]
+    }
+  })()
+
+  return (
+    rawValue === studentIntroVideo ||
+    pathname === '/src/assets/studentintro.mp4' ||
+    /^\/assets\/studentintro-[A-Za-z0-9_-]+\.mp4$/.test(pathname)
+  )
+}
 
 export const DEFAULT_STUDENT_SKILLS = ['React', 'Node.js', 'UI/UX Design']
 
@@ -42,7 +59,7 @@ export const DEFAULT_STUDENT_PROFILE = {
 }
 
 export function mergeStudentProfile(student = {}) {
-  const videoUrl = LEGACY_STUDENT_VIDEO_URLS.has(student.videoUrl)
+  const videoUrl = isBundledStudentIntroVideoUrl(student.videoUrl)
     ? studentIntroVideo
     : student.videoUrl || DEFAULT_STUDENT_PROFILE.videoUrl
 
