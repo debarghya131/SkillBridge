@@ -459,7 +459,7 @@ through `CORS_ORIGIN=https://skillbridge.debarghya.org`.
 
 **Debarghya Bandyopadhyay**
 
-- Computer Science engineering student and developer from Kolkata
+- Computer Science engineering student from kolkata
 
 ### Be My Friend
 
