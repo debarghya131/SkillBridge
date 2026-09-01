@@ -138,6 +138,16 @@ skillbridge/                              # Project root
 │   │   ├── assets/                       # Intro videos and media files
 │   │   │   ├── companyintro.mp4          # Company intro video
 │   │   │   ├── otherintroduction.mp4     # Default intro video
+│   │   │   ├── screenshots/              # README screenshots
+│   │   │   │   ├── company-dashboard.png # Company dashboard screenshot
+│   │   │   │   ├── company-gig-management.png # Gig management screenshot
+│   │   │   │   ├── landing-page.png      # Landing page screenshot
+│   │   │   │   ├── payment-center.png    # Payment center screenshot
+│   │   │   │   ├── project-workspace.png # Project workspace screenshot
+│   │   │   │   ├── skill-hub.png         # Skill Hub screenshot
+│   │   │   │   ├── student-dashboard.png # Student dashboard screenshot
+│   │   │   │   ├── student-network.png   # Student network screenshot
+│   │   │   │   └── talent-search.png     # Talent search screenshot
 │   │   │   └── studentintro.mp4          # Student intro video
 │   │   ├── company/                      # Company dashboard, auth, gigs, payments
 │   │   │   ├── GigManagement.jsx         # Company gig creation and applicant flow
@@ -208,16 +218,6 @@ skillbridge/                              # Project root
 │   ├── package.json                      # Frontend scripts and dependencies
 │   ├── vercel.json                       # Vercel frontend routing config
 │   └── vite.config.js                    # Vite build config
-├── docs/screenshots/                     # README screenshots
-│   ├── company-dashboard.png             # Company dashboard screenshot
-│   ├── company-gig-management.png        # Gig management screenshot
-│   ├── landing-page.png                  # Landing page screenshot
-│   ├── payment-center.png                # Payment center screenshot
-│   ├── project-workspace.png             # Project workspace screenshot
-│   ├── skill-hub.png                     # Skill Hub screenshot
-│   ├── student-dashboard.png             # Student dashboard screenshot
-│   ├── student-network.png               # Student network screenshot
-│   └── talent-search.png                 # Talent search screenshot
 ├── scripts/                              # Project scripts, currently empty
 ├── server/                               # Node.js + MongoDB backend
 │   ├── config/                           # Environment, DB, and default data
@@ -384,15 +384,15 @@ Screenshots from the main SkillBridge user flows.
 
 | Page / Flow | Preview |
 | --- | --- |
-| Landing Page | <img src="docs/screenshots/landing-page.png" width="420" alt="SkillBridge landing page screenshot" /> |
-| Student Dashboard / GIG Center | <img src="docs/screenshots/student-dashboard.png" width="420" alt="SkillBridge student dashboard screenshot" /> |
-| Skill Hub | <img src="docs/screenshots/skill-hub.png" width="420" alt="SkillBridge Skill Hub screenshot" /> |
-| Student Network | <img src="docs/screenshots/student-network.png" width="420" alt="SkillBridge student network screenshot" /> |
-| Company Dashboard | <img src="docs/screenshots/company-dashboard.png" width="420" alt="SkillBridge company dashboard screenshot" /> |
-| GIG Management | <img src="docs/screenshots/company-gig-management.png" width="420" alt="SkillBridge company GIG management screenshot" /> |
-| Talent Search | <img src="docs/screenshots/talent-search.png" width="420" alt="SkillBridge talent search screenshot" /> |
-| Project Workspace | <img src="docs/screenshots/project-workspace.png" width="420" alt="SkillBridge project workspace screenshot" /> |
-| Payment Center | <img src="docs/screenshots/payment-center.png" width="420" alt="SkillBridge payment center screenshot" /> |
+| Landing Page | <img src="client/src/assets/screenshots/landing-page.png" width="420" alt="SkillBridge landing page screenshot" /> |
+| Student Dashboard / GIG Center | <img src="client/src/assets/screenshots/student-dashboard.png" width="420" alt="SkillBridge student dashboard screenshot" /> |
+| Skill Hub | <img src="client/src/assets/screenshots/skill-hub.png" width="420" alt="SkillBridge Skill Hub screenshot" /> |
+| Student Network | <img src="client/src/assets/screenshots/student-network.png" width="420" alt="SkillBridge student network screenshot" /> |
+| Company Dashboard | <img src="client/src/assets/screenshots/company-dashboard.png" width="420" alt="SkillBridge company dashboard screenshot" /> |
+| GIG Management | <img src="client/src/assets/screenshots/company-gig-management.png" width="420" alt="SkillBridge company GIG management screenshot" /> |
+| Talent Search | <img src="client/src/assets/screenshots/talent-search.png" width="420" alt="SkillBridge talent search screenshot" /> |
+| Project Workspace | <img src="client/src/assets/screenshots/project-workspace.png" width="420" alt="SkillBridge project workspace screenshot" /> |
+| Payment Center | <img src="client/src/assets/screenshots/payment-center.png" width="420" alt="SkillBridge payment center screenshot" /> |
 
 ## 🧰 Tech Stack
 
