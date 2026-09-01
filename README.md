@@ -116,62 +116,160 @@ flowchart TD
 ## 📁 Folder Structure
 
 ```text
-skillbridge/
-├── .agents/
+skillbridge/                              # Project root
+├── .agents/                              # Agent config folder
 ├── .claude/
-│   └── settings.local.json
-├── .codex/
+│   └── settings.local.json               # Local Claude settings
+├── .codex/                               # Codex workspace folder
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
+│       └── ci.yml                        # GitHub Actions CI pipeline
 ├── .qodo/
-│   ├── agents/
-│   └── workflows/
+│   ├── agents/                           # Qodo agent config folder
+│   └── workflows/                        # Qodo workflow config folder
 ├── .vscode/
-│   └── settings.json
-├── client/
-│   ├── public/
-│   │   ├── favicon.svg
-│   │   ├── icons.svg
-│   │   └── logo.png
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── company/
-│   │   ├── config/
-│   │   ├── landingpage/
-│   │   ├── lib/
-│   │   ├── student/
+│   └── settings.json                     # VS Code workspace settings
+├── client/                               # React + Vite frontend
+│   ├── public/                           # Static public assets
+│   │   ├── favicon.svg                   # Browser favicon
+│   │   ├── icons.svg                     # Shared icon sprite/assets
+│   │   └── logo.png                      # SkillBridge logo
+│   ├── src/                              # Frontend source code
+│   │   ├── assets/                       # Intro videos and media files
+│   │   │   ├── companyintro.mp4          # Company intro video
+│   │   │   ├── otherintroduction.mp4     # Default intro video
+│   │   │   └── studentintro.mp4          # Student intro video
+│   │   ├── company/                      # Company dashboard, auth, gigs, payments
+│   │   │   ├── GigManagement.jsx         # Company gig creation and applicant flow
+│   │   │   ├── PaymentSection.jsx        # Company payment center
+│   │   │   ├── ProjectWorkspace.jsx      # Active project workspace UI
+│   │   │   ├── SetupBusinessProfile.jsx  # Business profile setup form
+│   │   │   ├── company.jsx               # Main company dashboard
+│   │   │   ├── companyApi.js             # Company API helper functions
+│   │   │   ├── companyAuth.jsx           # Company sign in/sign up page
+│   │   │   ├── companyDemoData.js        # Company dashboard default data
+│   │   │   ├── companyGigDemoData.js     # Company gig default data
+│   │   │   ├── companyPaymentDemoData.js # Company payment default data
+│   │   │   ├── companyTalentDemoData.js  # Talent search default data
+│   │   │   └── companyWorkspaceDemoData.js # Workspace default data
+│   │   ├── config/api.js                 # Frontend API base URL config
+│   │   ├── landingpage/                  # Landing page sections
+│   │   │   ├── Features.jsx              # Landing feature section
+│   │   │   ├── Footer.jsx                # Landing footer and social links
+│   │   │   ├── Hero.jsx                  # Landing hero section
+│   │   │   ├── HowItWorks.jsx            # Workflow explanation section
+│   │   │   ├── LandingNav.jsx            # Landing navigation bar
+│   │   │   ├── LandingPage.jsx           # Landing page composition
+│   │   │   └── landingApi.js             # Landing page API calls
+│   │   ├── lib/apiRequest.js             # Shared fetch/API helper
+│   │   ├── student/                      # Student dashboard, auth, gigs, skills
 │   │   │   ├── earning/
+│   │   │   │   ├── earning.jsx           # Student earnings dashboard
+│   │   │   │   └── earningDemoData.js    # Earnings default data
 │   │   │   ├── gig/
+│   │   │   │   ├── HiringAlert.jsx       # Company invite alert UI
+│   │   │   │   ├── HiringResult.jsx      # Hiring/task result UI
+│   │   │   │   ├── Opportunity.jsx       # Individual opportunity card
+│   │   │   │   ├── gig.jsx               # Student GIG Center
+│   │   │   │   └── gigDemoData.js        # Gig default data
 │   │   │   ├── network/
-│   │   │   ├── profile/
+│   │   │   │   ├── MyNetwork.jsx         # Saved network view
+│   │   │   │   ├── NetworkContext.jsx    # Network state context
+│   │   │   │   ├── network.jsx           # Network module wrapper
+│   │   │   │   ├── networkDemoData.js    # Network default data
+│   │   │   │   ├── networkhome.jsx       # Network discovery page
+│   │   │   │   ├── networknav.jsx        # Network sub-navigation
+│   │   │   │   └── networkteamup.jsx     # Team-up request page
+│   │   │   ├── profile/                  # Reserved profile module folder
 │   │   │   ├── skillhub/
-│   │   │   └── task/
-│   │   ├── ui/
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   └── vite.config.js
-├── docs/
-│   └── screenshots/
-├── scripts/
-├── server/
-│   ├── config/
-│   ├── controllers/
-│   ├── models/
-│   ├── tests/
-│   ├── utils/
-│   ├── .env.example
-│   ├── package-lock.json
-│   ├── package.json
-│   └── server.js
-├── .gitignore
-├── render.yaml
-└── README.md
+│   │   │   │   ├── Dailychallenge.jsx    # Daily challenge UI
+│   │   │   │   ├── skillHubDemoData.js   # Skill Hub default data
+│   │   │   │   ├── skillgapreport.jsx    # Skill gap report UI
+│   │   │   │   └── skillhub.jsx          # Main Skill Hub dashboard
+│   │   │   ├── task/
+│   │   │   │   ├── ComanyTaskpage.jsx    # Company task page component
+│   │   │   │   └── Taskpage.jsx          # Student task submission page
+│   │   │   ├── student.jsx               # Main student dashboard
+│   │   │   ├── studentApi.js             # Student API helper functions
+│   │   │   ├── studentAuth.jsx           # Student sign in/sign up page
+│   │   │   ├── studentNav.jsx            # Student top navigation
+│   │   │   ├── studentProfileDefaults.js # Student profile defaults
+│   │   │   ├── studentSidebar.jsx        # Student sidebar navigation
+│   │   │   └── trustscoreCriteria.jsx    # TrustScore criteria page
+│   │   ├── ui/                           # Shared UI helpers like toast
+│   │   │   ├── ToastViewport.jsx         # Toast render container
+│   │   │   └── toast.js                  # Toast state/actions
+│   │   ├── App.jsx                       # Main React routes
+│   │   ├── index.css                     # Global styles and responsive CSS
+│   │   └── main.jsx                      # React app entry point
+│   ├── eslint.config.js                  # Frontend ESLint config
+│   ├── index.html                        # Vite HTML entry
+│   ├── package-lock.json                 # Locked frontend dependencies
+│   ├── package.json                      # Frontend scripts and dependencies
+│   ├── vercel.json                       # Vercel frontend routing config
+│   └── vite.config.js                    # Vite build config
+├── docs/screenshots/                     # README screenshots
+│   ├── company-dashboard.png             # Company dashboard screenshot
+│   ├── company-gig-management.png        # Gig management screenshot
+│   ├── landing-page.png                  # Landing page screenshot
+│   ├── payment-center.png                # Payment center screenshot
+│   ├── project-workspace.png             # Project workspace screenshot
+│   ├── skill-hub.png                     # Skill Hub screenshot
+│   ├── student-dashboard.png             # Student dashboard screenshot
+│   ├── student-network.png               # Student network screenshot
+│   └── talent-search.png                 # Talent search screenshot
+├── scripts/                              # Project scripts, currently empty
+├── server/                               # Node.js + MongoDB backend
+│   ├── config/                           # Environment, DB, and default data
+│   │   ├── companyDefaults.js            # Company dashboard defaults
+│   │   ├── companyGigDefaults.js         # Company gig defaults
+│   │   ├── companyPaymentDefaults.js     # Company payment defaults
+│   │   ├── companyWorkspaceDefaults.js   # Company workspace defaults
+│   │   ├── db.js                         # MongoDB connection helper
+│   │   ├── earningDefaults.js            # Student earnings defaults
+│   │   ├── env.js                        # Environment variable loader
+│   │   ├── gigDefaults.js                # Student gig defaults
+│   │   ├── networkDefaults.js            # Student network defaults
+│   │   ├── skillHubDefaults.js           # Skill Hub defaults
+│   │   ├── studentDefaults.js            # Student profile defaults
+│   │   └── trustScoreDefaults.js         # TrustScore defaults
+│   ├── controllers/                      # API business logic
+│   │   ├── companyController.js          # Company auth/profile/state logic
+│   │   ├── earningController.js          # Student earnings logic
+│   │   ├── gigController.js              # Student gig action logic
+│   │   ├── networkController.js          # Student network logic
+│   │   ├── siteMetricController.js       # Site view counter logic
+│   │   ├── skillHubController.js         # Skill Hub logic
+│   │   ├── studentController.js          # Student auth/profile logic
+│   │   ├── taskBridgeController.js       # Task submit/review bridge logic
+│   │   └── trustScoreController.js       # TrustScore read logic
+│   ├── models/                           # Mongoose schemas
+│   │   ├── Company.js                    # Company schema
+│   │   ├── SiteMetric.js                 # Site metric schema
+│   │   ├── Student.js                    # Student schema
+│   │   └── TaskSubmission.js             # Task submission schema
+│   ├── tests/                            # Backend unit tests
+│   │   ├── auth.test.js                  # Auth utility tests
+│   │   ├── rateLimit.test.js             # Rate limiter tests
+│   │   ├── sectionUsage.test.js          # Daily section usage tests
+│   │   ├── session.test.js               # Session TTL tests
+│   │   ├── siteMetric.test.js            # Site metric tests
+│   │   └── templateState.test.js         # Template state tests
+│   ├── utils/                            # Auth, sessions, rate limit, logging
+│   │   ├── auth.js                       # Password hashing and token helpers
+│   │   ├── logger.js                     # Request/error logging helpers
+│   │   ├── rateLimit.js                  # Rate limit helper
+│   │   ├── request.js                    # JSON body and bearer token helpers
+│   │   ├── sectionUsage.js               # Daily write-limit helper
+│   │   ├── session.js                    # Session validation helper
+│   │   └── templateState.js              # Merge/reduce default state helper
+│   ├── .env.example                      # Example backend environment variables
+│   ├── package-lock.json                 # Locked backend dependencies
+│   ├── package.json                      # Backend scripts and dependencies
+│   └── server.js                         # Backend HTTP server and API routes
+├── .gitignore                            # Git ignore rules
+├── render.yaml                           # Render backend deployment config
+└── README.md                             # Project documentation
 ```
 
 ## 🗄️ Database Design
