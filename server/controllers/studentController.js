@@ -8,6 +8,7 @@ const {
   getSessionTtlMs,
 } = require('../utils/session')
 const { consumeSectionOperation } = require('../utils/sectionUsage')
+const { recordTrustScoreEvents } = require('./trustScoreController')
 
 function normalizeEmail(email) {
   return email?.trim().toLowerCase() || ''
@@ -107,10 +108,17 @@ async function signInStudent(payload) {
 
   const email = normalizeEmail(contact)
   const phone = normalizePhone(contact)
+  const isEmail = /\S+@\S+\.\S+/.test(contact)
+  const isPhone = /^\d{10}$/.test(contact)
+
+  if (!isEmail && !isPhone) {
+    throw buildAuthError('Enter your registered email or 10-digit phone number')
+  }
+
   const student = await Student.findOne({
     $or: [
-      { email },
-      { phone },
+      ...(isEmail ? [{ email }] : []),
+      ...(isPhone ? [{ phone }] : []),
     ],
   })
 
@@ -135,6 +143,10 @@ async function getCurrentStudent(token) {
 async function updateCurrentStudent(token, payload) {
   const student = await findStudentByToken(token)
   const updates = {}
+  const previousSkills = Array.isArray(student.skills) ? student.skills : []
+  const previousGithubLinks = Array.isArray(student.githubLink) ? student.githubLink : []
+  const previousProjects = Array.isArray(student.projects) ? student.projects : []
+  const previousVideoUrl = student.videoUrl
 
   if (typeof payload.name === 'string' && payload.name.trim()) {
     updates.name = payload.name.trim()
@@ -212,6 +224,35 @@ async function updateCurrentStudent(token, payload) {
   }
 
   Object.assign(student, updates)
+
+  const nextSkills = Array.isArray(student.skills) ? student.skills : []
+  const nextGithubLinks = Array.isArray(student.githubLink) ? student.githubLink : []
+  const nextProjects = Array.isArray(student.projects) ? student.projects : []
+  const previousSkillNames = new Set(previousSkills.map(skill => skill.toLowerCase()))
+  const previousGithubUrls = new Set(previousGithubLinks.map(link => link.url).filter(Boolean))
+  const previousProjectKeys = new Set(previousProjects.map(project => `${project.name || ''}:${project.link || project.demoLink || ''}`))
+  const trustEvents = [
+    ...nextSkills
+      .filter(skill => !previousSkillNames.has(skill.toLowerCase()))
+      .map(skill => ({ type: 'new_skill_added', referenceId: skill.toLowerCase() })),
+    ...nextGithubLinks
+      .map(link => link.url)
+      .filter(url => url && !previousGithubUrls.has(url))
+      .map(url => ({ type: 'profile_link_added', referenceId: url })),
+    ...nextProjects
+      .map(project => ({
+        key: `${project.name || ''}:${project.link || project.demoLink || ''}`,
+        hasProof: Boolean(project.link || project.demoLink),
+      }))
+      .filter(project => project.hasProof && !previousProjectKeys.has(project.key))
+      .map(project => ({ type: 'project_uploaded', referenceId: project.key })),
+  ]
+
+  if (!previousVideoUrl && student.videoUrl) {
+    trustEvents.push({ type: 'intro_video_uploaded', referenceId: 'profile-video' })
+  }
+
+  recordTrustScoreEvents(student, trustEvents)
   await student.save()
 
   return sanitizeStudent(student)

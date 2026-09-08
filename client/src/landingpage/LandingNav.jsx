@@ -148,7 +148,7 @@ export default function LandingNav() {
         <div className="landing-nav-cta" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 14 }}
             onClick={() => navigate('/student')}>
-            Get Started
+            For Student
           </button>
           <button className="btn-primary" style={{ padding: '9px 20px', fontSize: 14 }}
             onClick={() => navigate('/company')}>
@@ -190,7 +190,7 @@ export default function LandingNav() {
           </div>
           <div className="landing-nav-mobile-actions">
             <button className="btn-secondary" onClick={() => { setMenuOpen(false); navigate('/student') }}>
-              Get Started
+              For Student
             </button>
             <button className="btn-primary" onClick={() => { setMenuOpen(false); navigate('/company') }}>
               For Company

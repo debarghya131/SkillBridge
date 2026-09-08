@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchStudentSkillHub, getStudentSessionToken, saveStudentSkillHub } from '../studentApi'
+import { fetchStudentSkillHub, getStudentSessionToken, recordStudentSkillHubEvent, saveStudentSkillHub } from '../studentApi'
 import DailyChallenge from './Dailychallenge'
 import { buildDemoSkillHubSkills } from './skillHubDemoData'
 import SkillGapReport from './skillgapreport'
@@ -20,7 +20,7 @@ function SubNav({ sub, setSub }) {
   const activeItem = SKILLHUB_NAV.find(item => item.key === sub) || SKILLHUB_NAV[0]
 
   return (
-    <div className="responsive-pill-nav responsive-pill-nav-menu" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
+    <div className="responsive-pill-nav responsive-pill-nav-menu skillhub-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
       <div className="responsive-pill-nav-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ fontSize: 16, flexShrink: 0 }}>{activeItem.icon}</span>
@@ -41,7 +41,7 @@ function SubNav({ sub, setSub }) {
 
       <div className={`responsive-pill-nav-list${isOpen ? ' is-open' : ''}`}>
       {SKILLHUB_NAV.map(item => (
-        <button key={item.key} onClick={() => {
+        <button key={item.key} type="button" className={`skillhub-subnav-item${sub === item.key ? ' is-active' : ''}`} aria-pressed={sub === item.key} onClick={() => {
           setSub(item.key)
           setIsOpen(false)
         }} style={{
@@ -54,7 +54,8 @@ function SubNav({ sub, setSub }) {
         }}
         onMouseEnter={e => { if (sub !== item.key) e.currentTarget.style.background = 'var(--bg)' }}
         onMouseLeave={e => { if (sub !== item.key) e.currentTarget.style.background = 'transparent' }}>
-          {item.icon} {item.label}
+          <span className="skillhub-subnav-icon" aria-hidden="true">{item.icon}</span>
+          <span>{item.label}</span>
         </button>
       ))}
       </div>
@@ -161,6 +162,7 @@ export default function SkillHub() {
   const [skillFilter, setSkillFilter] = useState('all')
   const [assessmentFilter, setAssessmentFilter] = useState('all')
   const [skills, setSkills] = useState(() => buildDemoSkillHubSkills())
+  const [skillHubState, setSkillHubState] = useState(null)
   const [showAddSkill, setShowAddSkill] = useState(false)
   const [newSkill, setNewSkill] = useState({ name: '', category: 'Frontend', level: '65' })
 
@@ -178,6 +180,7 @@ export default function SkillHub() {
 
         if (!cancelled && Array.isArray(result.skillHub?.skills)) {
           setSkills(result.skillHub.skills)
+          setSkillHubState(result.skillHub.skillHubState || null)
         }
       } catch (error) {
         if (!cancelled) {
@@ -209,6 +212,21 @@ export default function SkillHub() {
 
     return () => window.clearTimeout(timeoutId)
   }, [skills])
+
+  const handleSkillHubEvent = async payload => {
+    if (!sessionTokenRef.current) {
+      return null
+    }
+
+    const result = await recordStudentSkillHubEvent(sessionTokenRef.current, payload)
+    if (Array.isArray(result.skillHub?.skills)) {
+      setSkills(result.skillHub.skills)
+    }
+    if (result.skillHub?.skillHubState) {
+      setSkillHubState(result.skillHub.skillHubState)
+    }
+    return result
+  }
 
   const verifiedSkills = skills.filter(skill => skill.verified)
   const unverifiedSkills = skills.filter(skill => !skill.verified)
@@ -318,6 +336,7 @@ export default function SkillHub() {
         trustGain: skill.trustGain,
         trustLoss: skill.trustLoss,
         showIntegrityWarning: true,
+        returnSection: 'skillhub',
       },
     })
   }
@@ -333,6 +352,7 @@ export default function SkillHub() {
         criteria: plan.criteria,
         trustGain: plan.trustGain,
         showIntegrityWarning: true,
+        returnSection: 'skillhub',
       },
     })
   }
@@ -1037,9 +1057,9 @@ export default function SkillHub() {
         </div>
       )}
 
-      {sub === 'challenge' && <DailyChallenge />}
+      {sub === 'challenge' && <DailyChallenge skills={skills} skillHubState={skillHubState} onEvent={handleSkillHubEvent} />}
 
-      {sub === 'gap' && <SkillGapReport />}
+      {sub === 'gap' && <SkillGapReport skillHubState={skillHubState} />}
     </div>
   )
 }

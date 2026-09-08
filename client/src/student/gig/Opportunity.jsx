@@ -129,13 +129,17 @@ export default function Opportunity({
                     <>
                       <button
                         onClick={async () => {
-                          await onAcceptOpportunity(item)
+                          const didAccept = await onAcceptOpportunity(item)
+                          if (didAccept === false) {
+                            return
+                          }
                           setExpanded(null)
                           navigate('/student/task', {
                             state: {
                               taskType: 'company-interview',
                               opportunity: item,
                               showIntegrityWarning: true,
+                              returnSection: 'gig',
                             },
                           })
                         }}

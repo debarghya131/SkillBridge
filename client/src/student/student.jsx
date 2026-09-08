@@ -6,6 +6,7 @@ import SkillHub from './skillhub/skillhub'
 import Earning from './earning/earning'
 import StudentNav from './studentNav'
 import StudentSidebar from './studentSidebar'
+import { TrustScoreCriteriaContent } from './trustscoreCriteria'
 import { clearStudentSessionToken, fetchCurrentStudent, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
 import { isBundledStudentIntroVideoUrl, mergeStudentProfile } from './studentProfileDefaults'
 import { toast } from '../ui/toast'
@@ -20,6 +21,8 @@ const NAV_ITEMS = [
 ]
 
 const VERIFIED_SKILL_SET = new Set(['React', 'Node.js', 'UI/UX Design'])
+const MAX_PROFILE_PHOTO_SIZE = 600 * 1024
+const STUDENT_ACTIVE_SECTION_KEY = 'skillbridge.student.activeSection'
 const DEMO_PROJECT_LINKS = [
   'https://github.com/topics/react-dashboard',
   'https://github.com/topics/flutter-app',
@@ -36,6 +39,28 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error('Unable to read file'))
     reader.readAsDataURL(file)
   })
+}
+
+async function updateProfilePhoto(file, setAvatar) {
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    toast.warning('Please choose an image file.', { title: 'Unsupported File' })
+    return
+  }
+
+  if (file.size > MAX_PROFILE_PHOTO_SIZE) {
+    toast.warning('Profile photos must be 600 KB or smaller.', { title: 'Image Too Large' })
+    return
+  }
+
+  try {
+    const imageUrl = await readFileAsDataUrl(file)
+    setAvatar(imageUrl)
+    toast.success('Your profile photo has been updated.', { title: 'Photo Added' })
+  } catch {
+    toast.error('The selected image could not be read. Please try another file.', { title: 'Upload Failed' })
+  }
 }
 
 function VerifiedBadge({ method }) {
@@ -98,7 +123,7 @@ function ModalVerifiedBadge() {
   )
 }
 
-function ProfileViewModal({ onClose, name, trustScore, avatar, skills, githubLink, projects, videoUrl, contactInfo }) {
+function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills, githubLink, projects, videoUrl, contactInfo }) {
   const videoRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const verifiedSkills = skills.filter(s => VERIFIED_SKILL_SET.has(s))
@@ -174,6 +199,65 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, skills, githubLin
         </div>
 
         <div className="responsive-modal-body" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Profile Photo */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Profile Photo</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, flexWrap: 'wrap' }}>
+              <div style={{
+                width: 68, height: 68, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                background: avatar ? 'transparent' : 'linear-gradient(135deg, #A5B4FC, #60A5FA)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontWeight: 900, fontSize: 25,
+                border: '3px solid white', boxShadow: '0 2px 10px rgba(15,23,42,0.12)',
+              }}>
+                {avatar
+                  ? <img src={avatar} alt={`${name}'s profile`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : name[0].toUpperCase()
+                }
+              </div>
+              <div style={{ flex: '1 1 190px' }}>
+                <div style={{ color: 'var(--dark)', fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
+                  {avatar ? 'Change your profile photo' : 'Add a profile photo'}
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 10 }}>JPG, PNG, WEBP or GIF up to 600 KB.</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: 'var(--primary)', color: 'white', padding: '7px 13px',
+                    borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  }}>
+                    📷 {avatar ? 'Change Photo' : 'Add Photo'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async e => {
+                        await updateProfilePhoto(e.target.files?.[0], setAvatar)
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                  {avatar && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAvatar(null)
+                        toast.info('Your profile photo has been removed.', { title: 'Photo Removed' })
+                      }}
+                      style={{
+                        background: 'white', color: '#DC2626', padding: '7px 13px',
+                        borderRadius: 8, border: '1px solid #FCA5A5', fontSize: 12,
+                        fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Skills */}
           <div>
@@ -335,11 +419,8 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
             }}>📷</div>
             <input type="file" accept="image/*" style={{ display: 'none' }}
               onChange={async e => {
-                const file = e.target.files[0]
-                if (!file) return
-
-                const imageUrl = await readFileAsDataUrl(file)
-                setAvatar(imageUrl)
+                await updateProfilePhoto(e.target.files?.[0], setAvatar)
+                e.target.value = ''
               }} />
           </label>
           <div>
@@ -598,6 +679,7 @@ function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
     { label: 'Retention Task Missed (Penalty)', icon: '❌', desc: 'Missed 2 days of retention tasks', points: -30, earned: false, category: 'Penalty' },
   ], [profileLinks, savedProjects.length, verifiedSkills])
   const [trustScoreData, setTrustScoreData] = useState(null)
+  const [showCriteria, setShowCriteria] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -644,12 +726,44 @@ function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
   const displayedTrustScore = trustScoreData?.trustScore ?? trustScore
   const scoreColor = displayedTrustScore >= 850 ? '#10B981' : displayedTrustScore >= 700 ? '#3B82F6' : '#F59E0B'
   const grade = displayedTrustScore >= 850 ? 'Excellent' : displayedTrustScore >= 700 ? 'Good' : 'Fair'
-  const openCriteriaWindow = () => {
-    window.open('/student/trustscore-criteria', '_blank', 'noopener,noreferrer')
-  }
-
   return (
     <div>
+      {showCriteria && (
+        <div
+          className="responsive-modal-shell"
+          role="dialog"
+          aria-modal="true"
+          aria-label="TrustScore criteria"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+          onClick={e => e.target === e.currentTarget && setShowCriteria(false)}
+        >
+          <div className="responsive-modal-card" style={{
+            position: 'relative', width: '100%', maxWidth: 1040, maxHeight: '90vh',
+            overflowY: 'auto', background: 'var(--bg)', borderRadius: 18,
+            border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', padding: 20,
+          }}>
+            <button
+              type="button"
+              aria-label="Close TrustScore criteria"
+              onClick={() => setShowCriteria(false)}
+              style={{
+                position: 'sticky', top: 0, zIndex: 2, float: 'right',
+                width: 36, height: 36, borderRadius: '50%', border: 'none',
+                background: 'rgba(255,255,255,0.16)', color: 'white',
+                fontSize: 18, fontWeight: 700, cursor: 'pointer', margin: '10px 10px -46px 0',
+              }}
+            >
+              ✕
+            </button>
+            <TrustScoreCriteriaContent />
+          </div>
+        </div>
+      )}
+
       {/* Hero card */}
       <div className="responsive-hero" style={{
         background: 'linear-gradient(135deg, var(--dark) 0%, #1E1B4B 100%)',
@@ -665,21 +779,41 @@ function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
           <span style={{ background: scoreColor, color: 'white', fontSize: 13, fontWeight: 700, padding: '4px 14px', borderRadius: 100 }}>{grade}</span>
         </div>
         <button
-          onClick={openCriteriaWindow}
+          onClick={() => setShowCriteria(true)}
           style={{
             textAlign: 'right',
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.14)',
-            borderRadius: 10,
-            padding: '14px 16px',
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.24)',
+            borderRadius: 12,
+            padding: '16px 18px',
             minWidth: 220,
             cursor: 'pointer',
             color: 'white',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.16)',
+            transition: 'transform 0.15s, background 0.15s, border-color 0.15s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.38)'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.24)'
+            e.currentTarget.style.transform = 'translateY(0)'
           }}
         >
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>TrustScore Criteria</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'white', marginBottom: 6 }}>View Details ↗</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 9 }}>TrustScore Criteria</div>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: 'linear-gradient(135deg, #6366F1, #818CF8)', color: 'white',
+            border: '1px solid rgba(255,255,255,0.28)', borderRadius: 9,
+            padding: '9px 16px', marginBottom: 9, fontSize: 16, fontWeight: 800,
+            boxShadow: '0 5px 14px rgba(99,102,241,0.4)',
+          }}>
+            View Details <span aria-hidden="true">→</span>
+          </span>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
             See what adds Trust, what can reduce it, and how your score changes over time.
           </div>
         </button>
@@ -772,7 +906,10 @@ export default function StudentDashboard() {
   const sessionTokenRef = useRef(getStudentSessionToken())
   const didHydrateRef = useRef(false)
 
-  const [active, setActive] = useState('gig')
+  const [active, setActive] = useState(() => {
+    const requestedSection = state?.activeSection || window.sessionStorage.getItem(STUDENT_ACTIVE_SECTION_KEY)
+    return NAV_ITEMS.some(item => item.key === requestedSection) ? requestedSection : 'gig'
+  })
   const [name, setName] = useState(initialStudent.name)
   const [trustScore, setTrustScore] = useState(initialStudent.trustScore)
   const [avatar, setAvatar] = useState(initialStudent.avatar)
@@ -783,6 +920,10 @@ export default function StudentDashboard() {
   const [videoUrl, setVideoUrl] = useState(initialStudent.videoUrl)
   const [showProfile, setShowProfile] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    window.sessionStorage.setItem(STUDENT_ACTIVE_SECTION_KEY, active)
+  }, [active])
 
   useEffect(() => {
     let cancelled = false
@@ -853,6 +994,7 @@ export default function StudentDashboard() {
     const token = sessionTokenRef.current
 
     clearStudentSessionToken()
+    window.sessionStorage.removeItem(STUDENT_ACTIVE_SECTION_KEY)
     sessionTokenRef.current = ''
 
     if (token) {
@@ -873,7 +1015,7 @@ export default function StudentDashboard() {
       {showProfile && (
         <ProfileViewModal
           onClose={() => setShowProfile(false)}
-          name={name} trustScore={trustScore} avatar={avatar}
+          name={name} trustScore={trustScore} avatar={avatar} setAvatar={setAvatar}
           skills={skills} githubLink={githubLink} contactInfo={contactInfo} projects={projects} videoUrl={videoUrl}
         />
       )}

@@ -23,6 +23,8 @@ function calcCompletion(profile) {
 
 export default function SetupBusinessProfile({ profile, onSave }) {
   const [draft, setDraft] = useState(profile)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     setDraft(profile)
@@ -43,16 +45,62 @@ export default function SetupBusinessProfile({ profile, onSave }) {
     }))
   }
 
+  const handleSave = async () => {
+    const emailIsValid = !draft.contactEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.contactEmail.trim())
+    const websiteIsValid = !draft.website || /^https?:\/\/[^\s]+$/i.test(draft.website.trim())
+    const phoneDigits = draft.contactPhone.replace(/\D/g, '')
+
+    if (!draft.businessName.trim() || !draft.location.trim()) {
+      setSaveError('Business name and primary location are required.')
+      return
+    }
+
+    if (!websiteIsValid) {
+      setSaveError('Website must start with http:// or https://.')
+      return
+    }
+
+    if (!emailIsValid) {
+      setSaveError('Enter a valid contact email address.')
+      return
+    }
+
+    if (draft.contactPhone && (phoneDigits.length < 10 || phoneDigits.length > 15)) {
+      setSaveError('Contact phone must contain 10 to 15 digits.')
+      return
+    }
+
+    setSaveError('')
+    setIsSaving(true)
+    try {
+      await onSave({
+        ...draft,
+        businessName: draft.businessName.trim(),
+        location: draft.location.trim(),
+        website: draft.website.trim(),
+        contactEmail: draft.contactEmail.trim().toLowerCase(),
+        contactPhone: draft.contactPhone.trim(),
+      })
+    } catch (error) {
+      setSaveError(error.message || 'The business profile could not be saved.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <div>
       <div style={{
         background: 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)',
         borderRadius: 16,
+        borderLeft: '5px solid var(--accent)',
+        boxShadow: '0 8px 24px rgba(249,115,22,0.08)',
         padding: '24px 28px',
         border: '1px solid #FED7AA',
         marginBottom: 20,
       }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 9 }}>
+          <span style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(249,115,22,0.14)', fontSize: 14 }}>🛠️</span>
           Business Profile
         </div>
         <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--dark)', marginBottom: 8 }}>
@@ -69,15 +117,15 @@ export default function SetupBusinessProfile({ profile, onSave }) {
           { label: 'Primary Location', value: draft.location || 'Add location', icon: '📍' },
           { label: 'Profile Status', value: `${completion}% Complete`, icon: '✅' },
         ].map(item => (
-          <div key={item.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '16px 18px', border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 20, marginBottom: 6 }}>{item.icon}</div>
+          <div key={item.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '17px 18px 15px', border: '1px solid var(--border)', borderTop: '3px solid var(--accent)', boxShadow: '0 2px 8px rgba(15,23,42,0.03)' }}>
+            <div style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-light)', borderRadius: 9, fontSize: 18, marginBottom: 8 }}>{item.icon}</div>
             <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 2 }}>{item.value}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{item.label}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', marginBottom: 18 }}>
+      <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', marginBottom: 18, boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
         <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Business Name</span>
@@ -93,7 +141,7 @@ export default function SetupBusinessProfile({ profile, onSave }) {
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Website</span>
-            <input value={draft.website} onChange={e => updateField('website', e.target.value)} placeholder="https://yourbusiness.com" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit' }} />
+            <input type="url" value={draft.website} onChange={e => updateField('website', e.target.value)} placeholder="https://yourbusiness.com" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Team Size</span>
@@ -113,6 +161,7 @@ export default function SetupBusinessProfile({ profile, onSave }) {
               return (
                 <button
                   key={mode}
+                  type="button"
                   onClick={() => toggleWorkMode(mode)}
                   style={{
                     padding: '8px 14px',
@@ -135,7 +184,7 @@ export default function SetupBusinessProfile({ profile, onSave }) {
         <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14, marginTop: 14 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Contact Email</span>
-            <input value={draft.contactEmail} onChange={e => updateField('contactEmail', e.target.value)} placeholder="hiring@business.com" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit' }} />
+            <input type="email" value={draft.contactEmail} onChange={e => updateField('contactEmail', e.target.value)} placeholder="hiring@business.com" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit' }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Contact Phone</span>
@@ -154,11 +203,14 @@ export default function SetupBusinessProfile({ profile, onSave }) {
         </label>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-            Current completion: <strong style={{ color: 'var(--dark)' }}>{completion}%</strong>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Current completion: <strong style={{ color: 'var(--dark)' }}>{completion}%</strong>
+            </div>
+            {saveError && <div style={{ color: '#B91C1C', fontSize: 12, fontWeight: 600, marginTop: 5 }}>{saveError}</div>}
           </div>
-          <button className="btn-accent" onClick={() => onSave(draft)} style={{ padding: '10px 18px', fontSize: 13 }}>
-            Save Business Profile
+          <button className="btn-accent" type="button" onClick={handleSave} disabled={isSaving} style={{ padding: '10px 18px', fontSize: 13 }}>
+            {isSaving ? 'Saving...' : 'Save Business Profile'}
           </button>
         </div>
       </div>

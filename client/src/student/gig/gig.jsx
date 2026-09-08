@@ -4,6 +4,7 @@ import {
   acceptStudentOpportunity,
   applyStudentGig,
   declineStudentOpportunity,
+  fetchPublicCompanyProfile,
   fetchStudentGigs,
   getStudentSessionToken,
   saveStudentGig,
@@ -15,8 +16,8 @@ import { toast } from '../../ui/toast'
 const GIG_SUBNAV = [
   { key: 'opportunity', label: 'Opportunity', icon: '🎯' },
   { key: 'browse', label: 'Browse GIGs', icon: '🔍' },
-  { key: 'applied', label: 'Applied GIGs', icon: '📤' },
   { key: 'active', label: 'Active GIG', icon: '⚡' },
+  { key: 'applied', label: 'Applied GIGs', icon: '📤' },
   { key: 'completed', label: 'Completed GIGs', icon: '✅' },
   { key: 'saved', label: 'Saved GIGs', icon: '🔖' },
 ]
@@ -30,7 +31,7 @@ function EmptyState({ icon, msg }) {
   )
 }
 
-function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, showApply = false, showSave = false, status }) {
+function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany, showApply = false, showSave = false, status }) {
   const statusMeta = {
     active: { label: '⚡ In Progress', bg: '#D1FAE5', color: '#065F46' },
     applied: { label: '📤 Applied', bg: '#EFF6FF', color: '#1D4ED8' },
@@ -80,6 +81,12 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, showApply = f
         </div>
       ) : null}
       <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => onViewCompany(gig)}
+          style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          View Company
+        </button>
         {showApply ? (
           <button onClick={() => onApply(gig.id)} className="btn-primary" style={{ padding: '7px 18px', fontSize: 13 }}
             disabled={isApplied}>
@@ -101,10 +108,100 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, showApply = f
   )
 }
 
+function CompanyDetailsModal({ gig, onClose }) {
+  const [companyProfile, setCompanyProfile] = useState(null)
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!gig?.company) {
+      setCompanyProfile(null)
+      return undefined
+    }
+
+    setIsLoadingProfile(true)
+    fetchPublicCompanyProfile(gig.company)
+      .then(result => {
+        if (!cancelled) setCompanyProfile(result.companyProfile || null)
+      })
+      .catch(() => {
+        if (!cancelled) setCompanyProfile(null)
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingProfile(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [gig?.company])
+
+  if (!gig) return null
+
+  const displayCompany = companyProfile?.businessName || gig.company
+  const displayLocation = companyProfile?.location || gig.location || 'Location not specified'
+  const displayWorkModes = companyProfile?.workModes?.length > 0 ? companyProfile.workModes.join(' · ') : gig.workMode
+  const displaySkills = companyProfile?.requiredSkills
+    ? companyProfile.requiredSkills.split(',').map(item => item.trim()).filter(Boolean)
+    : (gig.tags || [])
+
+  return (
+    <div
+      className="responsive-modal-shell"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${displayCompany} details`}
+      style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div className="responsive-modal-card" style={{ width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', background: 'var(--white)', borderRadius: 18, border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
+        <div style={{ padding: '22px 24px', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', borderRadius: '18px 18px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.78, marginBottom: 7 }}>Company details</div>
+            <div style={{ fontSize: 22, fontWeight: 850, marginBottom: 4 }}>{displayCompany}</div>
+            <div style={{ fontSize: 13, opacity: 0.82 }}>{displayLocation}{displayWorkModes ? ` · ${displayWorkModes}` : ''}</div>
+          </div>
+          <button type="button" aria-label="Close company details" onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', color: 'white', border: '1px solid rgba(255,255,255,0.24)', fontSize: 18 }}>×</button>
+        </div>
+        <div style={{ padding: '22px 24px' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>{gig.title}</div>
+          <div className="responsive-card-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
+            {[
+              ['Budget', gig.budget || 'Not specified'],
+              ['Work mode', displayWorkModes || 'Not specified'],
+              ['Posted', gig.posted || gig.postedOn || 'Recently'],
+              ['Status', gig.progress || statusLabel(gig.status) || 'Open for applications'],
+            ].map(([label, value]) => (
+              <div key={label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 12px' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 800 }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Required skills</div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 20 }}>
+            {displaySkills.map(tag => <span key={tag} style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '5px 10px', borderRadius: 100, fontSize: 12, fontWeight: 700 }}>{tag}</span>)}
+          </div>
+          {isLoadingProfile && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Loading saved company profile...</div>}
+          {companyProfile?.industry && <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}><strong style={{ color: 'var(--dark)' }}>Industry:</strong> {companyProfile.industry}</div>}
+          {companyProfile?.description && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 14 }}>{companyProfile.description}</div>}
+          <button type="button" className="btn-primary" onClick={onClose} style={{ padding: '9px 16px', fontSize: 13 }}>Close Details</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function statusLabel(status) {
+  return typeof status === 'string' ? status.replace(/_/g, ' ') : ''
+}
+
 export default function GigCenter() {
   const [sub, setSub] = useState('opportunity')
   const [isSubnavOpen, setIsSubnavOpen] = useState(false)
   const [gigState, setGigState] = useState(buildDemoGigState())
+  const [selectedCompanyGig, setSelectedCompanyGig] = useState(null)
   const [sessionToken] = useState(() => getStudentSessionToken())
 
   useEffect(() => {
@@ -150,10 +247,7 @@ export default function GigCenter() {
     [browseGigs, appliedGigIds],
   )
 
-  const activeGigs = useMemo(
-    () => [...activeGigBase, ...appliedGigs.slice(0, 1)],
-    [activeGigBase, appliedGigs],
-  )
+  const activeGigs = useMemo(() => activeGigBase, [activeGigBase])
   const activeSubnav = GIG_SUBNAV.find(item => item.key === sub) || GIG_SUBNAV[0]
 
   const syncGigState = async (updater, requestFn) => {
@@ -218,6 +312,8 @@ export default function GigCenter() {
     if (didSucceed) {
       toast.success('Company invite accepted.', { title: 'Interview Task Unlocked' })
     }
+
+    return didSucceed
   }
 
   const handleDeclineOpportunity = async (opportunity) => {
@@ -238,7 +334,7 @@ export default function GigCenter() {
 
   return (
     <div>
-      <div className="responsive-pill-nav responsive-pill-nav-menu" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="responsive-pill-nav responsive-pill-nav-menu gig-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
         <div className="responsive-pill-nav-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <span style={{ fontSize: 16, flexShrink: 0 }}>{activeSubnav.icon}</span>
@@ -259,7 +355,7 @@ export default function GigCenter() {
 
         <div className={`responsive-pill-nav-list${isSubnavOpen ? ' is-open' : ''}`}>
           {GIG_SUBNAV.map(item => (
-          <button key={item.key} onClick={() => {
+          <button key={item.key} type="button" className={`gig-subnav-item${sub === item.key ? ' is-active' : ''}`} aria-pressed={sub === item.key} onClick={() => {
             setSub(item.key)
             setIsSubnavOpen(false)
           }} style={{
@@ -297,6 +393,7 @@ export default function GigCenter() {
               isSaved={savedGigIds.includes(gig.id)}
               onApply={handleApply}
               onToggleSave={handleToggleSave}
+              onViewCompany={setSelectedCompanyGig}
             />
           ))}
         </div>
@@ -314,6 +411,7 @@ export default function GigCenter() {
                 isSaved={savedGigIds.includes(gig.id)}
                 onApply={handleApply}
                 onToggleSave={handleToggleSave}
+                onViewCompany={setSelectedCompanyGig}
               />
             ))
             : <EmptyState icon="📤" msg="You haven't applied to any GIGs yet. Browse and apply!" />}
@@ -332,6 +430,7 @@ export default function GigCenter() {
                 isSaved={savedGigIds.includes(gig.id)}
                 onApply={handleApply}
                 onToggleSave={handleToggleSave}
+                onViewCompany={setSelectedCompanyGig}
               />
             ))
             : <EmptyState icon="⚡" msg="No active GIGs right now. Apply to get started!" />}
@@ -348,6 +447,7 @@ export default function GigCenter() {
               isSaved={savedGigIds.includes(gig.id)}
               onApply={handleApply}
               onToggleSave={handleToggleSave}
+              onViewCompany={setSelectedCompanyGig}
             />
           ))}
         </div>
@@ -366,6 +466,7 @@ export default function GigCenter() {
                 isSaved
                 onApply={handleApply}
                 onToggleSave={handleToggleSave}
+                onViewCompany={setSelectedCompanyGig}
               />
             ))
             : <EmptyState icon="🔖" msg="No saved GIGs yet. Save GIGs from Browse to find them here!" />}
@@ -379,6 +480,8 @@ export default function GigCenter() {
           onDeclineOpportunity={handleDeclineOpportunity}
         />
       ) : null}
+
+      <CompanyDetailsModal gig={selectedCompanyGig} onClose={() => setSelectedCompanyGig(null)} />
     </div>
   )
 }

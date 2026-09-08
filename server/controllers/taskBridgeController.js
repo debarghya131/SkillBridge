@@ -1,11 +1,13 @@
 const Company = require('../models/Company')
 const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
+const { DEFAULT_OPPORTUNITIES } = require('../config/gigDefaults')
 const { buildDefaultCompanyGigManagementState } = require('../config/companyGigDefaults')
 const { buildDefaultCompanyWorkspaceState } = require('../config/companyWorkspaceDefaults')
 const { consumeSectionOperation } = require('../utils/sectionUsage')
 const { mergeTemplateState, clone, reduceTemplateState } = require('../utils/templateState')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
+const { recordTrustScoreEvent } = require('./trustScoreController')
 
 async function findStudentByToken(token) {
   return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
@@ -113,6 +115,8 @@ function sanitizeTaskSubmission(submission) {
   return {
     id: submission._id.toString(),
     studentId: submission.studentId.toString(),
+    companyId: submission.companyId ? submission.companyId.toString() : null,
+    companyGigId: Number.isFinite(Number(submission.companyGigId)) ? Number(submission.companyGigId) : null,
     studentName: submission.studentName,
     studentLocation: submission.studentLocation || '',
     studentTrustScore: Number(submission.studentTrustScore) || 0,
@@ -141,16 +145,104 @@ function sanitizeTaskSubmission(submission) {
 
 function normalizeTaskIdentity(payload) {
   const gigTitle = typeof payload?.gigTitle === 'string' ? payload.gigTitle.trim() : ''
-  const opportunityId = Number.isFinite(Number(payload?.opportunityId)) ? Number(payload.opportunityId) : null
+  const opportunityId = Number.isInteger(Number(payload?.opportunityId)) ? Number(payload.opportunityId) : null
 
   if (!gigTitle) {
     throw buildAuthError('GIG title is required')
+  }
+
+  if (!Number.isInteger(opportunityId) || opportunityId < 1) {
+    throw buildAuthError('A valid opportunity is required')
   }
 
   return {
     gigTitle,
     opportunityId,
   }
+}
+
+function toPlainOpportunity(opportunity) {
+  return opportunity && typeof opportunity.toObject === 'function' ? opportunity.toObject() : opportunity
+}
+
+function sanitizeTaskAssignment(opportunity) {
+  if (!opportunity) {
+    return null
+  }
+
+  return {
+    id: Number(opportunity.id),
+    companyId: opportunity.companyId ? opportunity.companyId.toString() : null,
+    companyGigId: Number.isFinite(Number(opportunity.companyGigId)) ? Number(opportunity.companyGigId) : null,
+    title: opportunity.title,
+    company: opportunity.company,
+    location: opportunity.location || '',
+    stipend: opportunity.stipend || '',
+    deadline: opportunity.deadline || '',
+    status: opportunity.status,
+    matchedSkills: Array.isArray(opportunity.matchedSkills) ? opportunity.matchedSkills : [],
+    type: opportunity.type || 'Interview Task',
+  }
+}
+
+function findAcceptedOpportunity(student, opportunityId, gigTitle) {
+  const opportunities = Array.isArray(student.gigState?.opportunities)
+    ? student.gigState.opportunities
+    : []
+  const opportunity = opportunities
+    .map(toPlainOpportunity)
+    .find(item => Number(item?.id) === opportunityId)
+
+  if (!opportunity) {
+    throw buildAuthError('Opportunity not found', 404)
+  }
+
+  if (opportunity.title !== gigTitle) {
+    throw buildAuthError('The task does not match this opportunity', 400)
+  }
+
+  if (opportunity.status !== 'accepted') {
+    throw buildAuthError('Accept the opportunity before submitting its task', 409)
+  }
+
+  return opportunity
+}
+
+function buildTaskSubmissionQuery(studentId, assignment) {
+  const query = {
+    studentId,
+    opportunityId: Number(assignment.id),
+    gigTitle: assignment.title,
+  }
+
+  if (assignment.companyId) {
+    query.companyId = assignment.companyId
+  }
+
+  if (Number.isFinite(Number(assignment.companyGigId))) {
+    query.companyGigId = Number(assignment.companyGigId)
+  }
+
+  return query
+}
+
+function normalizeSubmissionLink(value) {
+  const link = typeof value === 'string' ? value.trim() : ''
+
+  if (!link || link.length > 500) {
+    throw buildAuthError('A submission link is required and must be 500 characters or fewer')
+  }
+
+  try {
+    const parsed = new URL(link)
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('Unsupported protocol')
+    }
+  } catch (error) {
+    throw buildAuthError('Enter a valid http:// or https:// submission link')
+  }
+
+  return link
 }
 
 function buildStudentTaskProfile(student) {
@@ -185,45 +277,130 @@ function buildStudentTaskProfile(student) {
 async function getStudentCompanyInterviewTask(token, payload) {
   const student = await findStudentByToken(token)
   const { gigTitle, opportunityId } = normalizeTaskIdentity(payload)
-
-  const query = {
-    studentId: student._id,
-    gigTitle,
-  }
-
-  if (opportunityId !== null) {
-    query.opportunityId = opportunityId
-  }
+  const assignment = findAcceptedOpportunity(student, opportunityId, gigTitle)
+  const query = buildTaskSubmissionQuery(student._id, assignment)
 
   const taskSubmission = await TaskSubmission.findOne(query).sort({ updatedAt: -1 })
   return {
     taskSubmission: sanitizeTaskSubmission(taskSubmission),
-    gigManagementState: sanitizeGigManagementState(company.gigManagementState),
-    projectWorkspaceState: sanitizeProjectWorkspaceState(company.projectWorkspaceState),
+    taskAssignment: sanitizeTaskAssignment(assignment),
   }
+}
+
+async function sendCompanyInterviewTask(token, payload) {
+  const company = await findCompanyByToken(token)
+  const gigTitle = typeof payload?.gigTitle === 'string' ? payload.gigTitle.trim() : ''
+  const studentId = typeof payload?.studentId === 'string' ? payload.studentId.trim() : ''
+
+  if (!gigTitle || !studentId) {
+    throw buildAuthError('An applicant and GIG are required')
+  }
+
+  const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
+  const gig = gigManagementState.gigs.find(item => item.title === gigTitle)
+
+  if (!gig) {
+    throw buildAuthError('GIG not found', 404)
+  }
+
+  const student = await Student.findById(studentId)
+  if (!student) {
+    throw buildAuthError('Applicant not found', 404)
+  }
+
+  const applicants = Array.isArray(gigManagementState.applicantsByGig?.[gig.id])
+    ? gigManagementState.applicantsByGig[gig.id]
+    : []
+  const studentKey = student._id.toString()
+  const isApplicant = applicants.some(applicant => (
+    String(applicant?.studentId || applicant?.id || '') === studentKey
+  ))
+
+  if (!isApplicant) {
+    throw buildAuthError('Interview tasks can only be sent to applicants for this GIG', 403)
+  }
+
+  const currentOpportunities = Array.isArray(student.gigState?.opportunities)
+    ? student.gigState.opportunities.map(item => ({ ...(typeof item.toObject === 'function' ? item.toObject() : item) }))
+    : []
+  const existingOpportunity = currentOpportunities.find(item => (
+    item.companyId?.toString() === company._id.toString()
+    && Number(item.companyGigId) === Number(gig.id)
+  ) || (item.company === company.businessName && item.title === gigTitle))
+
+  if (existingOpportunity) {
+    existingOpportunity.companyId = company._id
+    existingOpportunity.companyGigId = Number(gig.id)
+    await student.save()
+    return { opportunity: existingOpportunity, gigManagementState: sanitizeGigManagementState(company.gigManagementState) }
+  }
+
+  consumeSectionOperation(
+    company,
+    'gig-management',
+    'GIG Management',
+    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
+  )
+
+  const highestOpportunityId = [...DEFAULT_OPPORTUNITIES, ...currentOpportunities]
+    .map(item => Number(item.id) || 0)
+    .reduce((highest, id) => Math.max(highest, id), 0)
+  const opportunity = {
+    id: highestOpportunityId + 1,
+    companyId: company._id,
+    companyGigId: Number(gig.id),
+    title: gig.title,
+    company: company.businessName,
+    companyInitial: company.businessName[0]?.toUpperCase() || 'C',
+    companyColor: '#F97316',
+    location: company.businessProfile?.location || company.location || gig.mode || 'Remote',
+    stipend: gig.budget,
+    deadline: 'Review within 7 days',
+    sentOn: 'Just now',
+    message: `${company.businessName} invited you to complete an interview task for ${gig.title}.`,
+    matchedSkills: Array.isArray(gig.skills) ? gig.skills : [],
+    duration: 'Interview task',
+    type: 'Interview Task',
+    status: 'new',
+  }
+
+  student.gigState = student.gigState || {}
+  student.gigState.opportunities = [...currentOpportunities, opportunity]
+  await student.save()
+
+  const gigIndex = gigManagementState.gigs.findIndex(item => item.title === gigTitle)
+  if (gigIndex !== -1) {
+    gigManagementState.gigs[gigIndex] = {
+      ...gigManagementState.gigs[gigIndex],
+      interviewTasks: (Number(gigManagementState.gigs[gigIndex].interviewTasks) || 0) + 1,
+    }
+  }
+  gigManagementState.stats = gigManagementState.stats.map(item => item.label === 'Interview Tasks Sent'
+    ? { ...item, value: String((Number(item.value) || 0) + 1) }
+    : item)
+  gigManagementState.pipeline = gigManagementState.pipeline.map(item => item.label === 'Interview Task Pending'
+    ? { ...item, value: String((Number(item.value) || 0) + 1) }
+    : item)
+  gigManagementState.recentActivity = [`Interview task sent to ${student.name} for ${gigTitle}.`, ...gigManagementState.recentActivity].slice(0, 8)
+  company.gigManagementState = reduceTemplateState(gigManagementState, buildDefaultCompanyGigManagementState())
+  await company.save()
+
+  return { opportunity, gigManagementState: sanitizeGigManagementState(company.gigManagementState) }
 }
 
 async function submitStudentCompanyInterviewTask(token, payload) {
   const student = await findStudentByToken(token)
   const { gigTitle, opportunityId } = normalizeTaskIdentity(payload)
-  const submissionLink = typeof payload?.submissionLink === 'string' ? payload.submissionLink.trim() : ''
+  const assignment = findAcceptedOpportunity(student, opportunityId, gigTitle)
+  const submissionLink = normalizeSubmissionLink(payload?.submissionLink)
   const note = typeof payload?.note === 'string' ? payload.note.trim() : ''
-  const companyName = typeof payload?.companyName === 'string' ? payload.companyName.trim() : ''
-  const companyLocation = typeof payload?.companyLocation === 'string' ? payload.companyLocation.trim() : ''
-  const matchedSkills = Array.isArray(payload?.matchedSkills)
-    ? payload.matchedSkills.filter(skill => typeof skill === 'string' && skill.trim())
-    : []
-  const query = {
-    studentId: student._id,
-    gigTitle,
-  }
+  const companyName = assignment.company || ''
+  const companyLocation = assignment.location || ''
+  const matchedSkills = Array.isArray(assignment.matchedSkills) ? assignment.matchedSkills : []
+  const query = buildTaskSubmissionQuery(student._id, assignment)
 
-  if (!submissionLink) {
-    throw buildAuthError('Submission link is required')
-  }
-
-  if (opportunityId !== null) {
-    query.opportunityId = opportunityId
+  if (note.length > 2000) {
+    throw buildAuthError('The submission note must be 2000 characters or fewer')
   }
 
   const existingSubmission = await TaskSubmission.findOne(query).sort({ updatedAt: -1 })
@@ -251,6 +428,8 @@ async function submitStudentCompanyInterviewTask(token, payload) {
     {
       $set: {
         ...profile,
+        companyId: assignment.companyId || null,
+        companyGigId: Number.isFinite(Number(assignment.companyGigId)) ? Number(assignment.companyGigId) : null,
         gigTitle,
         opportunityId,
         companyName,
@@ -279,16 +458,8 @@ async function submitStudentCompanyInterviewTask(token, payload) {
 
 async function getCompanyTaskSubmissions(token) {
   const company = await findCompanyByToken(token)
-  const gigTitles = sanitizeGigManagementState(company.gigManagementState).gigs
-    .map(gig => gig.title)
-    .filter(Boolean)
-
-  if (gigTitles.length === 0) {
-    return []
-  }
-
   const submissions = await TaskSubmission.find({
-    gigTitle: { $in: gigTitles },
+    companyId: company._id,
   }).sort({ submittedAt: -1, updatedAt: -1 })
 
   return submissions.map(sanitizeTaskSubmission)
@@ -297,9 +468,6 @@ async function getCompanyTaskSubmissions(token) {
 async function reviewCompanyTaskSubmission(token, submissionId, payload) {
   const company = await findCompanyByToken(token)
   const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
-  const gigTitles = gigManagementState.gigs
-    .map(gig => gig.title)
-    .filter(Boolean)
 
   const taskSubmission = await TaskSubmission.findById(submissionId)
 
@@ -307,7 +475,12 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
     throw buildAuthError('Task submission not found', 404)
   }
 
-  if (!gigTitles.includes(taskSubmission.gigTitle)) {
+  const ownsGig = gigManagementState.gigs.some(gig => (
+    Number(gig.id) === Number(taskSubmission.companyGigId)
+    && taskSubmission.companyId?.toString() === company._id.toString()
+  ))
+
+  if (!ownsGig) {
     throw buildAuthError('You can only review submissions for your own GIGs', 403)
   }
 
@@ -337,10 +510,8 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
   if (previousStatus !== nextStatus) {
     const defaultGigManagementState = buildDefaultCompanyGigManagementState()
     const nextGigManagementState = clone(gigManagementState)
-    const gigIndex = nextGigManagementState.gigs.findIndex(gig => gig.title === taskSubmission.gigTitle)
-    const companySubmissions = await TaskSubmission.find({
-      gigTitle: { $in: gigTitles },
-    })
+    const gigIndex = nextGigManagementState.gigs.findIndex(gig => Number(gig.id) === Number(taskSubmission.companyGigId))
+    const companySubmissions = await TaskSubmission.find({ companyId: company._id })
 
     const setValue = (items, label, value) => {
       const index = items.findIndex(item => item.label === label)
@@ -382,6 +553,12 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
     company.gigManagementState = reduceTemplateState(nextGigManagementState, defaultGigManagementState)
 
     if (nextStatus === 'ready_to_hire') {
+      const student = await Student.findById(taskSubmission.studentId)
+      if (student) {
+        recordTrustScoreEvent(student, 'gig_completed', taskSubmission._id.toString())
+        await student.save()
+      }
+
       const defaultWorkspaceState = buildDefaultCompanyWorkspaceState()
       const nextWorkspaceState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
       const memberName = buildWorkspaceMemberName(taskSubmission.studentName)
@@ -443,8 +620,12 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
 }
 
 module.exports = {
+  buildTaskSubmissionQuery,
   getCompanyTaskSubmissions,
   getStudentCompanyInterviewTask,
+  normalizeTaskIdentity,
+  normalizeSubmissionLink,
+  sendCompanyInterviewTask,
   reviewCompanyTaskSubmission,
   submitStudentCompanyInterviewTask,
 }
