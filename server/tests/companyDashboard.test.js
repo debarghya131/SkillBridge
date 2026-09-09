@@ -62,11 +62,11 @@ test('company GIG operations validate and persist new and updated roles in state
     skills: ['Node.js', 'MongoDB'],
   })
 
-  assert.equal(created.gigs[0].id, 4)
+  assert.equal(created.gigs[0].id, 1)
   assert.equal(created.gigs[0].title, 'Backend Intern')
-  assert.deepEqual(created.applicantsByGig[4], [])
+  assert.deepEqual(created.applicantsByGig[1], [])
 
-  const updated = buildUpdatedGigState(created, 4, {
+  const updated = buildUpdatedGigState(created, 1, {
     title: 'Backend Engineering Intern',
     mode: 'Hybrid',
     budget: 'Rs 18000 / month',

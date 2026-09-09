@@ -219,7 +219,7 @@ export default function GigCenter() {
           setGigState(result.gigState)
         }
       } catch (error) {
-        // Keep demo fallback data in place if the backend fetch fails.
+        // Keep the empty production state in place if the backend fetch fails.
       }
     }
 

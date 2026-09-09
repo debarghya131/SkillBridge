@@ -95,7 +95,7 @@ export default function Opportunity({
                     🏢 {item.company} · 📍 {item.location} · 🕐 Sent {item.sentOn}
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {item.matchedSkills.map(skill => (
+                    {(Array.isArray(item.matchedSkills) ? item.matchedSkills : []).map(skill => (
                       <span key={skill} style={{ fontSize: 11, fontWeight: 700, background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 9px', borderRadius: 100 }}>
                         ✓ {skill}
                       </span>
