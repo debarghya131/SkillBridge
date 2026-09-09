@@ -15,11 +15,35 @@ const TASK_STATUS_META = {
     color: '#6D28D9',
     copy: 'Your interview task was reviewed. Open the task page to see the latest notes.',
   },
-  ready_to_hire: {
-    badge: '🎉 Ready to Hire',
+  selected: {
+    badge: '🎉 Selected',
     bg: '#D1FAE5',
     color: '#065F46',
-    copy: 'You moved forward in the company pipeline. Check your Active GIG tab for the next step.',
+    copy: 'You were selected for this GIG. Check your Active GIG tab for the next step.',
+  },
+  work_started: {
+    badge: '🚀 Work Started',
+    bg: '#EDE9FE',
+    color: '#6D28D9',
+    copy: 'Your GIG is in progress. Check your Active GIG tab for project updates.',
+  },
+  delivered: {
+    badge: '📦 Delivered',
+    bg: '#FEF3C7',
+    color: '#92400E',
+    copy: 'Your work was delivered and is waiting for company approval.',
+  },
+  approved: {
+    badge: '✅ Approved',
+    bg: '#DBEAFE',
+    color: '#1D4ED8',
+    copy: 'Your work was approved by the company.',
+  },
+  completed: {
+    badge: '🏁 Completed',
+    bg: '#D1FAE5',
+    color: '#065F46',
+    copy: 'This GIG is complete. Check Earning for payment updates.',
   },
   needs_revision: {
     badge: '🔁 Needs Revision',

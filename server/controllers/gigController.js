@@ -91,6 +91,13 @@ async function buildCompanyManagedGigs(student) {
 }
 
 function buildBridgeActiveGig(opportunity) {
+  const statusCopy = {
+    reviewed: 'Company reviewed your interview task',
+    selected: 'Company selected you for this GIG',
+    work_started: 'Work has started',
+    delivered: 'Work delivered and awaiting approval',
+    approved: 'Company approved your work',
+  }
   return {
     id: 800 + opportunity.id,
     company: opportunity.company,
@@ -100,9 +107,7 @@ function buildBridgeActiveGig(opportunity) {
     budget: opportunity.stipend,
     tags: Array.isArray(opportunity.matchedSkills) ? opportunity.matchedSkills : [],
     posted: 'Task bridge activated',
-    progress: opportunity.taskSubmissionStatus === 'ready_to_hire'
-      ? 'Company marked you ready to hire'
-      : 'Company reviewed your interview task',
+    progress: statusCopy[opportunity.taskSubmissionStatus] || 'Company reviewed your interview task',
     bridgeStatus: opportunity.taskSubmissionStatus,
   }
 }
@@ -169,11 +174,25 @@ async function buildGigState(student) {
   })
 
   const bridgeActiveGigs = opportunities
-    .filter(item => item.taskSubmissionStatus === 'ready_to_hire' || item.taskSubmissionStatus === 'reviewed')
+    .filter(item => ['reviewed', 'selected', 'work_started', 'delivered', 'approved', 'ready_to_hire'].includes(item.taskSubmissionStatus))
     .map(buildBridgeActiveGig)
 
   const storedActiveGigs = Array.isArray(student.gigState?.activeGigBase) ? student.gigState.activeGigBase : []
   const storedCompletedGigs = Array.isArray(student.gigState?.completedGigs) ? student.gigState.completedGigs : []
+  const completedTaskGigs = opportunities
+    .filter(item => item.taskSubmissionStatus === 'completed')
+    .map(item => ({
+      id: 900 + Number(item.id),
+      company: item.company,
+      location: item.location,
+      workMode: item.location === 'Remote' ? 'Remote' : 'Hybrid',
+      title: item.title,
+      budget: item.stipend,
+      tags: Array.isArray(item.matchedSkills) ? item.matchedSkills : [],
+      posted: 'Completed GIG',
+      progress: 'Company approved your completed work',
+      bridgeStatus: 'completed',
+    }))
 
   return {
     opportunities,
@@ -181,7 +200,7 @@ async function buildGigState(student) {
     savedGigIds,
     appliedGigIds,
     activeGigBase: mergeUniqueGigs([...bridgeActiveGigs, ...storedActiveGigs, ...defaults.activeGigBase]),
-    completedGigs: mergeUniqueGigs([...storedCompletedGigs, ...defaults.completedGigs]),
+    completedGigs: mergeUniqueGigs([...completedTaskGigs, ...storedCompletedGigs, ...defaults.completedGigs]),
   }
 }
 

@@ -48,7 +48,7 @@ export function buildDefaultCompanyGigManagementState() {
       { label: 'New Applications', value: '12', bg: '#EFF6FF', color: '#1D4ED8' },
       { label: 'Interview Task Pending', value: '7', bg: '#FEF3C7', color: '#92400E' },
       { label: 'Task Submitted', value: '5', bg: '#EDE9FE', color: '#7C3AED' },
-      { label: 'Ready to Hire', value: '3', bg: '#D1FAE5', color: '#065F46' },
+      { label: 'Selected', value: '3', bg: '#D1FAE5', color: '#065F46' },
     ],
     recentActivity: [
       'Riya Sharma completed the Frontend Internship interview task.',

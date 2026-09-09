@@ -16,9 +16,23 @@ const PROFILE_LEVEL_META = {
 }
 const REVIEW_STATUS_OPTIONS = [
   { value: 'reviewed', label: 'Mark Reviewed' },
-  { value: 'ready_to_hire', label: 'Ready to Hire' },
+  { value: 'selected', label: 'Select Student' },
+  { value: 'work_started', label: 'Work Started' },
+  { value: 'delivered', label: 'Mark Delivered' },
+  { value: 'approved', label: 'Approve Work' },
+  { value: 'completed', label: 'Complete GIG' },
   { value: 'needs_revision', label: 'Needs Revision' },
 ]
+const TASK_SUBMISSION_STATUS_META = {
+  submitted: { label: 'Submitted', bg: '#EDE9FE', color: '#6D28D9' },
+  reviewed: { label: 'Reviewed', bg: '#DBEAFE', color: '#1D4ED8' },
+  selected: { label: 'Selected', bg: '#D1FAE5', color: '#065F46' },
+  work_started: { label: 'Work Started', bg: '#EDE9FE', color: '#6D28D9' },
+  delivered: { label: 'Delivered', bg: '#FEF3C7', color: '#92400E' },
+  approved: { label: 'Approved', bg: '#DBEAFE', color: '#1D4ED8' },
+  completed: { label: 'Completed', bg: '#D1FAE5', color: '#065F46' },
+  needs_revision: { label: 'Needs Revision', bg: '#FEF3C7', color: '#92400E' },
+}
 
 function slugifyName(name = '') {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '') || 'student'
@@ -313,8 +327,8 @@ function ApplicantsModal({ gig, applicants, onClose, onViewProfile }) {
                     </span>
                   ))}
                   {applicant.taskSubmission && (
-                    <span style={{ background: '#EDE9FE', color: '#6D28D9', padding: '3px 9px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>
-                      Task Submitted
+                    <span style={{ background: TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.bg || '#EDE9FE', color: TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.color || '#6D28D9', padding: '3px 9px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>
+                      {TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.label || 'Task Submitted'}
                     </span>
                   )}
                 </div>
@@ -370,7 +384,11 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
   const submissionStatusMeta = {
     submitted: { label: 'Submitted', bg: '#EDE9FE', color: '#6D28D9' },
     reviewed: { label: 'Reviewed', bg: '#DBEAFE', color: '#1D4ED8' },
-    ready_to_hire: { label: 'Ready to Hire', bg: '#D1FAE5', color: '#065F46' },
+    selected: { label: 'Selected', bg: '#D1FAE5', color: '#065F46' },
+    work_started: { label: 'Work Started', bg: '#EDE9FE', color: '#6D28D9' },
+    delivered: { label: 'Delivered', bg: '#FEF3C7', color: '#92400E' },
+    approved: { label: 'Approved', bg: '#DBEAFE', color: '#1D4ED8' },
+    completed: { label: 'Completed', bg: '#D1FAE5', color: '#065F46' },
     needs_revision: { label: 'Needs Revision', bg: '#FEF3C7', color: '#92400E' },
   }
   const currentSubmissionMeta = applicant.taskSubmission ? (submissionStatusMeta[applicant.taskSubmission.status] || submissionStatusMeta.submitted) : null

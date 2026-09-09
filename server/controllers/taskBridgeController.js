@@ -134,7 +134,7 @@ function sanitizeTaskSubmission(submission) {
     matchedSkills: Array.isArray(submission.matchedSkills) ? submission.matchedSkills : [],
     submissionLink: submission.submissionLink,
     note: submission.note || '',
-    status: submission.status,
+    status: submission.status === 'ready_to_hire' ? 'selected' : submission.status,
     feedback: submission.feedback || '',
     submittedAt: submission.submittedAt ? submission.submittedAt.toISOString() : null,
     reviewedAt: submission.reviewedAt ? submission.reviewedAt.toISOString() : null,
@@ -484,7 +484,7 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
     throw buildAuthError('You can only review submissions for your own GIGs', 403)
   }
 
-  const allowedStatuses = new Set(['reviewed', 'ready_to_hire', 'needs_revision'])
+  const allowedStatuses = new Set(['reviewed', 'selected', 'work_started', 'delivered', 'approved', 'completed', 'needs_revision'])
   const previousStatus = taskSubmission.status
   const nextStatus = typeof payload?.status === 'string' ? payload.status : ''
 
@@ -525,36 +525,42 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
       }
     }
     const submittedBucketCount = companySubmissions.filter(item => ['submitted', 'reviewed', 'needs_revision'].includes(item.status)).length
-    const readyToHireCount = companySubmissions.filter(item => item.status === 'ready_to_hire').length
+    const selectedCount = companySubmissions.filter(item => ['selected', 'work_started', 'delivered', 'approved'].includes(item.status)).length
+    const completedCount = companySubmissions.filter(item => item.status === 'completed').length
     const defaultTaskSubmitted = Number(defaultGigManagementState.pipeline.find(item => item.label === 'Task Submitted')?.value) || 0
-    const defaultReadyToHire = Number(defaultGigManagementState.pipeline.find(item => item.label === 'Ready to Hire')?.value) || 0
+    const defaultSelected = Number(defaultGigManagementState.pipeline.find(item => item.label === 'Selected')?.value) || 0
+    const selectedPipelineLabel = nextGigManagementState.pipeline.some(item => item.label === 'Selected')
+      ? 'Selected'
+      : 'Ready to Hire'
     const defaultActiveHires = Number(defaultGigManagementState.stats.find(item => item.label === 'Active Hires')?.value) || 0
 
     setValue(nextGigManagementState.pipeline, 'Task Submitted', defaultTaskSubmitted + submittedBucketCount)
-    setValue(nextGigManagementState.pipeline, 'Ready to Hire', defaultReadyToHire + readyToHireCount)
-    setValue(nextGigManagementState.stats, 'Active Hires', defaultActiveHires + readyToHireCount)
+    setValue(nextGigManagementState.pipeline, selectedPipelineLabel, defaultSelected + selectedCount)
+    setValue(nextGigManagementState.stats, 'Active Hires', defaultActiveHires + selectedCount + completedCount)
 
     if (gigIndex !== -1) {
       const currentGig = nextGigManagementState.gigs[gigIndex]
       nextGigManagementState.gigs[gigIndex] = {
         ...currentGig,
-        status: nextStatus === 'ready_to_hire' ? 'In Progress' : 'Reviewing',
+        status: ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(nextStatus) ? 'In Progress' : 'Reviewing',
       }
     }
 
-    const reviewMessage = nextStatus === 'ready_to_hire'
-      ? `${taskSubmission.studentName} is ready to hire for ${taskSubmission.gigTitle}.`
+    const reviewMessage = nextStatus === 'selected'
+      ? `${taskSubmission.studentName} was selected for ${taskSubmission.gigTitle}.`
+      : nextStatus === 'completed'
+        ? `${taskSubmission.studentName} completed ${taskSubmission.gigTitle}.`
       : nextStatus === 'needs_revision'
         ? `Revision requested from ${taskSubmission.studentName} for ${taskSubmission.gigTitle}.`
-        : `${taskSubmission.studentName}'s task was reviewed for ${taskSubmission.gigTitle}.`
+        : `${taskSubmission.studentName}'s status changed to ${nextStatus.replaceAll('_', ' ')} for ${taskSubmission.gigTitle}.`
 
     nextGigManagementState.recentActivity = [reviewMessage, ...nextGigManagementState.recentActivity].slice(0, 8)
 
     company.gigManagementState = reduceTemplateState(nextGigManagementState, defaultGigManagementState)
 
-    if (nextStatus === 'ready_to_hire') {
+    if (['selected', 'completed'].includes(nextStatus)) {
       const student = await Student.findById(taskSubmission.studentId)
-      if (student) {
+      if (student && nextStatus === 'completed' && previousStatus !== 'completed') {
         recordTrustScoreEvent(student, 'gig_completed', taskSubmission._id.toString())
         await student.save()
       }

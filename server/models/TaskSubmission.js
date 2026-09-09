@@ -33,7 +33,7 @@ const taskSubmissionSchema = new mongoose.Schema({
   note: { type: String, default: '', trim: true },
   status: {
     type: String,
-    enum: ['submitted', 'reviewed', 'ready_to_hire', 'needs_revision'],
+    enum: ['submitted', 'reviewed', 'selected', 'work_started', 'delivered', 'approved', 'completed', 'needs_revision'],
     default: 'submitted',
   },
   feedback: { type: String, default: '', trim: true },

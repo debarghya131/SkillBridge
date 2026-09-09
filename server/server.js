@@ -408,8 +408,8 @@ async function handleStudentApi(req, res, pathname) {
 
     if (req.method === 'POST' && pathname === '/api/student/tasks/company-interview/load') {
       const payload = await readJsonBody(req)
-      const taskSubmission = await getStudentCompanyInterviewTask(getBearerToken(req), payload)
-      sendJson(res, 200, { taskSubmission })
+      const result = await getStudentCompanyInterviewTask(getBearerToken(req), payload)
+      sendJson(res, 200, result)
       return true
     }
 
