@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Opportunity from './Opportunity'
 import {
   acceptStudentOpportunity,
@@ -12,6 +13,8 @@ import {
 } from '../studentApi'
 import { buildDemoGigState } from './gigDemoData'
 import { toast } from '../../ui/toast'
+import CompanyLogo from '../../ui/CompanyLogo'
+import CompanyProfileModal from '../../ui/CompanyProfileModal'
 
 const GIG_SUBNAV = [
   { key: 'opportunity', label: 'Opportunity', icon: '🎯' },
@@ -22,6 +25,35 @@ const GIG_SUBNAV = [
   { key: 'saved', label: 'Saved GIGs', icon: '🔖' },
 ]
 
+const COMPANY_REGISTRATION_METHODS = {
+  email: { icon: '📧', label: 'Business email' },
+  phone: { icon: '📱', label: 'Phone number' },
+}
+
+const COMPANY_VERIFICATION_METHODS = {
+  gstin: { icon: '🏛️', label: 'GSTIN' },
+  udyam: { icon: '📋', label: 'Udyam registration' },
+}
+
+function CompanyVerificationBadge({ contactMethod = 'email', verificationMethod = 'gstin' }) {
+  const [show, setShow] = useState(false)
+  const registration = COMPANY_REGISTRATION_METHODS[contactMethod] || COMPANY_REGISTRATION_METHODS.email
+  const verification = COMPANY_VERIFICATION_METHODS[verificationMethod] || COMPANY_VERIFICATION_METHODS.gstin
+
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      <span aria-label="Verified business" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#10B981', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 100, cursor: 'default' }}>✓ Verified</span>
+      {show && (
+        <span style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 1200, minWidth: 190, background: 'white', color: 'var(--dark)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)', borderRadius: 8, padding: '8px 10px', fontSize: 12, pointerEvents: 'none' }}>
+          <strong style={{ display: 'block', color: '#059669', marginBottom: 5 }}>Business verification</strong>
+          <span style={{ display: 'block' }}>{registration.icon} Registered via {registration.label}</span>
+          <span style={{ display: 'block', marginTop: 3 }}>{verification.icon} Verified via {verification.label}</span>
+        </span>
+      )}
+    </span>
+  )
+}
+
 function EmptyState({ icon, msg }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '40vh', gap: 12 }}>
@@ -31,12 +63,16 @@ function EmptyState({ icon, msg }) {
   )
 }
 
-function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany, showApply = false, showSave = false, status }) {
+function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany, onOpenTask, showApply = false, showSave = false, status }) {
   const statusMeta = {
     active: { label: '⚡ In Progress', bg: '#D1FAE5', color: '#065F46' },
     applied: { label: '📤 Applied', bg: '#EFF6FF', color: '#1D4ED8' },
     reviewed: { label: '📝 Reviewed', bg: '#EDE9FE', color: '#6D28D9' },
-    ready_to_hire: { label: '🎉 Ready to Hire', bg: '#D1FAE5', color: '#065F46' },
+    selected: { label: '🎉 Selected', bg: '#D1FAE5', color: '#065F46' },
+    work_started: { label: '🚀 Work Started', bg: '#EDE9FE', color: '#7C3AED' },
+    delivered: { label: '📦 Work Delivered', bg: '#DBEAFE', color: '#1D4ED8' },
+    approved: { label: '✅ Approved', bg: '#D1FAE5', color: '#065F46' },
+    completed: { label: '✓ Completed', bg: '#D1FAE5', color: '#065F46' },
     needs_revision: { label: '🔁 Needs Revision', bg: '#FEF3C7', color: '#92400E' },
   }
   const resolvedStatus = typeof status === 'string' ? (statusMeta[status] || { label: status, bg: '#FEF9C3', color: '#854D0E' }) : null
@@ -49,11 +85,14 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
     onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow)'; e.currentTarget.style.borderColor = 'var(--primary)' }}
     onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'var(--border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div>
+        <div style={{ display: 'flex', gap: 11, minWidth: 0 }}>
+          <CompanyLogo logo={gig.companyLogo} name={gig.company} size={40} />
+          <div>
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--dark)', marginBottom: 3 }}>{gig.title}</div>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             🏢 {gig.company} · 📍 {gig.location}
             {gig.workMode ? ` · ${gig.workMode}` : ''}
+          </div>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
@@ -87,6 +126,16 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
         >
           View Company
         </button>
+        {onOpenTask && gig.opportunityId ? (
+          <button
+            type="button"
+            onClick={() => onOpenTask(gig)}
+            className="btn-primary"
+            style={{ padding: '7px 14px', fontSize: 13 }}
+          >
+            Open Work Task
+          </button>
+        ) : null}
         {showApply ? (
           <button onClick={() => onApply(gig.id)} className="btn-primary" style={{ padding: '7px 18px', fontSize: 13 }}
             disabled={isApplied}>
@@ -100,7 +149,7 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
             color: isSaved ? 'var(--primary)' : 'var(--muted)',
             fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>
-            {isSaved ? '🔖 Saved' : '🔖 Save'}
+            {isSaved ? '🔖 Unsave' : '🔖 Save'}
           </button>
         ) : null}
       </div>
@@ -109,106 +158,59 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
 }
 
 function CompanyDetailsModal({ gig, onClose }) {
-  const [companyProfile, setCompanyProfile] = useState(null)
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false)
-
+  const [response, setResponse] = useState(null)
+  const [retry, setRetry] = useState(0)
+  const companyKey = gig?.companyId || gig?.company
   useEffect(() => {
+    if (!companyKey) return undefined
     let cancelled = false
-
-    if (!gig?.company) {
-      setCompanyProfile(null)
-      return undefined
-    }
-
-    setIsLoadingProfile(true)
-    fetchPublicCompanyProfile(gig.company)
-      .then(result => {
-        if (!cancelled) setCompanyProfile(result.companyProfile || null)
-      })
-      .catch(() => {
-        if (!cancelled) setCompanyProfile(null)
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingProfile(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [gig?.company])
-
+    setResponse(null)
+    fetchPublicCompanyProfile(companyKey)
+      .then(result => { if (!cancelled) setResponse({ key: companyKey, profile: result.companyProfile }) })
+      .catch(error => { if (!cancelled) setResponse({ key: companyKey, error: error.message || 'Could not load company profile.' }) })
+    return () => { cancelled = true }
+  }, [companyKey, retry])
   if (!gig) return null
-
-  const displayCompany = companyProfile?.businessName || gig.company
-  const displayLocation = companyProfile?.location || gig.location || 'Location not specified'
-  const displayWorkModes = companyProfile?.workModes?.length > 0 ? companyProfile.workModes.join(' · ') : gig.workMode
-  const displaySkills = companyProfile?.requiredSkills
-    ? companyProfile.requiredSkills.split(',').map(item => item.trim()).filter(Boolean)
-    : (gig.tags || [])
-
-  return (
-    <div
-      className="responsive-modal-shell"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${displayCompany} details`}
-      style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="responsive-modal-card" style={{ width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', background: 'var(--white)', borderRadius: 18, border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
-        <div style={{ padding: '22px 24px', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', color: 'white', borderRadius: '18px 18px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.78, marginBottom: 7 }}>Company details</div>
-            <div style={{ fontSize: 22, fontWeight: 850, marginBottom: 4 }}>{displayCompany}</div>
-            <div style={{ fontSize: 13, opacity: 0.82 }}>{displayLocation}{displayWorkModes ? ` · ${displayWorkModes}` : ''}</div>
-          </div>
-          <button type="button" aria-label="Close company details" onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', color: 'white', border: '1px solid rgba(255,255,255,0.24)', fontSize: 18 }}>×</button>
-        </div>
-        <div style={{ padding: '22px 24px' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>{gig.title}</div>
-          <div className="responsive-card-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
-            {[
-              ['Budget', gig.budget || 'Not specified'],
-              ['Work mode', displayWorkModes || 'Not specified'],
-              ['Posted', gig.posted || gig.postedOn || 'Recently'],
-              ['Status', gig.progress || statusLabel(gig.status) || 'Open for applications'],
-            ].map(([label, value]) => (
-              <div key={label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 12px' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 800 }}>{value}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Required skills</div>
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 20 }}>
-            {displaySkills.map(tag => <span key={tag} style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '5px 10px', borderRadius: 100, fontSize: 12, fontWeight: 700 }}>{tag}</span>)}
-          </div>
-          {isLoadingProfile && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Loading saved company profile...</div>}
-          {companyProfile?.industry && <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}><strong style={{ color: 'var(--dark)' }}>Industry:</strong> {companyProfile.industry}</div>}
-          {companyProfile?.description && <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 14 }}>{companyProfile.description}</div>}
-          <button type="button" className="btn-primary" onClick={onClose} style={{ padding: '9px 16px', fontSize: 13 }}>Close Details</button>
-        </div>
-      </div>
-    </div>
-  )
+  const current = response?.key === companyKey ? response : null
+  return <CompanyProfileModal gig={gig} profile={current?.profile} loading={!current}
+    error={current?.error} onRetry={() => setRetry(value => value + 1)} onClose={onClose}/>
 }
 
-function statusLabel(status) {
-  return typeof status === 'string' ? status.replace(/_/g, ' ') : ''
-}
+import DashboardSkeleton from '../../ui/DashboardSkeleton'
 
 export default function GigCenter() {
-  const [sub, setSub] = useState('opportunity')
+  const navigate = useNavigate()
+  const { search } = useLocation()
+  const tabFromUrl = new URLSearchParams(search).get('tab')
+  const requestedTab = GIG_SUBNAV.some(item => item.key === tabFromUrl) ? tabFromUrl : 'opportunity'
+  const [sub, setSub] = useState(requestedTab)
   const [isSubnavOpen, setIsSubnavOpen] = useState(false)
   const [gigState, setGigState] = useState(buildDemoGigState())
   const [selectedCompanyGig, setSelectedCompanyGig] = useState(null)
   const [sessionToken] = useState(() => getStudentSessionToken())
+  const [isLoading, setIsLoading] = useState(() => Boolean(getStudentSessionToken()))
+  const [loadError, setLoadError] = useState('')
+  const [refresh, setRefresh] = useState(0)
+
+  useEffect(() => {
+    setSub(current => current === requestedTab ? current : requestedTab)
+  }, [requestedTab])
+
+  const selectSubnav = tab => {
+    if (!GIG_SUBNAV.some(item => item.key === tab)) return
+    setSub(tab)
+    setIsSubnavOpen(false)
+    navigate(`/student/dashboard?section=gig&tab=${encodeURIComponent(tab)}`)
+  }
 
   useEffect(() => {
     let cancelled = false
 
     async function loadGigState() {
+      setIsLoading(true)
+      setLoadError('')
       if (!sessionToken) {
+        navigate('/student', { replace: true })
         return
       }
 
@@ -219,7 +221,12 @@ export default function GigCenter() {
           setGigState(result.gigState)
         }
       } catch (error) {
-        // Keep the empty production state in place if the backend fetch fails.
+        if (!cancelled) {
+          if (error.status === 401) navigate('/student', { replace: true })
+          else setLoadError(error.message || 'Could not load GIGs. Please retry.')
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
     }
 
@@ -228,12 +235,24 @@ export default function GigCenter() {
     return () => {
       cancelled = true
     }
-  }, [sessionToken])
+  }, [sessionToken, refresh, navigate])
+
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') setRefresh(value => value + 1) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   const browseGigs = useMemo(() => gigState.browseGigs || [], [gigState.browseGigs])
   const opportunities = useMemo(() => gigState.opportunities || [], [gigState.opportunities])
   const savedGigIds = useMemo(() => gigState.savedGigIds || [], [gigState.savedGigIds])
   const appliedGigIds = useMemo(() => gigState.appliedGigIds || [], [gigState.appliedGigIds])
+  const appliedGigs = useMemo(
+    () => Array.isArray(gigState.appliedGigs)
+      ? gigState.appliedGigs
+      : browseGigs.filter(gig => appliedGigIds.includes(gig.id)),
+    [gigState.appliedGigs, browseGigs, appliedGigIds],
+  )
   const completedGigs = useMemo(() => gigState.completedGigs || [], [gigState.completedGigs])
   const activeGigBase = useMemo(() => gigState.activeGigBase || [], [gigState.activeGigBase])
 
@@ -242,12 +261,11 @@ export default function GigCenter() {
     [browseGigs, savedGigIds],
   )
 
-  const appliedGigs = useMemo(
-    () => browseGigs.filter(gig => appliedGigIds.includes(gig.id)),
-    [browseGigs, appliedGigIds],
-  )
-
   const activeGigs = useMemo(() => activeGigBase, [activeGigBase])
+  const opportunityCount = useMemo(
+    () => opportunities.filter(item => item.status !== 'declined' && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)).length,
+    [opportunities],
+  )
   const activeSubnav = GIG_SUBNAV.find(item => item.key === sub) || GIG_SUBNAV[0]
 
   const syncGigState = async (updater, requestFn) => {
@@ -332,8 +350,26 @@ export default function GigCenter() {
     }
   }
 
+  const handleOpenActiveTask = gig => {
+    const opportunity = opportunities.find(item => String(item.id) === String(gig.opportunityId))
+    if (!opportunity) {
+      toast.error('The accepted GIG task could not be found. Refresh your GIG Center.', { title: 'Task Unavailable' })
+      return
+    }
+
+    navigate('/student/task', {
+      state: {
+        taskType: 'company-interview',
+        opportunity,
+        showIntegrityWarning: false,
+        returnSection: 'gig',
+      },
+    })
+  }
+
   return (
     <div>
+      {isLoading ? <DashboardSkeleton section="gig" /> : loadError ? <div role="alert" className="work-error">{loadError} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div> : <div className="student-tab-layout">
       <div className="responsive-pill-nav responsive-pill-nav-menu gig-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
         <div className="responsive-pill-nav-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -355,10 +391,7 @@ export default function GigCenter() {
 
         <div className={`responsive-pill-nav-list${isSubnavOpen ? ' is-open' : ''}`}>
           {GIG_SUBNAV.map(item => (
-          <button key={item.key} type="button" className={`gig-subnav-item${sub === item.key ? ' is-active' : ''}`} aria-pressed={sub === item.key} onClick={() => {
-            setSub(item.key)
-            setIsSubnavOpen(false)
-          }} style={{
+          <button key={item.key} type="button" className={`gig-subnav-item${sub === item.key ? ' is-active' : ''}`} aria-pressed={sub === item.key} onClick={() => selectSubnav(item.key)} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', borderRadius: 8, border: 'none',
             background: sub === item.key ? 'var(--primary)' : 'transparent',
@@ -369,17 +402,56 @@ export default function GigCenter() {
           onMouseEnter={e => { if (sub !== item.key) e.currentTarget.style.background = 'var(--bg)' }}
           onMouseLeave={e => { if (sub !== item.key) e.currentTarget.style.background = 'transparent' }}>
             {item.icon} {item.label}
+            {item.key === 'opportunity' && opportunityCount > 0 ? (
+              <span style={{ background: sub === 'opportunity' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)', color: sub === 'opportunity' ? 'white' : 'var(--primary)', borderRadius: 100, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{opportunityCount}</span>
+            ) : null}
+            {item.key === 'browse' && browseGigs.length > 0 ? (
+              <span style={{ background: sub === 'browse' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)', color: sub === 'browse' ? 'white' : 'var(--primary)', borderRadius: 100, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{browseGigs.length}</span>
+            ) : null}
+            {item.key === 'active' && activeGigs.length > 0 ? (
+              <span style={{ background: sub === 'active' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)', color: sub === 'active' ? 'white' : 'var(--primary)', borderRadius: 100, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, lineHeight: 1 }}>{activeGigs.length}</span>
+            ) : null}
             {item.key === 'applied' && appliedGigs.length > 0 ? (
-              <span style={{ background: 'rgba(255,255,255,0.3)', borderRadius: 100, padding: '0 6px', fontSize: 11, fontWeight: 800 }}>{appliedGigs.length}</span>
+              <span style={{
+                background: sub === 'applied' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)',
+                color: sub === 'applied' ? 'white' : 'var(--primary)',
+                borderRadius: 100,
+                minWidth: 18,
+                height: 18,
+                padding: '0 5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1,
+              }}>{appliedGigs.length}</span>
             ) : null}
             {item.key === 'saved' && savedGigs.length > 0 ? (
               <span style={{ background: sub === 'saved' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)', color: sub === 'saved' ? 'white' : 'var(--primary)', borderRadius: 100, padding: '0 6px', fontSize: 11, fontWeight: 800 }}>{savedGigs.length}</span>
+            ) : null}
+            {item.key === 'completed' && completedGigs.length > 0 ? (
+              <span style={{
+                background: sub === 'completed' ? 'rgba(255,255,255,0.3)' : 'var(--primary-light)',
+                color: sub === 'completed' ? 'white' : 'var(--primary)',
+                borderRadius: 100,
+                minWidth: 18,
+                height: 18,
+                padding: '0 5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1,
+              }}>{completedGigs.length}</span>
             ) : null}
           </button>
         ))}
         </div>
       </div>
 
+      <div key={sub} className="student-tab-content">
       {sub === 'browse' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>{browseGigs.length} GIGs available for you</div>
@@ -431,6 +503,7 @@ export default function GigCenter() {
                 onApply={handleApply}
                 onToggleSave={handleToggleSave}
                 onViewCompany={setSelectedCompanyGig}
+                onOpenTask={handleOpenActiveTask}
               />
             ))
             : <EmptyState icon="⚡" msg="No active GIGs right now. Apply to get started!" />}
@@ -443,11 +516,13 @@ export default function GigCenter() {
             <GigCard
               key={gig.id}
               gig={gig}
+              status="completed"
               isApplied={appliedGigIds.includes(gig.id)}
               isSaved={savedGigIds.includes(gig.id)}
               onApply={handleApply}
               onToggleSave={handleToggleSave}
               onViewCompany={setSelectedCompanyGig}
+              onOpenTask={handleOpenActiveTask}
             />
           ))}
         </div>
@@ -482,6 +557,8 @@ export default function GigCenter() {
       ) : null}
 
       <CompanyDetailsModal gig={selectedCompanyGig} onClose={() => setSelectedCompanyGig(null)} />
+      </div>
+      </div>}
     </div>
   )
 }

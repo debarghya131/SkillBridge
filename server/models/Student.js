@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
+const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
 
 const profileLinkSchema = new mongoose.Schema({
   icon: { type: String, default: '🐙' },
@@ -44,18 +45,27 @@ const opportunitySchema = new mongoose.Schema({
   id: { type: Number, required: true },
   companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
   companyGigId: { type: Number, default: null },
+  companyGigPublicId: { type: String, default: '' },
   title: { type: String, default: '' },
   company: { type: String, default: '' },
   companyInitial: { type: String, default: '' },
   companyColor: { type: String, default: '' },
+  companyLogo: { type: String, default: '' },
   location: { type: String, default: '' },
   stipend: { type: String, default: '' },
   deadline: { type: String, default: '' },
   sentOn: { type: String, default: '' },
   message: { type: String, default: '' },
+  taskTitle: { type: String, default: '' },
+  taskType: { type: String, enum: ['live_project', 'code', 'mcq', 'written', 'mixed'], default: 'mixed' },
+  taskDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
+  taskInstructions: { type: String, default: '' },
+  taskDeadline: { type: String, default: '' },
+  taskPoints: { type: Number, default: 0 },
   matchedSkills: { type: [String], default: [] },
   duration: { type: String, default: '' },
   type: { type: String, default: '' },
+  source: { type: String, enum: ['application', 'direct_invite'], default: 'application' },
   status: { type: String, enum: ['new', 'accepted', 'declined'], default: 'new' },
 }, { _id: false })
 
@@ -64,6 +74,8 @@ const gigStateSchema = new mongoose.Schema({
   browseGigs: { type: [gigSchema], default: undefined },
   savedGigIds: { type: [Number], default: undefined },
   appliedGigIds: { type: [Number], default: undefined },
+  appliedGigs: { type: [gigSchema], default: undefined },
+  opportunityStatusById: { type: mongoose.Schema.Types.Mixed, default: undefined },
   activeGigBase: { type: [gigSchema], default: undefined },
   completedGigs: { type: [gigSchema], default: undefined },
 }, { _id: false })
@@ -76,11 +88,15 @@ const skillHubSkillSchema = new mongoose.Schema({
   verified: { type: Boolean, default: false },
   renewalStatus: { type: String, default: 'unverified' },
   renewalDue: { type: String, default: '-' },
+  verifiedAt: { type: String, default: '' },
+  assessmentId: { type: String, default: '' },
+  lastRetentionDate: { type: String, default: '' },
   trustGain: { type: Number, default: 0 },
   trustLoss: { type: Number, default: 0 },
   createdOn: { type: String, default: '' },
   lastEvent: { type: String, default: 'created' },
   streak: { type: Number, default: 0 },
+  longestStreak: { type: Number, default: 0 },
   missedDays: { type: Number, default: 0 },
   wrongAnswers: { type: Number, default: 0 },
 }, { _id: false })
@@ -96,7 +112,7 @@ const studentSchema = new mongoose.Schema({
   verificationMethod: { type: String, enum: ['aadhaar', 'digilocker'], default: 'aadhaar' },
   aadhaarNumber: { type: String, default: '' },
   digilockerToken: { type: String, default: '' },
-  trustScore: { type: Number, default: 750 },
+  trustScore: { type: Number, default: 0 },
   trustScoreState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   avatar: { type: String, default: null },
   skills: { type: [String], default: () => buildDefaultStudentProfile().skills },
@@ -104,8 +120,10 @@ const studentSchema = new mongoose.Schema({
   contactInfo: { type: [contactInfoSchema], default: () => buildDefaultStudentProfile().contactInfo },
   projects: { type: [projectSchema], default: () => buildDefaultStudentProfile().projects },
   videoUrl: { type: String, default: null },
-  skillHubSkills: { type: [skillHubSkillSchema], default: undefined },
-  skillHubState: { type: mongoose.Schema.Types.Mixed, default: undefined },
+  // New accounts must begin with an empty, persisted Skill Hub. Leaving these
+  // undefined made older migration and seed data too easy to surface at login.
+  skillHubSkills: { type: [skillHubSkillSchema], default: () => [] },
+  skillHubState: { type: mongoose.Schema.Types.Mixed, default: () => buildDefaultSkillHubState() },
   gigState: { type: gigStateSchema, default: undefined },
   networkState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   earningState: { type: mongoose.Schema.Types.Mixed, default: undefined },

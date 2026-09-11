@@ -11,8 +11,8 @@ async function findStudentByToken(token) {
   return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
 }
 
-function buildManagedGigId(companyId, gigId) {
-  const source = `${companyId}:${gigId}`
+function buildManagedGigId(companyId, gigIdentity) {
+  const source = `${companyId}:${gigIdentity}`
   let hash = 0
 
   for (let index = 0; index < source.length; index += 1) {
@@ -43,6 +43,44 @@ function mergeUniqueGigs(gigs) {
   return [...byId.values()]
 }
 
+function toPlainGigStateItem(item) {
+  return item && typeof item.toObject === 'function' ? item.toObject() : item
+}
+
+function normalizeOpportunityStatusOverrides(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(Object.entries(value).filter(([id, status]) => (
+    Number.isInteger(Number(id))
+    && Number(id) > 0
+    && typeof status === 'string'
+  )))
+}
+
+function sanitizeStudentTaskDetails(details) {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) {
+    return {}
+  }
+
+  const safeDetails = Object.fromEntries(Object.entries(details)
+    .filter(([key, value]) => (
+      ['deliverables', 'acceptanceCriteria', 'submissionRequirements', 'language', 'testCases',
+        'questionCount', 'questions', 'options', 'optionsAndAnswers', 'passingScore', 'wordLimit',
+        'evaluationCriteria', 'components'].includes(key)
+      && (typeof value === 'string' || typeof value === 'number')
+    ))
+    .map(([key, value]) => [key, String(value).trim().slice(0, 2000)])
+    .filter(([, value]) => value))
+
+  delete safeDetails.answerKey
+
+  delete safeDetails.optionsAndAnswers
+
+  return safeDetails
+}
+
 function incrementLabeledValue(items, label, delta) {
   return items.map(item => item.label === label
     ? { ...item, value: String(Math.max(0, (Number(item.value) || 0) + delta)) }
@@ -70,19 +108,32 @@ async function buildCompanyManagedGigs(student) {
       }
 
       const tags = Array.isArray(gig.skills) ? gig.skills : []
+      const applicants = Array.isArray(state.applicantsByGig?.[gig.id])
+        ? state.applicantsByGig[gig.id]
+        : []
+      const isApplied = applicants.some(applicant => (
+        String(applicant?.studentId || applicant?.id || '') === String(student._id)
+      ))
       managedGigs.push({
-        id: buildManagedGigId(company._id.toString(), gig.id),
+        id: buildManagedGigId(
+          company._id.toString(),
+          gig.publicId || gig.createdAt || `${gig.id}:${gig.title}`,
+        ),
         sourceCompanyId: company._id.toString(),
         sourceGigId: Number(gig.id),
+        sourceGigPublicId: gig.publicId || '',
         company: company.businessName,
-        location: company.businessProfile?.location || company.location || gig.mode || 'Remote',
+        companyLogo: typeof company.businessProfile?.logo === 'string' ? company.businessProfile.logo : '',
+        location: gig.location || company.businessProfile?.location || company.location || 'Location not specified',
         workMode: gig.mode || 'Remote',
         title: gig.title,
+        type: gig.type || 'Internship',
         budget: gig.budget || 'Compensation discussed with company',
         tags,
         match: calculateGigMatch(tags, studentSkills),
         posted: gig.postedOn || 'Recently posted',
         progress: gig.status === 'In Progress' ? 'Hiring in progress' : '',
+        isApplied,
       })
     })
   })
@@ -93,40 +144,66 @@ async function buildCompanyManagedGigs(student) {
 function buildBridgeActiveGig(opportunity) {
   return {
     id: 800 + opportunity.id,
+    opportunityId: opportunity.id,
+    companyGigId: opportunity.companyGigId,
+    companyGigPublicId: opportunity.companyGigPublicId || '',
     company: opportunity.company,
+    companyLogo: opportunity.companyLogo || '',
     location: opportunity.location,
     workMode: opportunity.location === 'Remote' ? 'Remote' : 'Hybrid',
     title: opportunity.title,
     budget: opportunity.stipend,
     tags: Array.isArray(opportunity.matchedSkills) ? opportunity.matchedSkills : [],
     posted: 'Task bridge activated',
-    progress: opportunity.taskSubmissionStatus === 'ready_to_hire'
-      ? 'Company marked you ready to hire'
-      : 'Company reviewed your interview task',
+    progress: opportunity.taskSubmissionStatus === 'selected'
+      ? 'Selected for this GIG'
+      : opportunity.taskSubmissionStatus === 'work_started'
+        ? 'Work started'
+        : opportunity.taskSubmissionStatus === 'delivered'
+          ? 'Work delivered for review'
+          : 'Company reviewed your interview task',
     bridgeStatus: opportunity.taskSubmissionStatus,
+  }
+}
+
+function buildBridgeCompletedGig(opportunity) {
+  return {
+    ...buildBridgeActiveGig(opportunity),
+    posted: opportunity.externalPayment ? 'Completed with an external payment record' : 'Completed',
+    completedOn: opportunity.completedAt ? new Date(opportunity.completedAt).toISOString().slice(0, 10) : '',
+    bridgeStatus: 'completed',
   }
 }
 
 async function buildGigState(student) {
   const defaults = buildDefaultGigState()
   const managedGigs = await buildCompanyManagedGigs(student)
+  const storedOpportunities = Array.isArray(student.gigState?.opportunities)
+    ? student.gigState.opportunities.map(toPlainGigStateItem)
+    : []
   const savedGigIds = Array.isArray(student.gigState?.savedGigIds)
     ? student.gigState.savedGigIds.map(Number).filter(Number.isFinite)
     : defaults.savedGigIds
   const appliedGigIds = Array.isArray(student.gigState?.appliedGigIds)
     ? student.gigState.appliedGigIds.map(Number).filter(Number.isFinite)
     : defaults.appliedGigIds
-  const legacyStatuses = Array.isArray(student.gigState?.opportunities)
-    ? student.gigState.opportunities.reduce((acc, item) => {
+  const storedAppliedGigs = Array.isArray(student.gigState?.appliedGigs)
+    ? student.gigState.appliedGigs.map(toPlainGigStateItem).filter(item => Number.isFinite(Number(item?.id)))
+    : []
+  const appliedManagedGigIds = managedGigs
+    .filter(gig => gig.isApplied)
+    .map(gig => Number(gig.id))
+    .filter(Number.isFinite)
+  const legacyStatuses = storedOpportunities.reduce((acc, item) => {
       if (item && Number.isFinite(Number(item.id)) && typeof item.status === 'string') {
         acc[item.id] = item.status
       }
       return acc
     }, {})
-    : {}
-  const statusOverrides = student.gigState?.opportunityStatusById && typeof student.gigState.opportunityStatusById === 'object'
-    ? { ...legacyStatuses, ...student.gigState.opportunityStatusById }
-    : legacyStatuses
+  const statusOverrides = {
+    ...legacyStatuses,
+    ...normalizeOpportunityStatusOverrides(student.gigState?.opportunityStatusById),
+  }
   const taskSubmissions = await TaskSubmission.find({ studentId: student._id }).sort({ updatedAt: -1 })
   const submissionsByOpportunityId = new Map()
   const submissionsByGigTitle = new Map()
@@ -141,20 +218,60 @@ async function buildGigState(student) {
     }
   })
 
-  const storedOpportunities = Array.isArray(student.gigState?.opportunities)
-    ? student.gigState.opportunities
-    : []
   const storedById = new Map(storedOpportunities.map(item => [Number(item.id), item]))
   const defaultOpportunityIds = new Set(defaults.opportunities.map(item => item.id))
+  const normalizedStoredOpportunities = storedOpportunities
+    .map(item => {
+      const managedGig = managedGigs.find(gig => (
+        String(gig.sourceCompanyId || '') === String(item.companyId || '')
+        && Number(gig.sourceGigId) === Number(item.companyGigId)
+        && (item.companyGigPublicId
+          ? item.companyGigPublicId === gig.sourceGigPublicId
+          : !gig.sourceGigPublicId)
+      ))
+
+      if (item.companyId || item.companyGigId != null) {
+        // Keep invitation status and tasks, but refresh public company and role metadata.
+        return {
+          ...item,
+          title: managedGig?.title || item.title || '',
+          company: managedGig?.company || item.company || '',
+          companyLogo: managedGig?.companyLogo || item.companyLogo || '',
+          location: managedGig?.location || item.location || '',
+          stipend: managedGig?.budget || item.stipend || '',
+          type: managedGig?.type || item.type || 'Interview Task',
+          matchedSkills: managedGig?.tags?.length > 0 ? managedGig.tags : (Array.isArray(item.matchedSkills) ? item.matchedSkills : []),
+          message: item.message || (managedGig
+            ? `${managedGig.company} invited you to complete an interview task for ${managedGig.title}.`
+            : ''),
+          companyGigPublicId: item.companyGigPublicId || managedGig?.sourceGigPublicId || '',
+        }
+      }
+
+      return item.title && item.company
+        ? { ...item, taskDetails: sanitizeStudentTaskDetails(item.taskDetails) }
+        : null
+    })
+    .filter(Boolean)
   const opportunities = [
     ...defaults.opportunities,
-    ...storedOpportunities.filter(item => !defaultOpportunityIds.has(Number(item.id))),
+    ...normalizedStoredOpportunities.filter(item => !defaultOpportunityIds.has(Number(item.id))),
   ].map(item => ({
     ...item,
-    ...(storedById.get(item.id) || {}),
+    ...(defaultOpportunityIds.has(Number(item.id)) ? (storedById.get(Number(item.id)) || {}) : {}),
     status: typeof statusOverrides[item.id] === 'string' ? statusOverrides[item.id] : item.status,
+    taskDetails: sanitizeStudentTaskDetails(
+      defaultOpportunityIds.has(Number(item.id))
+        ? (storedById.get(Number(item.id))?.taskDetails || item.taskDetails)
+        : item.taskDetails,
+    ),
   })).map(item => {
-    const linkedSubmission = submissionsByOpportunityId.get(item.id) || submissionsByGigTitle.get(item.title)
+    const candidate = submissionsByOpportunityId.get(Number(item.id))
+    const linkedSubmission = item.companyId && item.companyGigId != null
+      ? (candidate && String(candidate.companyId) === String(item.companyId)
+        && Number(candidate.companyGigId) === Number(item.companyGigId)
+        && (!candidate.companyGigPublicId || candidate.companyGigPublicId === item.companyGigPublicId) ? candidate : null)
+      : candidate || submissionsByGigTitle.get(item.title)
 
     if (!linkedSubmission) {
       return item
@@ -162,33 +279,53 @@ async function buildGigState(student) {
 
     return {
       ...item,
+      status: item.status === 'declined' ? item.status : 'accepted',
       taskSubmissionStatus: linkedSubmission.status,
+      revisionReturnStatus: linkedSubmission.revisionReturnStatus || 'submitted',
       companyFeedback: linkedSubmission.feedback || '',
       submissionLink: linkedSubmission.submissionLink || '',
+      score: linkedSubmission.score ?? null,
+      externalPayment: linkedSubmission.externalPayment || null,
+      completedAt: linkedSubmission.completedAt || null,
     }
   })
 
   const bridgeActiveGigs = opportunities
-    .filter(item => item.taskSubmissionStatus === 'ready_to_hire' || item.taskSubmissionStatus === 'reviewed')
+    .filter(item => ['selected', 'work_started', 'delivered', 'approved', 'ready_to_hire'].includes(item.taskSubmissionStatus)
+      || (item.taskSubmissionStatus === 'needs_revision' && item.revisionReturnStatus === 'delivered'))
     .map(buildBridgeActiveGig)
+  const bridgeCompletedGigs = opportunities
+    .filter(item => item.taskSubmissionStatus === 'completed')
+    .map(buildBridgeCompletedGig)
 
-  const storedActiveGigs = Array.isArray(student.gigState?.activeGigBase) ? student.gigState.activeGigBase : []
-  const storedCompletedGigs = Array.isArray(student.gigState?.completedGigs) ? student.gigState.completedGigs : []
+  const storedActiveGigs = Array.isArray(student.gigState?.activeGigBase) ? student.gigState.activeGigBase.filter(item => !item.bridgeStatus) : []
+  const storedCompletedGigs = Array.isArray(student.gigState?.completedGigs) ? student.gigState.completedGigs.filter(item => !item.bridgeStatus) : []
 
   return {
     opportunities,
     browseGigs: [...defaults.browseGigs, ...managedGigs],
     savedGigIds,
-    appliedGigIds,
+    appliedGigIds: [...new Set([...appliedGigIds, ...appliedManagedGigIds])],
+    appliedGigs: mergeUniqueGigs([
+      ...storedAppliedGigs,
+      ...[...defaults.browseGigs, ...managedGigs].filter(gig => appliedGigIds.includes(Number(gig.id)) || gig.isApplied),
+    ]),
     activeGigBase: mergeUniqueGigs([...bridgeActiveGigs, ...storedActiveGigs, ...defaults.activeGigBase]),
-    completedGigs: mergeUniqueGigs([...storedCompletedGigs, ...defaults.completedGigs]),
+    completedGigs: mergeUniqueGigs([...bridgeCompletedGigs, ...storedCompletedGigs, ...defaults.completedGigs]),
   }
 }
 
 function persistGigState(student, gigState) {
   const defaults = buildDefaultGigState()
   const defaultStatuses = new Map(defaults.opportunities.map(item => [item.id, item.status]))
-  const opportunityStatusById = gigState.opportunities.reduce((acc, item) => {
+  const opportunities = Array.isArray(gigState.opportunities)
+    ? gigState.opportunities.map(toPlainGigStateItem)
+    : []
+  const opportunityStatusById = opportunities.reduce((acc, item) => {
+    if (!item || !Number.isInteger(Number(item.id)) || Number(item.id) < 1) {
+      return acc
+    }
+
     const defaultStatus = defaultStatuses.get(item.id)
     if (item.status && item.status !== defaultStatus) {
       acc[item.id] = item.status
@@ -197,17 +334,19 @@ function persistGigState(student, gigState) {
   }, {})
 
   const nextState = {
-    opportunities: gigState.opportunities,
+    opportunities,
     savedGigIds: gigState.savedGigIds,
     appliedGigIds: gigState.appliedGigIds,
+    appliedGigs: gigState.appliedGigs,
     opportunityStatusById,
-    activeGigBase: gigState.activeGigBase,
-    completedGigs: gigState.completedGigs,
+    activeGigBase: gigState.activeGigBase.filter(item => !item.bridgeStatus),
+    completedGigs: gigState.completedGigs.filter(item => !item.bridgeStatus),
   }
 
   student.gigState = reduceTemplateState(nextState, {
     savedGigIds: defaults.savedGigIds,
     appliedGigIds: defaults.appliedGigIds,
+    appliedGigs: defaults.appliedGigs,
     opportunityStatusById: {},
     activeGigBase: defaults.activeGigBase,
     completedGigs: defaults.completedGigs,
@@ -240,6 +379,7 @@ async function applyToGig(token, gigId) {
       Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
     )
     gigState.appliedGigIds.push(numericGigId)
+    gigState.appliedGigs = mergeUniqueGigs([...(gigState.appliedGigs || []), appliedGig])
 
     if (appliedGig?.sourceCompanyId && Number.isFinite(appliedGig.sourceGigId)) {
       const company = await Company.findById(appliedGig.sourceCompanyId)
@@ -250,7 +390,6 @@ async function applyToGig(token, gigId) {
         )
         const companyGig = companyState.gigs.find(gig => Number(gig.id) === appliedGig.sourceGigId)
         if (companyGig) {
-          companyGig.applicants = (Number(companyGig.applicants) || 0) + 1
           companyState.applicantsByGig = companyState.applicantsByGig || {}
           const applicants = Array.isArray(companyState.applicantsByGig[appliedGig.sourceGigId])
             ? companyState.applicantsByGig[appliedGig.sourceGigId]
@@ -259,6 +398,7 @@ async function applyToGig(token, gigId) {
 
           const isNewApplicant = !applicants.some(applicant => applicant.studentId === studentId)
           if (isNewApplicant) {
+            companyGig.applicants = (Number(companyGig.applicants) || 0) + 1
             companyState.applicantsByGig[appliedGig.sourceGigId] = [
               ...applicants,
               {
@@ -345,8 +485,8 @@ async function acceptOpportunity(token, opportunityId) {
   const student = await findStudentByToken(token)
   const gigState = await buildGigState(student)
 
-  const numericOpportunityId = Number(opportunityId)
-  const opportunity = gigState.opportunities.find(item => item.id === numericOpportunityId)
+  const normalizedOpportunityId = String(opportunityId)
+  const opportunity = gigState.opportunities.find(item => String(item.id) === normalizedOpportunityId)
 
   if (!opportunity) {
     throw buildAuthError('Opportunity not found', 404)
@@ -374,8 +514,8 @@ async function declineOpportunity(token, opportunityId) {
   const student = await findStudentByToken(token)
   const gigState = await buildGigState(student)
 
-  const numericOpportunityId = Number(opportunityId)
-  const opportunity = gigState.opportunities.find(item => item.id === numericOpportunityId)
+  const normalizedOpportunityId = String(opportunityId)
+  const opportunity = gigState.opportunities.find(item => String(item.id) === normalizedOpportunityId)
 
   if (!opportunity) {
     throw buildAuthError('Opportunity not found', 404)
@@ -400,6 +540,7 @@ async function declineOpportunity(token, opportunityId) {
 }
 
 module.exports = {
+  buildGigState,
   acceptOpportunity,
   applyToGig,
   calculateGigMatch,

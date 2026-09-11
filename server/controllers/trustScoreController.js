@@ -6,7 +6,7 @@ const TRUST_EVENT_DEFINITIONS = Object.freeze({
   daily_challenge_solved: { label: 'Daily Challenge Solved', points: 80, category: 'Daily' },
   retention_task_completed: { label: 'Retention Task Completed', points: 20, category: 'Daily' },
   skill_verified: { label: 'Skill Verified', points: 60, category: 'Skills' },
-  new_skill_added: { label: 'New Skill Added', points: 20, category: 'Skills' },
+  new_skill_added: { label: 'New Skill Added', points: 0, category: 'Skills' },
   skill_level_upgraded: { label: 'Skill Level Upgraded', points: 100, category: 'Skills' },
   project_uploaded: { label: 'Project Uploaded', points: 80, category: 'Projects' },
   gig_completed: { label: 'GIG Completed', points: 150, category: 'GIGs' },
@@ -40,10 +40,27 @@ function readTrustScoreEvents(student) {
     : []
 }
 
+function calculateTrustScore(student) {
+  return readTrustScoreEvents(student)
+    .reduce((total, event) => clampTrustScore(total + (Number(event.points) || 0)), 0)
+}
+
+function reconcileTrustScore(student) {
+  const ledgerScore = calculateTrustScore(student)
+  if (Number(student.trustScore) === ledgerScore) return false
+  student.trustScore = ledgerScore
+  return true
+}
+
+function eventTimestamp(event) {
+  const timestamp = new Date(event?.occurredAt || 0).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
 function buildTrustScoreActivity(student) {
   return readTrustScoreEvents(student)
     .slice()
-    .sort((left, right) => new Date(right.occurredAt || 0) - new Date(left.occurredAt || 0))
+    .sort((left, right) => eventTimestamp(right) - eventTimestamp(left))
     .slice(0, 30)
     .map(event => ({
       id: event.key,
@@ -52,7 +69,7 @@ function buildTrustScoreActivity(student) {
       points: Number(event.points) || 0,
       category: event.category,
       referenceId: event.referenceId,
-      occurredAt: event.occurredAt,
+      occurredAt: eventTimestamp(event) ? event.occurredAt : null,
     }))
 }
 
@@ -68,6 +85,7 @@ function recordTrustScoreEvent(student, eventType, referenceId) {
   const events = readTrustScoreEvents(student)
 
   if (events.some(event => event.key === key)) {
+    reconcileTrustScore(student)
     return {
       recorded: false,
       event: events.find(event => event.key === key),
@@ -84,11 +102,11 @@ function recordTrustScoreEvent(student, eventType, referenceId) {
     occurredAt: new Date().toISOString(),
   }
 
-  student.trustScore = clampTrustScore(Number(student.trustScore) + definition.points)
   student.trustScoreState = {
-    events: [...events, event].slice(-250),
+    events: [...events, event],
     updatedAt: event.occurredAt,
   }
+  reconcileTrustScore(student)
 
   return { recorded: true, event }
 }
@@ -106,14 +124,15 @@ function buildTrustScoreSnapshot(student) {
     const points = Number(event.points) || 0
     if (points > 0) {
       summary.earnedPoints += points
+      summary.approvedActions += 1
     } else {
       summary.penalties += points
     }
     return summary
-  }, { earnedPoints: 0, penalties: 0 })
+  }, { earnedPoints: 0, penalties: 0, approvedActions: 0 })
 
   return {
-    trustScore: clampTrustScore(student.trustScore),
+    trustScore: calculateTrustScore(student),
     factors,
     summary: events.length > 0
       ? { ...eventSummary, maxPoints: factorSummary.maxPoints }
@@ -124,32 +143,21 @@ function buildTrustScoreSnapshot(student) {
 
 async function getStudentTrustScore(token) {
   const student = await findStudentByToken(token)
+  await require('./skillHubController').reconcileSkillExpiry(student)
+  if (reconcileTrustScore(student)) await student.save()
   return buildTrustScoreSnapshot(student)
 }
 
 async function recordStudentTrustScoreEvent(token, payload) {
-  const student = await findStudentByToken(token)
-  const eventType = typeof payload?.eventType === 'string' ? payload.eventType.trim() : ''
-
-  if (!TRUST_EVENT_DEFINITIONS[eventType]) {
-    throw buildAuthError('A valid TrustScore event is required')
-  }
-
-  const result = recordTrustScoreEvent(student, eventType, payload?.referenceId)
-
-  if (result.recorded) {
-    await student.save()
-  }
-
-  return {
-    recorded: result.recorded,
-    trustScore: buildTrustScoreSnapshot(student),
-  }
+  await findStudentByToken(token)
+  throw buildAuthError('TrustScore events are recorded only by verified server workflows.', 403)
 }
 
 module.exports = {
   buildTrustScoreSnapshot,
+  calculateTrustScore,
   getStudentTrustScore,
+  reconcileTrustScore,
   recordStudentTrustScoreEvent,
   recordTrustScoreEvent,
   recordTrustScoreEvents,

@@ -1,80 +1,56 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Handshake, House, Rocket } from 'lucide-react'
+import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import NetworkNav from './networknav'
 import { NetworkProvider } from './NetworkContext'
-import { buildDemoNetworkState } from './networkDemoData'
 import NetworkHome from './networkhome'
 import MyNetwork from './MyNetwork'
 import NetworkTeamUp from './networkteamup'
-import { clearStudentSessionToken, fetchStudentNetwork, getStudentSessionToken, saveStudentNetwork } from '../studentApi'
+import { clearStudentSessionToken, fetchStudentNetwork, getStudentSessionToken } from '../studentApi'
+import './Network.css'
 
 const NETWORK_NAV_ITEMS = [
-  { key: 'home', icon: '🏠', label: 'Home' },
-  { key: 'my-network', icon: '🤝', label: 'My Network' },
-  { key: 'team-up', icon: '🚀', label: 'Team Up' },
+  { key: 'home', icon: House, label: 'Discover' },
+  { key: 'my-network', icon: Handshake, label: 'My Network' },
+  { key: 'team-up', icon: Rocket, label: 'Team Up' },
 ]
 
 export default function Network() {
-  const sessionTokenRef = useRef(getStudentSessionToken())
-  const didHydrateRef = useRef(false)
   const [activeTab, setActiveTab] = useState('home')
-  const [networkState, setNetworkState] = useState(() => buildDemoNetworkState())
+  const [networkState, setNetworkState] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState('')
+  const token = getStudentSessionToken()
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadNetworkState() {
-      if (!sessionTokenRef.current) {
-        didHydrateRef.current = true
-        return
-      }
-
-      try {
-        const result = await fetchStudentNetwork(sessionTokenRef.current)
-
-        if (!cancelled && result.networkState) {
-          setNetworkState(result.networkState)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          clearStudentSessionToken()
-          sessionTokenRef.current = ''
-          setNetworkState(buildDemoNetworkState())
-        }
-      } finally {
-        if (!cancelled) {
-          didHydrateRef.current = true
-        }
-      }
+  const reload = useCallback(async ({ quiet = false } = {}) => {
+    if (!token) return
+    if (!quiet) setIsLoading(true)
+    setError('')
+    try {
+      const result = await fetchStudentNetwork(token)
+      setNetworkState(result.networkState)
+    } catch (loadError) {
+      if (loadError.status === 401) clearStudentSessionToken()
+      setError(loadError.message)
+      throw loadError
+    } finally {
+      setIsLoading(false)
     }
+  }, [token])
 
-    loadNetworkState()
+  useEffect(() => { reload().catch(() => {}) }, [reload])
 
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  if (isLoading && !networkState) return <DashboardSkeleton section="network" />
 
-  useEffect(() => {
-    if (!sessionTokenRef.current || !didHydrateRef.current) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      saveStudentNetwork(sessionTokenRef.current, { networkState }).catch(() => {})
-    }, 350)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [networkState])
-
-  return (
-    <NetworkProvider value={{ networkState, setNetworkState }}>
-      <div>
-        <NetworkNav items={NETWORK_NAV_ITEMS} active={activeTab} onChange={setActiveTab} />
-
-        {activeTab === 'home' && <NetworkHome />}
-        {activeTab === 'my-network' && <MyNetwork />}
-        {activeTab === 'team-up' && <NetworkTeamUp />}
-      </div>
-    </NetworkProvider>
-  )
+  return <NetworkProvider value={{ networkState, reload, token, setActiveTab }}>
+    <div className="network-workspace">
+      <NetworkNav items={NETWORK_NAV_ITEMS} active={activeTab} onChange={setActiveTab} />
+      {error && !networkState ? <div className="network-error" role="alert"><span>{error}</span><button type="button" onClick={() => reload().catch(() => {})}>Retry</button></div> :
+        <div key={activeTab} className="student-tab-content network-tab-content">
+          {activeTab === 'home' && <NetworkHome />}
+          {activeTab === 'my-network' && <MyNetwork />}
+          {activeTab === 'team-up' && <NetworkTeamUp />}
+        </div>}
+    </div>
+  </NetworkProvider>
 }

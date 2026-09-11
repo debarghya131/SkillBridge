@@ -1,5 +1,6 @@
 const Student = require('../models/Student')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
+const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
 const {
   appendSession,
@@ -8,7 +9,8 @@ const {
   getSessionTtlMs,
 } = require('../utils/session')
 const { consumeSectionOperation } = require('../utils/sectionUsage')
-const { recordTrustScoreEvents } = require('./trustScoreController')
+const { reconcileTrustScore, recordTrustScoreEvents } = require('./trustScoreController')
+const { buildActivityDays, buildStudentSkillHubSkills, buildStreakSummary, reconcileSkillExpiry } = require('./skillHubController')
 
 function normalizeEmail(email) {
   return email?.trim().toLowerCase() || ''
@@ -19,14 +21,39 @@ function normalizePhone(phone) {
 }
 
 function createTrustScore() {
-  return Math.floor(Math.random() * 200) + 720
+  return 0
 }
 
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function safeExternalUrl(value) {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 2048) return ''
+  try {
+    const url = new URL(value.trim())
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : ''
+  } catch {
+    return ''
+  }
+}
+
+function safeMediaValue(value, kind, maxLength) {
+  if (value === null) return null
+  if (typeof value !== 'string' || value.length > maxLength) return undefined
+  if (safeExternalUrl(value)) return value.trim()
+  const type = kind === 'image' ? 'image\\/(jpeg|png|webp|gif)' : 'video\\/(mp4|webm)'
+  return new RegExp(`^data:${type};base64,`, 'i').test(value) ? value : undefined
+}
+
 function sanitizeStudent(student) {
+  const skillHubSkills = buildStudentSkillHubSkills(student)
+  const practiceSummary = buildStreakSummary(
+    skillHubSkills,
+    Array.isArray(student.skillHubState?.skillLog) ? student.skillHubState.skillLog : [],
+  )
+  const activityDays = buildActivityDays(Array.isArray(student.skillHubState?.skillLog) ? student.skillHubState.skillLog : [])
+
   return {
     id: student._id.toString(),
     name: student.name,
@@ -39,6 +66,12 @@ function sanitizeStudent(student) {
     trustScore: student.trustScore,
     avatar: student.avatar || null,
     skills: Array.isArray(student.skills) ? student.skills : buildDefaultStudentProfile().skills,
+    skillHubSkills,
+    practiceStats: {
+      totalPracticeDays: practiceSummary.totalPracticeDays,
+      overallCurrent: practiceSummary.overallCurrent,
+      activityDays,
+    },
     githubLink: Array.isArray(student.githubLink) ? student.githubLink : [],
     contactInfo: Array.isArray(student.contactInfo) ? student.contactInfo : [],
     projects: Array.isArray(student.projects) ? student.projects : buildDefaultStudentProfile().projects,
@@ -89,6 +122,8 @@ async function signUpStudent(payload) {
     digilockerToken: verificationMethod === 'digilocker' ? payload.digilockerToken.trim() : '',
     trustScore: createTrustScore(),
     ...buildDefaultStudentProfile(),
+    skillHubSkills: [],
+    skillHubState: buildDefaultSkillHubState(),
   })
 
   const token = createSessionToken()
@@ -126,6 +161,7 @@ async function signInStudent(payload) {
     throw buildAuthError('Invalid credentials', 401)
   }
 
+  reconcileTrustScore(student)
   const token = createSessionToken()
   await appendSession(student, token, Number(process.env.MAX_SESSIONS_PER_ACCOUNT) || 5)
 
@@ -137,6 +173,8 @@ async function signInStudent(payload) {
 
 async function getCurrentStudent(token) {
   const student = await findStudentByToken(token)
+  await reconcileSkillExpiry(student)
+  if (reconcileTrustScore(student)) await student.save()
   return sanitizeStudent(student)
 }
 
@@ -144,33 +182,42 @@ async function updateCurrentStudent(token, payload) {
   const student = await findStudentByToken(token)
   const updates = {}
   const previousSkills = Array.isArray(student.skills) ? student.skills : []
-  const previousGithubLinks = Array.isArray(student.githubLink) ? student.githubLink : []
-  const previousProjects = Array.isArray(student.projects) ? student.projects : []
+  const previousGithubLinks = Array.isArray(student.githubLink)
+    ? student.githubLink.filter(link => link?.saved !== false)
+    : []
+  const previousProjects = Array.isArray(student.projects)
+    ? student.projects.filter(project => project?.saved === true)
+    : []
   const previousVideoUrl = student.videoUrl
 
   if (typeof payload.name === 'string' && payload.name.trim()) {
     updates.name = payload.name.trim()
   }
 
-  if (payload.avatar === null || typeof payload.avatar === 'string') {
-    updates.avatar = payload.avatar
+  if (Object.prototype.hasOwnProperty.call(payload, 'avatar')) {
+    const avatar = safeMediaValue(payload.avatar, 'image', 850000)
+    if (avatar === undefined) throw buildAuthError('Use a JPG, PNG, WEBP, GIF, or HTTPS profile image under 600 KB')
+    updates.avatar = avatar
   }
 
   if (Array.isArray(payload.skills)) {
-    updates.skills = payload.skills.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim())
+    // Skill Hub owns skill mutations; stale profile autosaves must not erase reviewed skills.
+    updates.skills = buildStudentSkillHubSkills(student).map(skill => skill.name)
   }
 
   if (Array.isArray(payload.githubLink)) {
+    if (payload.githubLink.length > 20) throw buildAuthError('A maximum of 20 profile links is allowed')
     updates.githubLink = payload.githubLink
       .filter(item => item && typeof item.url === 'string' && item.url.trim())
       .map(item => ({
         icon: typeof item.icon === 'string' ? item.icon : '🐙',
-        url: item.url.trim(),
+        url: safeExternalUrl(item.url),
         saved: item.saved !== false,
-      }))
+      })).filter(item => item.url)
   }
 
   if (Array.isArray(payload.contactInfo)) {
+    if (payload.contactInfo.length > 20) throw buildAuthError('A maximum of 20 contact details is allowed')
     updates.contactInfo = payload.contactInfo
       .filter(item => item && typeof item.label === 'string' && typeof item.value === 'string' && item.value.trim())
       .map(item => ({
@@ -181,17 +228,20 @@ async function updateCurrentStudent(token, payload) {
   }
 
   if (Array.isArray(payload.projects)) {
+    if (payload.projects.length > 30) throw buildAuthError('A maximum of 30 projects is allowed')
     updates.projects = payload.projects.map(item => ({
-      name: typeof item?.name === 'string' ? item.name : '',
-      desc: typeof item?.desc === 'string' ? item.desc : '',
-      link: typeof item?.link === 'string' ? item.link : '',
-      demoLink: typeof item?.demoLink === 'string' ? item.demoLink : '',
+      name: typeof item?.name === 'string' ? item.name.trim().slice(0, 120) : '',
+      desc: typeof item?.desc === 'string' ? item.desc.trim().slice(0, 1000) : '',
+      link: safeExternalUrl(item?.link),
+      demoLink: safeExternalUrl(item?.demoLink),
       saved: item?.saved === true,
     }))
   }
 
-  if (payload.videoUrl === null || typeof payload.videoUrl === 'string') {
-    updates.videoUrl = payload.videoUrl
+  if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
+    const videoUrl = safeMediaValue(payload.videoUrl, 'video', 7000000)
+    if (videoUrl === undefined) throw buildAuthError('Use an MP4, WEBM, or HTTPS intro video under 5 MB')
+    updates.videoUrl = videoUrl
   }
 
   const nextStudentState = {
@@ -226,8 +276,15 @@ async function updateCurrentStudent(token, payload) {
   Object.assign(student, updates)
 
   const nextSkills = Array.isArray(student.skills) ? student.skills : []
-  const nextGithubLinks = Array.isArray(student.githubLink) ? student.githubLink : []
-  const nextProjects = Array.isArray(student.projects) ? student.projects : []
+  // Only records that are explicitly saved are public profile evidence and
+  // therefore eligible for TrustScore credit. The editor keeps draft records
+  // in the same snapshot while a project is being completed.
+  const nextGithubLinks = Array.isArray(student.githubLink)
+    ? student.githubLink.filter(link => link?.saved !== false)
+    : []
+  const nextProjects = Array.isArray(student.projects)
+    ? student.projects.filter(project => project?.saved === true)
+    : []
   const previousSkillNames = new Set(previousSkills.map(skill => skill.toLowerCase()))
   const previousGithubUrls = new Set(previousGithubLinks.map(link => link.url).filter(Boolean))
   const previousProjectKeys = new Set(previousProjects.map(project => `${project.name || ''}:${project.link || project.demoLink || ''}`))
@@ -253,6 +310,7 @@ async function updateCurrentStudent(token, payload) {
   }
 
   recordTrustScoreEvents(student, trustEvents)
+  if (student.updatedAt) student.$where = { updatedAt: student.updatedAt }
   await student.save()
 
   return sanitizeStudent(student)

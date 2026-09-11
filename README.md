@@ -113,6 +113,72 @@ flowchart TD
     G --> K[Dashboard State]
 ```
 
+### 3. Full GIG Pipeline
+
+```mermaid
+flowchart TD
+    subgraph Company[Company]
+        Publish[GIG Management: Publish GIG]
+        Applicants[Review applications]
+        Assign[Send saved or new interview assignment]
+        Review{Review interview submission}
+        Reject[Reject application]
+        Select[Select student]
+        Start[Project Workspace: Start GIG work]
+        Track[Track updates and milestones]
+        Delivery{Review final delivery}
+        Approve[Approve work]
+        Pending[Payment: Awaiting payment]
+        Pay[Pay student outside SkillBridge]
+        Record[Record amount, date, method and transaction reference]
+        History[Payment History]
+    end
+
+    subgraph Student[Student]
+        Browse[GIG Center: Browse and save GIGs]
+        Apply[Apply for GIG]
+        Invite{Opportunity: Accept invitation?}
+        Decline[Decline invitation]
+        Task[Complete and submit interview task]
+        ReviseTask[Revise interview task]
+        Active[Active GIG: Complete project work]
+        Submit[Submit final deliverable]
+        ReviseWork[Revise project work]
+        EarningsPending[Earnings: Pending payment]
+        EarningsRecorded[Earnings: Company-recorded external payment]
+        Complete[Completed GIGs]
+    end
+
+    Publish --> Browse --> Apply --> Applicants --> Assign --> Invite
+    Invite -->|No| Decline
+    Invite -->|Yes| Task --> Review
+    Review -->|Revision requested| ReviseTask --> Task
+    Review -->|Rejected| Reject
+    Review -->|Selected| Select --> Start
+    Start --> Track
+    Start --> Active --> Submit --> Delivery
+    Track -.-> Delivery
+    Delivery -->|Revision requested| ReviseWork --> Submit
+    Delivery -->|Approved| Approve --> Pending --> Pay --> Record
+    Approve --> EarningsPending
+    Record --> History
+    Record --> EarningsRecorded
+    Record --> Complete
+
+    subgraph Trust[Trust and Reputation]
+        Evidence[Task evidence and work outcomes]
+        Center[Trust Center: Evidence review]
+        Score[TrustScore]
+        Reconcile[Completion hook reconciliation pending]
+        Evidence -.-> Center -.-> Score
+        Reconcile -.-> Score
+    end
+
+    Task -.-> Evidence
+    Submit -.-> Evidence
+    Complete -.-> Reconcile
+```
+
 ## 📁 Folder Structure
 
 ```text

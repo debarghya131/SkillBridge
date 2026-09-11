@@ -1,0 +1,42 @@
+.company-profile-overlay { position:fixed; inset:0; z-index:1400; display:grid; place-items:center; padding:20px; background:#11182799; backdrop-filter:blur(4px); }
+.company-profile-dialog { width:min(560px,100%); max-height:90dvh; display:flex; flex-direction:column; border:1px solid #dce3ee; border-radius:8px; background:#fff; color:#172033; box-shadow:0 24px 80px #10182740; overflow:hidden; font-family:Inter,Arial,sans-serif; letter-spacing:0; }
+.company-profile-dialog * { box-sizing:border-box; }
+.company-profile-heading { display:flex; align-items:center; gap:14px; padding:26px; background:linear-gradient(120deg,#4f46e5,#0284c7); color:#fff; flex-shrink:0; }
+.company-profile-heading>div:nth-child(2) { flex:1; min-width:0; }
+.company-profile-heading small { font-size:10px; text-transform:uppercase; font-weight:700; opacity:.8; }
+.company-profile-heading h2 { font-size:22px; line-height:1.3; margin:7px 0; overflow-wrap:anywhere; }
+.company-profile-heading p { display:flex; align-items:center; gap:5px; margin:0; font-size:12px; color:#e0e7ff; }
+.company-profile-modes { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }
+.company-profile-modes span { font-size:10px; padding:4px 7px; border:1px solid #ffffff30; border-radius:4px; background:#ffffff12; }
+.company-profile-dialog button { font:600 12px Inter,Arial,sans-serif; cursor:pointer; border:1px solid #dce3ee; border-radius:6px; background:#fff; padding:8px 14px; color:#4f46e5; }
+.company-profile-dialog .company-profile-close { display:grid; place-items:center; width:32px; height:32px; padding:0; border-radius:50%; border-color:#ffffff40; background:#ffffff15; color:#fff; flex-shrink:0; align-self:flex-start; }
+.company-profile-dialog button:focus-visible,.company-profile-dialog a:focus-visible,.company-profile-dialog summary:focus-visible { outline:3px solid #a5b4fc; outline-offset:3px; }
+.company-profile-body { padding:26px; overflow-y:auto; min-height:0; scrollbar-width:thin; display:flex; flex-direction:column; gap:22px; }
+.company-profile-body>section+section { border-top:1px solid #edf0f5; padding-top:22px; }
+.company-profile-body h3 { font-size:11px; text-transform:uppercase; color:#62738d; margin:0 0 14px; }
+.company-profile-body .company-profile-role { font-size:18px; text-transform:none; color:#172033; line-height:1.5; }
+.company-profile-body p { font-size:13px; color:#62738d; line-height:1.7; margin:12px 0 0; }
+.company-profile-body dd,.company-profile-body p { overflow-wrap:anywhere; }
+.company-profile-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0; }
+.company-profile-facts>div { padding:12px; border:1px solid #e0e7f0; border-radius:6px; background:#f8fafc; }
+.company-profile-dialog dt { font-size:11px; color:#62738d; font-weight:600; }
+.company-profile-dialog dd { font-size:12px; margin:7px 0 0; line-height:1.5; font-weight:600; }
+.company-profile-info { margin:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 14px; }
+.company-profile-info>div:last-child { grid-column:1/-1; }
+.company-profile-info dt { display:flex; align-items:center; gap:6px; }
+.company-profile-info dt svg { color:#6366f1; }
+.company-profile-info dd { font-weight:500; }
+.company-profile-skills { display:flex; flex-wrap:wrap; gap:7px; }
+.company-profile-skills span { color:#4f46e5; background:#eef2ff; border-radius:5px; padding:7px 10px; font-size:12px; font-weight:600; }
+.company-profile-account summary { display:flex; align-items:center; gap:7px; cursor:pointer; font-size:12px; color:#047857; font-weight:600; }
+.company-profile-account summary::after { content:'+'; margin-left:auto; }
+.company-profile-account[open] summary::after { content:'-'; }
+.company-profile-contact { display:flex; flex-wrap:wrap; gap:8px; }
+.company-profile-contact a { display:inline-flex; align-items:center; gap:6px; padding:9px 10px; border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:6px; text-decoration:none; font-size:12px; font-weight:600; overflow-wrap:anywhere; }
+.company-profile-contact a[href^="mailto:"] { border-color:#a7f3d0; background:#ecfdf5; color:#047857; }
+.company-profile-contact a[href^="tel:"] { border-color:#fed7aa; background:#fff7ed; color:#c2410c; }
+.company-profile-contact a:hover { filter:brightness(.97); }
+.company-profile-dialog footer { flex-shrink:0; display:flex; justify-content:flex-end; padding:14px 26px; border-top:1px solid #e0e7f0; }
+.company-profile-dialog footer button { background:#4f46e5; color:#fff; border-color:#4f46e5; min-height:38px; }
+.company-profile-error { border-left:3px solid #dc2626; padding-left:12px; }
+@media(max-width:480px) { .company-profile-overlay { padding:10px; } .company-profile-dialog { max-height:94dvh; } .company-profile-heading { padding:20px 16px; gap:10px; } .company-profile-heading h2 { font-size:18px; } .company-profile-body { padding:22px 16px; } .company-profile-dialog footer { padding:12px 16px; } }

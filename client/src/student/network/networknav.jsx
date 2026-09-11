@@ -18,7 +18,7 @@ export default function NetworkNav({ items, active, onChange }) {
           onMouseEnter={e => { if (active !== item.key) e.currentTarget.style.background = 'var(--bg)' }}
           onMouseLeave={e => { if (active !== item.key) e.currentTarget.style.background = 'transparent' }}
         >
-          {item.icon} {item.label}
+          <item.icon size={15} aria-hidden="true" /> {item.label}
         </button>
       ))}
     </div>

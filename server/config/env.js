@@ -54,7 +54,7 @@ function getEnvConfig() {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInteger(process.env.PORT, 5000),
     mongoUrl: process.env.MONGO_URL || '',
-    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN || '*'),
+    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*')),
     sessionTtlDays: Math.max(parseInteger(process.env.SESSION_TTL_DAYS, 30), 1),
     maxSessionsPerAccount: Math.max(parseInteger(process.env.MAX_SESSIONS_PER_ACCOUNT, 5), 1),
     rateLimitWindowMs: Math.max(parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 60_000), 1_000),
@@ -62,6 +62,7 @@ function getEnvConfig() {
     authRateLimitMaxRequests: Math.max(parseInteger(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS, 12), 3),
     dailyUserRateLimitMaxRequests: Math.max(parseInteger(process.env.DAILY_USER_RATE_LIMIT_MAX_REQUESTS, 2000), 100),
     dailySectionOperationLimit: Math.max(parseInteger(process.env.DAILY_SECTION_OPERATION_LIMIT, 2), 1),
+    rateLimitingEnabled: process.env.RATE_LIMITING_ENABLED !== 'false',
     logLevel: process.env.LOG_LEVEL || 'info',
   }
 
@@ -69,6 +70,10 @@ function getEnvConfig() {
 
   if (!config.mongoUrl) {
     missingKeys.push('MONGO_URL')
+  }
+
+  if (config.nodeEnv === 'production' && (!config.corsOrigins.length || config.corsOrigins.includes('*'))) {
+    missingKeys.push('CORS_ORIGIN')
   }
 
   if (missingKeys.length > 0) {

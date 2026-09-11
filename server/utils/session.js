@@ -56,19 +56,21 @@ async function findModelByActiveToken(Model, token, entityLabel, sessionTtlMs) {
   return entity
 }
 
-async function resolveSessionSubject({ token, studentModel, companyModel, sessionTtlMs }) {
+async function resolveSessionSubject({ token, studentModel, companyModel, reviewerModel, sessionTtlMs }) {
   if (!token) {
     return null
   }
 
-  const [student, company] = await Promise.all([
+  const [student, company, reviewer] = await Promise.all([
     studentModel.findOne({ 'sessions.token': token }).select('_id sessions'),
     companyModel.findOne({ 'sessions.token': token }).select('_id sessions'),
+    reviewerModel ? reviewerModel.findOne({ 'sessions.token': token, active: true }).select('_id sessions') : null,
   ])
 
   const subjects = [
     student ? { type: 'student', entity: student } : null,
     company ? { type: 'company', entity: company } : null,
+    reviewer ? { type: 'reviewer', entity: reviewer } : null,
   ].filter(Boolean)
 
   for (const subject of subjects) {

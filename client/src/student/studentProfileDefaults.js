@@ -21,46 +21,20 @@ export function isBundledStudentIntroVideoUrl(videoUrl) {
   )
 }
 
-export const DEFAULT_STUDENT_SKILLS = ['React', 'Node.js', 'UI/UX Design']
-
-export const DEFAULT_STUDENT_PROJECTS = [
-  {
-    name: 'E-Commerce Dashboard',
-    desc: 'Built a React admin dashboard with sales analytics, inventory tracking and order management for a local retailer.',
-    link: 'https://github.com/topics/react-dashboard',
-    demoLink: 'https://github.com/topics/react-dashboard',
-    saved: true,
-  },
-  {
-    name: 'College Notice Board App',
-    desc: 'Flutter-based mobile app for college announcements with real-time push notifications and department filters.',
-    link: 'https://github.com/topics/flutter-app',
-    demoLink: 'https://github.com/topics/flutter-app',
-    saved: true,
-  },
-  {
-    name: 'Inventory Management System',
-    desc: 'Excel-powered inventory tracker with automated reorder alerts and monthly report generation for Sharma Traders.',
-    link: 'https://github.com/topics/inventory-management-system',
-    demoLink: 'https://github.com/topics/inventory-management-system',
-    saved: true,
-  },
-]
-
 export const DEFAULT_STUDENT_PROFILE = {
   name: 'Student',
-  trustScore: 750,
+  trustScore: 0,
   avatar: null,
-  skills: DEFAULT_STUDENT_SKILLS,
+  skills: [],
   githubLink: [],
   contactInfo: [],
-  projects: DEFAULT_STUDENT_PROJECTS,
-  videoUrl: studentIntroVideo,
+  projects: [],
+  videoUrl: null,
 }
 
 export function mergeStudentProfile(student = {}) {
   const videoUrl = isBundledStudentIntroVideoUrl(student.videoUrl)
-    ? studentIntroVideo
+    ? null
     : student.videoUrl || DEFAULT_STUDENT_PROFILE.videoUrl
 
   return {

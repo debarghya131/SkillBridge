@@ -1,299 +1,160 @@
-import { useEffect, useMemo, useState } from 'react'
-import { buildDefaultCompanyWorkspaceState, mergeCompanyWorkspaceState } from './companyWorkspaceDemoData'
-import { toast } from '../ui/toast'
+import { useMemo, useState } from 'react'
+import { Check, CircleCheck, Clock3, FolderKanban, RotateCcw } from 'lucide-react'
+import SectionTabs from './SectionTabs'
+import SubmissionReview from './SubmissionReview'
 
 const STATUS_META = {
-  Planning: { bg: '#E0E7FF', color: '#3730A3' },
-  'In Progress': { bg: '#FEF3C7', color: '#92400E' },
-  Review: { bg: '#DBEAFE', color: '#1D4ED8' },
-  Completed: { bg: '#D1FAE5', color: '#065F46' },
+  Planning: { className: 'planning', label: 'Planning' },
+  'In Progress': { className: 'progress', label: 'In progress' },
+  Review: { className: 'review', label: 'Awaiting approval' },
+  Completed: { className: 'completed', label: 'Completed' },
+}
+const EMPTY_PROJECTS = []
+
+function formatDate(value) {
+  if (!value) return 'No deadline'
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-const TASK_META = {
-  Todo: { bg: '#F1F5F9', color: '#475569' },
-  'In Review': { bg: '#DBEAFE', color: '#1D4ED8' },
-  Done: { bg: '#D1FAE5', color: '#065F46' },
+function formatUpdateDate(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 }
 
-const TASK_STATE_ORDER = ['Todo', 'In Review', 'Done']
+export default function ProjectWorkspace({ projectWorkspaceState, taskSubmissions = [], onReviewTaskSubmission, onShareUpdate, onSetMilestone }) {
+  const projects = projectWorkspaceState?.projects || EMPTY_PROJECTS
+  const [filter, setFilter] = useState('All')
+  const [view, setView] = useState('Delivery')
+  const [selectedId, setSelectedId] = useState('')
+  const [message, setMessage] = useState('')
+  const [title, setTitle] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
 
-export default function ProjectWorkspace({ projectWorkspaceState, onSaveState, onShareUpdate, onSetMilestone }) {
-  const [localState, setLocalState] = useState(() => mergeCompanyWorkspaceState(projectWorkspaceState || buildDefaultCompanyWorkspaceState()))
-  const [busyAction, setBusyAction] = useState('')
+  const visible = useMemo(() => projects.filter(project => (filter === 'All' || project.status === filter)
+    && `${project.title} ${(project.team || []).join(' ')}`.toLowerCase().includes(search.toLowerCase())), [projects, filter, search])
+  const project = visible.find(item => item.id === selectedId) || visible[0]
+  const submission = taskSubmissions.find(item => item.id === project?.submissionId)
+  const status = STATUS_META[project?.status] || STATUS_META.Planning
 
-  useEffect(() => {
-    setLocalState(mergeCompanyWorkspaceState(projectWorkspaceState || buildDefaultCompanyWorkspaceState()))
-  }, [projectWorkspaceState])
+  const save = async (event, action, milestone) => {
+    event.preventDefault()
+    if (!project || busy) return
+    setBusy(true)
+    setError('')
 
-  const updateWorkspaceState = (updater) => {
-    setLocalState(current => {
-      const nextState = typeof updater === 'function' ? updater(current) : updater
-      const mergedState = mergeCompanyWorkspaceState(nextState)
-      onSaveState(mergedState)
-      return mergedState
-    })
-  }
-
-  const statusOptions = ['All', 'Planning', 'In Progress', 'Review', 'Completed']
-
-  const filteredProjects = useMemo(
-    () => localState.projects.filter(project => localState.statusFilter === 'All' || project.status === localState.statusFilter),
-    [localState.projects, localState.statusFilter]
-  )
-
-  const selectedProject = filteredProjects.find(project => project.id === localState.selectedProjectId) || filteredProjects[0] || null
-  const allTasks = localState.projects.flatMap(project => project.tasks)
-
-  const cycleTaskState = (projectId, taskName) => {
-    updateWorkspaceState(current => {
-      const projects = current.projects.map(project => {
-        if (project.id !== projectId) return project
-
-        const tasks = project.tasks.map(task => {
-          if (task.name !== taskName) return task
-          const currentIndex = TASK_STATE_ORDER.indexOf(task.state)
-          return { ...task, state: TASK_STATE_ORDER[(currentIndex + 1) % TASK_STATE_ORDER.length] }
-        })
-        const completedCount = tasks.filter(task => task.state === 'Done').length
-
-        return {
-          ...project,
-          tasks,
-          progress: tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : project.progress,
-        }
-      })
-
-      return { ...current, projects }
-    })
-  }
-
-  const handleShareUpdate = async () => {
-    if (!selectedProject || busyAction) return
-    const message = window.prompt('Share a short project update', selectedProject.updates?.[selectedProject.updates.length - 1]?.message || '')
-    if (!message?.trim()) return
-
-    setBusyAction('update')
     try {
-      if (onShareUpdate) {
-        await onShareUpdate(selectedProject.id, message)
+      if (action === 'update') {
+        await onShareUpdate(project.id, message)
+        setMessage('')
+      } else if (action === 'status') {
+        await onSetMilestone(project.id, { id: milestone.id, status: milestone.status === 'Completed' ? 'Open' : 'Completed' })
       } else {
-        updateWorkspaceState(current => ({
-          ...current,
-          projects: current.projects.map(project => project.id === selectedProject.id
-            ? { ...project, updates: [...(project.updates || []), { id: `update-${Date.now()}`, message: message.trim(), sharedAt: new Date().toISOString() }].slice(-20) }
-            : project),
-        }))
-        toast.success('The project update was saved.', { title: 'Update Shared' })
+        await onSetMilestone(project.id, { title, dueDate })
+        setTitle('')
+        setDueDate('')
       }
-    } catch (error) {
-      toast.error(error.message || 'The project update could not be saved.', { title: 'Update Failed' })
+    } catch (failure) {
+      setError(failure.message || 'Could not save the project change.')
     } finally {
-      setBusyAction('')
-    }
-  }
-
-  const handleSetMilestone = async () => {
-    if (!selectedProject || busyAction) return
-    const title = window.prompt('Set a milestone for this project', selectedProject.milestones?.[selectedProject.milestones.length - 1]?.title || '')
-    if (!title?.trim()) return
-    const dueDate = window.prompt('Milestone due date (optional)', selectedProject.deadline || '') || ''
-
-    setBusyAction('milestone')
-    try {
-      const milestone = { title: title.trim(), dueDate: dueDate.trim() }
-      if (onSetMilestone) {
-        await onSetMilestone(selectedProject.id, milestone)
-      } else {
-        updateWorkspaceState(current => ({
-          ...current,
-          projects: current.projects.map(project => project.id === selectedProject.id
-            ? { ...project, milestones: [...(project.milestones || []), { id: `milestone-${Date.now()}`, ...milestone, status: 'Open', createdAt: new Date().toISOString() }].slice(-20) }
-            : project),
-        }))
-        toast.success('The project milestone was saved.', { title: 'Milestone Set' })
-      }
-    } catch (error) {
-      toast.error(error.message || 'The milestone could not be saved.', { title: 'Milestone Failed' })
-    } finally {
-      setBusyAction('')
+      setBusy(false)
     }
   }
 
   return (
-    <div>
-      <div style={{
-        background: 'linear-gradient(135deg, var(--dark), #1E1B4B)',
-        borderRadius: 14,
-        borderLeft: '5px solid #818CF8',
-        boxShadow: '0 8px 24px rgba(30,27,75,0.14)',
-        padding: '18px 20px',
-        marginBottom: 16,
-        color: 'white',
-      }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.72)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 7 }}>
-          <span style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(129,140,248,0.2)', fontSize: 14 }}>🗂️</span>
-          Project Workspace
+    <section className="company-work-section workspace-section">
+      <header className="workspace-header">
+        <div>
+          <p className="workspace-eyebrow">Delivery operations</p>
+          <h2>Project Workspace</h2>
+          <p className="work-muted">Track selected students, work delivery, reviews, and project milestones.</p>
         </div>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Track live project execution and delivery</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
-          Monitor task flow, deadlines, and team progress from one workspace.
-        </div>
+        <label className="workspace-filter">Status
+          <select disabled={busy} value={filter} onChange={event => { setFilter(event.target.value); setSelectedId(''); setMessage(''); setTitle(''); setDueDate(''); setError('') }}>
+            {['All', 'Planning', 'In Progress', 'Review', 'Completed'].map(value => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      </header>
+
+      <div className="workspace-summary" aria-label="Project summary">
+        <div><FolderKanban size={20} aria-hidden="true" /><strong>{projects.filter(item => item.status !== 'Completed').length}</strong><small>Active projects</small></div>
+        <div><Clock3 size={20} aria-hidden="true" /><strong>{projects.filter(item => item.status === 'Review').length}</strong><small>Awaiting approval</small></div>
+        <div><CircleCheck size={20} aria-hidden="true" /><strong>{projects.filter(item => item.status === 'Completed').length}</strong><small>Completed projects</small></div>
       </div>
 
-      <div className="responsive-card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
-        {[
-          { label: 'Active Projects', value: localState.projects.length, icon: '🗂️' },
-          { label: 'In Progress Tasks', value: allTasks.filter(task => task.state === 'In Review').length, icon: '⚡' },
-          { label: 'Completed Tasks', value: allTasks.filter(task => task.state === 'Done').length, icon: '✅' },
-        ].map(stat => (
-          <div key={stat.label} style={{ background: 'var(--white)', border: '1px solid var(--border)', borderTop: '3px solid #818CF8', borderRadius: 12, padding: '16px 16px 14px', boxShadow: '0 2px 8px rgba(15,23,42,0.03)' }}>
-            <div style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#EEF2FF', fontSize: 17, marginBottom: 8 }}>{stat.icon}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--dark)' }}>{stat.value}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{stat.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="responsive-split-two" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 14 }}>
-        <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 18px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--dark)' }}>Projects Board</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {statusOptions.map(option => (
-                <button
-                  key={option}
-                  onClick={() => updateWorkspaceState(current => ({ ...current, statusFilter: option }))}
-                  style={{
-                    border: 'none',
-                    borderRadius: 100,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: '4px 10px',
-                    cursor: 'pointer',
-                    background: localState.statusFilter === option ? 'var(--accent)' : 'var(--bg)',
-                    color: localState.statusFilter === option ? 'white' : 'var(--muted)',
-                  }}
-                >
-                  {option}
+      {!projects.length ? (
+        <div className="workspace-empty"><FolderKanban size={24} aria-hidden="true" /><strong>No selected students yet</strong></div>
+      ) : (
+        <div className="workspace-board">
+          <aside className="workspace-projects">
+            <div className="workspace-panel-title"><h3>Projects</h3><span>{visible.length} shown</span></div>
+            <input type="search" aria-label="Search projects or students" placeholder="Search projects or students" disabled={busy} value={search} onChange={event => { setSearch(event.target.value); setMessage(''); setTitle(''); setDueDate(''); setError('') }} />
+            <div className="workspace-project-list">
+              {visible.map(item => {
+                const itemStatus = STATUS_META[item.status] || STATUS_META.Planning
+                return <button key={item.id} type="button" disabled={busy} aria-pressed={item.id === project?.id} className={item.id === project?.id ? 'workspace-project is-selected' : 'workspace-project'} onClick={() => { setSelectedId(item.id); setError(''); setMessage(''); setTitle(''); setDueDate('') }}>
+                  <div className="workspace-project-top"><strong>{item.title}</strong><span className={'workspace-status ' + itemStatus.className}>{itemStatus.label}</span></div>
+                  <span className="workspace-project-person">{(item.team || []).join(', ') || 'Unassigned'}</span>
+                  <div className="workspace-project-progress"><span style={{ width: `${item.progress || 0}%` }} /></div>
+                  <small>{item.progress || 0}% complete · {formatDate(item.deadline)}</small>
                 </button>
-              ))}
+              })}
+              {!visible.length && <p className="work-muted">No projects match this status.</p>}
             </div>
-          </div>
+          </aside>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filteredProjects.map(project => {
-              const statusMeta = STATUS_META[project.status] || STATUS_META.Planning
-              const isActive = selectedProject?.id === project.id
-              return (
-                <button
-                  key={project.id}
-                  onClick={() => updateWorkspaceState(current => ({ ...current, selectedProjectId: project.id }))}
-                  style={{
-                    border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                    borderRadius: 10,
-                    background: isActive ? 'var(--accent-light)' : 'var(--white)',
-                    textAlign: 'left',
-                    padding: '12px 13px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--dark)' }}>{project.title}</div>
-                    <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 100, padding: '3px 8px', background: statusMeta.bg, color: statusMeta.color }}>
-                      {project.status}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 7 }}>{project.company} · Deadline {project.deadline}</div>
-                  <div style={{ height: 7, borderRadius: 99, background: '#E2E8F0', overflow: 'hidden' }}>
-                    <div style={{ width: `${project.progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #FB923C)' }} />
-                  </div>
-                </button>
-              )
-            })}
-            {filteredProjects.length === 0 && (
-              <div style={{ background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', padding: '14px', fontSize: 13, color: 'var(--muted)' }}>
-                No project found for this status.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 18px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
-          {selectedProject ? (
-            <>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)', marginBottom: 4 }}>{selectedProject.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                {selectedProject.company} · {selectedProject.progress}% completed · {selectedProject.team.join(', ')}
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    updateWorkspaceState(current => ({ ...current, selectedProjectId: selectedProject.id, statusFilter: 'All' }))
-                    toast.info('The selected project is open in this workspace.', { title: 'Workspace Open' })
-                  }}
-                  style={{ padding: '8px 12px', fontSize: 12 }}
-                >
-                  Open Workspace
-                </button>
-                <button className="btn-secondary" onClick={handleShareUpdate} disabled={Boolean(busyAction)} style={{ padding: '8px 12px', fontSize: 12 }}>
-                  {busyAction === 'update' ? 'Saving...' : 'Share Update'}
-                </button>
-                <button className="btn-secondary" onClick={handleSetMilestone} disabled={Boolean(busyAction)} style={{ padding: '8px 12px', fontSize: 12 }}>
-                  {busyAction === 'milestone' ? 'Saving...' : 'Set Milestone'}
-                </button>
-              </div>
-
-              {selectedProject.milestones?.length > 0 && (
-                <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 9, padding: '9px 11px', marginBottom: 14, fontSize: 12, color: '#3730A3' }}>
-                  <strong>Next milestone:</strong> {selectedProject.milestones[selectedProject.milestones.length - 1].title}
-                  {selectedProject.milestones[selectedProject.milestones.length - 1].dueDate && ` · ${selectedProject.milestones[selectedProject.milestones.length - 1].dueDate}`}
+          {project && (
+            <section className="workspace-detail">
+              <header className="workspace-detail-header">
+                <div>
+                  <p className="workspace-detail-kicker">Selected project</p>
+                  <h3>{project.title}</h3>
+                  <p className="work-muted">{(project.team || []).join(', ') || 'Unassigned'} · {formatDate(project.deadline)}</p>
                 </div>
-              )}
+                <span className={'workspace-status ' + status.className}>{status.label}</span>
+              </header>
 
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
-                Task Checklist
+              {project.paymentStatus && <p className="workspace-payment-status">{project.paymentStatus}</p>}
+
+              <SectionTabs label="Project views" options={['Delivery', 'Updates', 'Milestones']} value={view} onChange={setView} />
+              <div hidden={view !== 'Delivery'} className="workspace-delivery-panel">
+                {submission ? <SubmissionReview key={submission.id + submission.status} submission={submission} onReview={onReviewTaskSubmission} /> : <p className="work-muted">No submission is linked to this project.</p>}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {selectedProject.tasks.map(task => {
-                  const meta = TASK_META[task.state] || TASK_META.Todo
-                  return (
-                    <div key={task.name} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 12px', display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)', marginBottom: 2 }}>{task.name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>Owner: {task.owner}</div>
-                      </div>
-                      <button
-                        type="button"
-                        title="Advance task status"
-                        onClick={() => cycleTaskState(selectedProject.id, task.name)}
-                        style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, borderRadius: 100, padding: '4px 9px', background: meta.bg, color: meta.color, whiteSpace: 'nowrap' }}
-                      >
-                        {task.state}
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
+              <div hidden={view === 'Delivery'} className="workspace-detail-grid">
+                <section hidden={view !== 'Updates'} className="workspace-activity">
+                  <div className="workspace-panel-title"><h3>Project updates</h3><span>{(project.updates || []).length}</span></div>
+                  <div className="workspace-activity-list">
+                    {[...(project.updates || [])].reverse().map(update => <article key={update.id} className="workspace-update"><p>{update.message}</p><time dateTime={update.sharedAt}>{formatUpdateDate(update.sharedAt)}</time></article>)}
+                    {!project.updates?.length && <p className="work-muted">No project updates yet.</p>}
+                  </div>
+                  <form className="workspace-composer" onSubmit={event => save(event, 'update')}>
+                    <label>Share an update<textarea required maxLength="500" rows="3" value={message} onChange={event => setMessage(event.target.value)} placeholder="Add a delivery update for this project..." /></label>
+                    <button className="btn-primary" disabled={busy}>{busy ? 'Saving...' : 'Share update'}</button>
+                  </form>
+                </section>
 
-              {selectedProject.updates?.length > 0 && (
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 7 }}>Recent Updates</div>
-                  {selectedProject.updates.slice(-2).reverse().map(update => (
-                    <div key={update.id} style={{ fontSize: 12, color: 'var(--text)', background: 'var(--bg)', borderRadius: 8, padding: '8px 10px', marginTop: 6 }}>
-                      {update.message}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>Pick a project from the board to view details.</div>
+                <section hidden={view !== 'Milestones'} className="workspace-milestones">
+                  <div className="workspace-panel-title"><h3>Milestones</h3><span>{(project.milestones || []).length}</span></div>
+                  <div className="workspace-milestone-list">
+                    {(project.milestones || []).map(item => <article key={item.id} className="workspace-milestone"><div><strong>{item.title}</strong><small>{formatDate(item.dueDate)}</small></div><em>{item.status}</em><button type="button" className="btn-secondary" disabled={busy} title={item.status === 'Completed' ? 'Reopen milestone' : 'Complete milestone'} aria-label={`${item.status === 'Completed' ? 'Reopen' : 'Complete'} milestone: ${item.title}`} onClick={event => save(event, 'status', item)}>{item.status === 'Completed' ? <RotateCcw size={16} /> : <Check size={16} />}</button></article>)}
+                    {!project.milestones?.length && <p className="work-muted">No milestones added.</p>}
+                  </div>
+                  <form className="workspace-milestone-form" onSubmit={event => save(event, 'milestone')}>
+                    <label>Milestone<input required maxLength="120" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g. Deliver first milestone" /></label>
+                    <label>Due date<input type="date" required value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
+                    <button className="btn-secondary" disabled={busy}>{busy ? 'Saving...' : 'Add milestone'}</button>
+                  </form>
+                </section>
+              </div>
+              {error && <p role="alert" className="work-error">{error}</p>}
+            </section>
           )}
         </div>
-      </div>
-    </div>
+      )}
+    </section>
   )
 }

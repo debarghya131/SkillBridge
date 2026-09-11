@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Activity, ArrowRight, BadgeCheck, BriefcaseBusiness, CalendarDays, ChevronLeft, ChevronRight, Flame, RefreshCw, UsersRound } from 'lucide-react'
 import GigCenter from './gig/gig'
 import Network from './network/network'
 import SkillHub from './skillhub/skillhub'
 import Earning from './earning/earning'
 import StudentNav from './studentNav'
 import StudentSidebar from './studentSidebar'
+import DashboardSkeleton from '../ui/DashboardSkeleton'
+import './StudentViewport.css'
 import { TrustScoreCriteriaContent } from './trustscoreCriteria'
-import { clearStudentSessionToken, fetchCurrentStudent, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
+import { clearStudentSessionToken, fetchCurrentStudent, fetchStudentActivityHeatmap, fetchStudentGigs, fetchStudentNetwork, fetchStudentSkillHub, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
 import { isBundledStudentIntroVideoUrl, mergeStudentProfile } from './studentProfileDefaults'
 import { toast } from '../ui/toast'
+import { safeExternalUrl } from '../lib/safeExternalUrl'
 
 const NAV_ITEMS = [
   { key: 'gig',        icon: '💼', label: 'GIG Center' },
@@ -20,17 +24,42 @@ const NAV_ITEMS = [
   { key: 'profile',   icon: '👤', label: 'My Profile' },
 ]
 
-const VERIFIED_SKILL_SET = new Set(['React', 'Node.js', 'UI/UX Design'])
 const MAX_PROFILE_PHOTO_SIZE = 600 * 1024
+const MAX_INTRO_VIDEO_SIZE = 5 * 1024 * 1024
 const STUDENT_ACTIVE_SECTION_KEY = 'skillbridge.student.activeSection'
-const DEMO_PROJECT_LINKS = [
-  'https://github.com/topics/react-dashboard',
-  'https://github.com/topics/flutter-app',
-  'https://github.com/topics/inventory-management-system',
+const getProjectLink = project => safeExternalUrl(project?.link)
+const getProjectDemoLink = project => safeExternalUrl(project?.demoLink)
+const getPracticeStats = hub => {
+  const streaks = hub?.skillHubState?.streaks || hub?.practiceStats || {}
+  return {
+    totalPracticeDays: Math.max(0, Number(streaks.totalPracticeDays) || 0),
+    overallCurrent: Math.max(0, Number(streaks.overallCurrent ?? streaks.current) || 0),
+  }
+}
+const getActivityDays = hub => {
+  const saved = hub?.skillHubState?.activityDays || hub?.practiceStats?.activityDays
+  if (Array.isArray(saved)) return saved
+  const approved = new Set(['verify_completed', 'reverify_completed', 'upgrade_completed', 'retention_completed', 'challenge_completed'])
+  const counts = new Map()
+  for (const item of hub?.skillHubState?.skillLog || []) {
+    if (!approved.has(item?.eventType) || !/^\d{4}-\d{2}-\d{2}$/.test(item?.earnedDay || '')) continue
+    counts.set(item.earnedDay, (counts.get(item.earnedDay) || 0) + 1)
+  }
+  return [...counts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([date, count]) => ({ date, count }))
+}
+const dateKey = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+const daysInMonth = (year, month) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+const mondayOffset = (year, month, day = 1) => (new Date(Date.UTC(year, month, day)).getUTCDay() + 6) % 7
+const monthCells = (year, month) => [
+  ...Array.from({ length: mondayOffset(year, month) }, () => null),
+  ...Array.from({ length: daysInMonth(year, month) }, (_, index) => dateKey(year, month, index + 1)),
 ]
 
-const getProjectLink = (project, index) => project.link?.trim() || DEMO_PROJECT_LINKS[index % DEMO_PROJECT_LINKS.length]
-const getProjectDemoLink = (project, index) => project.demoLink?.trim() || DEMO_PROJECT_LINKS[index % DEMO_PROJECT_LINKS.length]
+function indiaToday() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric', day: 'numeric' })
+    .formatToParts(new Date()).filter(part => part.type !== 'literal').map(part => [part.type, Number(part.value)]))
+  return { year: parts.year, month: parts.month - 1, day: parts.day, key: dateKey(parts.year, parts.month - 1, parts.day) }
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -63,13 +92,44 @@ async function updateProfilePhoto(file, setAvatar) {
   }
 }
 
-function VerifiedBadge({ method }) {
-  const [show, setShow] = useState(false)
-  const labels = {
-    email: 'Verified via College Email',
-    aadhaar: 'Verified via Aadhaar Card',
-    digilocker: 'Verified via DigiLocker',
+async function updateIntroVideo(file, setVideoUrl) {
+  if (!file) return
+  if (!['video/mp4', 'video/webm'].includes(file.type)) {
+    toast.warning('Choose an MP4 or WEBM video.', { title: 'Unsupported Video' })
+    return
   }
+  if (file.size > MAX_INTRO_VIDEO_SIZE) {
+    toast.warning('Intro videos must be 5 MB or smaller.', { title: 'Video Too Large' })
+    return
+  }
+  try {
+    setVideoUrl(await readFileAsDataUrl(file))
+  } catch {
+    toast.error('The selected video could not be read. Please try again.', { title: 'Upload Failed' })
+  }
+}
+
+const registrationMethodDetails = {
+  email: { icon: '📧', label: 'College Email' },
+  phone: { icon: '📱', label: 'Phone Number' },
+}
+
+const identityMethodDetails = {
+  aadhaar: { icon: '🪪', label: 'Aadhaar Card' },
+  digilocker: { icon: '🔐', label: 'DigiLocker' },
+}
+
+function VerificationMethodRows({ contactMethod = 'email', verificationMethod = 'aadhaar' }) {
+  const registration = registrationMethodDetails[contactMethod] || registrationMethodDetails.email
+  const identity = identityMethodDetails[verificationMethod] || identityMethodDetails.aadhaar
+  return <>
+    <span>{registration.icon} Registered via {registration.label}</span>
+    <span>{identity.icon} Identity verified via {identity.label}</span>
+  </>
+}
+
+function VerifiedBadge({ contactMethod, verificationMethod }) {
+  const [show, setShow] = useState(false)
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
       onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
@@ -86,7 +146,10 @@ function VerifiedBadge({ method }) {
           padding: '5px 10px', borderRadius: 6, whiteSpace: 'nowrap',
           boxShadow: 'var(--shadow)', zIndex: 10, pointerEvents: 'none',
         }}>
-          {labels[method] || 'Identity Verified'}
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>Account verification</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <VerificationMethodRows contactMethod={contactMethod} verificationMethod={verificationMethod} />
+          </div>
           <span style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', borderWidth: 4, borderStyle: 'solid', borderColor: 'var(--dark) transparent transparent transparent' }} />
         </span>
       )}
@@ -94,7 +157,7 @@ function VerifiedBadge({ method }) {
   )
 }
 
-function ModalVerifiedBadge() {
+function ModalVerifiedBadge({ contactMethod, verificationMethod }) {
   const [show, setShow] = useState(false)
   return (
     <span style={{ position: 'relative', display: 'inline-flex' }}
@@ -110,11 +173,9 @@ function ModalVerifiedBadge() {
           boxShadow: '0 4px 16px rgba(0,0,0,0.18)', zIndex: 20, pointerEvents: 'none',
           border: '1px solid var(--border)',
         }}>
-          <div style={{ fontWeight: 700, color: '#10B981', marginBottom: 4 }}>Identity Verified via</div>
+          <div style={{ fontWeight: 700, color: '#10B981', marginBottom: 4 }}>Account verification</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span>📧 College Email</span>
-            <span>🪪 Aadhaar Card</span>
-            <span>🔐 DigiLocker</span>
+            <VerificationMethodRows contactMethod={contactMethod} verificationMethod={verificationMethod} />
           </div>
           <span style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', borderWidth: 5, borderStyle: 'solid', borderColor: 'transparent transparent white transparent' }} />
         </span>
@@ -123,10 +184,127 @@ function ModalVerifiedBadge() {
   )
 }
 
-function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills, githubLink, projects, videoUrl, contactInfo }) {
+function ProfileSkills({ skills, records = [] }) {
+  const [level, setLevel] = useState('All')
+  const visibleSkills = skills.filter(name => {
+    if (level === 'All') return true
+    const skill = records.find(item => item.name.toLowerCase() === name.toLowerCase())
+    return skill?.verified && ['valid', 'due'].includes(skill.renewalStatus) && skill.stage === level
+  })
+  return <section className="profile-skills">
+    <header className="profile-skills-heading">
+      <h3>Skills</h3>
+      <div className="profile-skill-filters" role="group" aria-label="Filter skills by level">
+        {['All', 'Pro', 'Intermediate', 'Beginner'].map(value => <button
+          key={value} type="button" data-level={value.toLowerCase()} aria-pressed={level === value}
+          onClick={() => setLevel(value)}>{value}</button>)}
+      </div>
+    </header>
+    <div className="profile-skill-list">
+    {visibleSkills.map(name => {
+      const skill = records.find(item => item.name.toLowerCase() === name.toLowerCase())
+      const verified = skill?.verified && ['valid', 'due'].includes(skill.renewalStatus)
+      return <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', maxWidth: '100%', overflowWrap: 'anywhere',
+        background: 'var(--primary-light)', color: 'var(--primary)', padding: '6px 10px', borderRadius: 6, fontSize: 13 }}>
+        {name}
+        {verified ? <><BadgeCheck size={16} aria-label="Verified skill" /><small>{skill.stage}</small>{skill.streak > 0 && <span className="profile-skill-streak" title={`${skill.streak} consecutive approved practice days`}><Flame size={13}/>{skill.streak}d</span>}</>
+          : <small>{skill?.renewalStatus === 'expired' ? 'Expired' : 'Unverified'}</small>}
+      </span>
+    })}
+    </div>
+    {!visibleSkills.length && <p className="work-muted" role="status">{skills.length ? `No actively verified ${level} skills.` : 'No skills added yet.'}</p>}
+  </section>
+}
+
+function ProfileActivityHeatmap({ activityDays = [] }) {
+  const today = useMemo(() => indiaToday(), [])
+  const [token] = useState(getStudentSessionToken)
+  const [view, setView] = useState('month')
+  const [period, setPeriod] = useState({ year: today.year, month: today.month })
+  const [remoteHeatmap, setRemoteHeatmap] = useState(null)
+  const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [retry, setRetry] = useState(0)
+  const visibleActivity = remoteHeatmap?.days || activityDays
+  const counts = useMemo(() => new Map(visibleActivity.map(item => [item.date, Math.max(0, Number(item.count) || 0)])), [visibleActivity])
+  const cells = useMemo(() => {
+    if (view === 'month') return monthCells(period.year, period.month)
+    return Array.from({ length: 12 }, (_, month) => monthCells(period.year, month).filter(Boolean)).flat()
+  }, [period, view])
+  const visibleDates = cells.filter(Boolean)
+  const activeDays = visibleDates.filter(key => (counts.get(key) || 0) > 0).length
+  const approvedCount = visibleDates.reduce((total, key) => total + (counts.get(key) || 0), 0)
+  const periodLabel = view === 'month'
+    ? new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(period.year, period.month, 1)))
+    : String(period.year)
+  const atLatest = view === 'month' ? period.year === today.year && period.month === today.month : period.year === today.year
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setLoadError('')
+    setRemoteHeatmap(null)
+    fetchStudentActivityHeatmap(token, { view, year: period.year, month: period.month + 1 })
+      .then(result => { if (!cancelled) setRemoteHeatmap(result.heatmap) })
+      .catch(error => { if (!cancelled) { setRemoteHeatmap(null); setLoadError(error.message || 'Could not load activity') } })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [period.month, period.year, retry, token, view])
+
+  function changePeriod(direction) {
+    setPeriod(current => view === 'month'
+      ? (() => { const date = new Date(Date.UTC(current.year, current.month + direction, 1)); return { year: date.getUTCFullYear(), month: date.getUTCMonth() } })()
+      : { ...current, year: current.year + direction })
+  }
+
+  function changeView(next) {
+    setView(next)
+    setPeriod({ year: today.year, month: today.month })
+  }
+
+  function renderCell(key, index, showDay = false, style) {
+    if (!key) return <span className="is-empty" aria-hidden="true" key={`empty-${index}`}/>
+    const count = counts.get(key) || 0
+    const future = key > today.key
+    const level = future ? 0 : Math.min(4, count)
+    const label = `${new Date(`${key}T00:00:00Z`).toLocaleDateString('en-IN', { dateStyle: 'medium', timeZone: 'UTC' })}: ${count} approved ${count === 1 ? 'activity' : 'activities'}`
+    return <span key={key} className={future ? 'is-future' : ''} data-level={level} title={label} aria-label={label} style={style}>{showDay ? Number(key.slice(-2)) : ''}</span>
+  }
+
+  return <section className="profile-activity" aria-labelledby="profile-activity-title">
+    <header><div><span>Approved activity</span><h3 id="profile-activity-title">Contribution heatmap</h3></div><div className="profile-activity-modes" role="group" aria-label="Heatmap period"><button type="button" aria-pressed={view === 'month'} onClick={() => changeView('month')}>Monthly</button><button type="button" aria-pressed={view === 'year'} onClick={() => changeView('year')}>Yearly</button></div></header>
+    <div className="profile-activity-period"><button type="button" title={`Previous ${view}`} aria-label={`Previous ${view}`} onClick={() => changePeriod(-1)}><ChevronLeft size={16}/></button><strong>{periodLabel}</strong><button type="button" title={`Next ${view}`} aria-label={`Next ${view}`} disabled={atLatest} onClick={() => changePeriod(1)}><ChevronRight size={16}/></button></div>
+    <div className="profile-heatmap-scroll">
+      {view === 'month' && <div className="profile-heatmap-weekdays">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => <span key={day}>{day}</span>)}</div>}
+      {view === 'month' && <div className="profile-heatmap-grid is-month">{cells.map((key, index) => renderCell(key, index, true))}</div>}
+      {view === 'year' && <>
+        <div className="profile-heatmap-months">{Array.from({ length: 12 }, (_, month) => {
+          const dayIndex = (Date.UTC(period.year, month, 1) - Date.UTC(period.year, 0, 1)) / 86400000
+          const column = Math.floor((mondayOffset(period.year, 0) + dayIndex) / 7) + 1
+          return <span key={month} style={{ gridColumn: column }}>{new Intl.DateTimeFormat('en-IN', { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(period.year, month, 1)))}</span>
+        })}</div>
+        <div className="profile-heatmap-grid is-year">{cells.map((key, index) => {
+          const position = mondayOffset(period.year, 0) + index
+          return renderCell(key, index, false, { gridColumn: Math.floor(position / 7) + 1, gridRow: (position % 7) + 1 })
+        })}</div>
+      </>}
+    </div>
+    <footer><span><strong>{remoteHeatmap?.activeDays ?? activeDays}</strong> active days</span><span><strong>{remoteHeatmap?.totalActivities ?? approvedCount}</strong> approved activities</span>{loading && <span role="status">Loading...</span>}{loadError && <button type="button" className="profile-heatmap-retry" title="Retry activity" aria-label="Retry activity" onClick={() => setRetry(value => value + 1)}><RefreshCw size={13}/></button>}<div className="profile-heatmap-legend"><small>Less</small>{[0,1,2,3,4].map(level => <i key={level} data-level={level}/>)}<small>More</small></div></footer>
+  </section>
+}
+
+function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills, skillHubSkills, githubLink, projects, videoUrl, contactInfo, practiceStats, activityDays, contactMethod, verificationMethod, profileActivity }) {
   const videoRef = useRef(null)
+  const closeButtonRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const verifiedSkills = skills.filter(s => VERIFIED_SKILL_SET.has(s))
+  const activity = practiceStats || { totalPracticeDays: 0, overallCurrent: 0 }
+
+  useEffect(() => {
+    closeButtonRef.current?.focus()
+    const onKeyDown = event => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
 
   const toggle = async () => {
     if (!videoRef.current) return
@@ -150,7 +328,7 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '24px',
     }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="responsive-modal-card" style={{
+      <div className="responsive-modal-card" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title" style={{
         background: 'var(--white)', borderRadius: 20, width: '100%', maxWidth: 560,
         maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow-lg)',
         border: '1px solid var(--border)',
@@ -173,8 +351,8 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                <span style={{ color: 'white', fontSize: 18, fontWeight: 800 }}>{name}</span>
-                <ModalVerifiedBadge />
+                <span id="profile-dialog-title" style={{ color: 'white', fontSize: 18, fontWeight: 800 }}>{name}</span>
+                <ModalVerifiedBadge contactMethod={contactMethod} verificationMethod={verificationMethod} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                 <span style={{
@@ -189,9 +367,15 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
                 </span>
                 <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>TrustScore™</span>
               </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} aria-label="Platform activity">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 7px', borderRadius: 6, background: 'rgba(96,165,250,.16)', color: '#bfdbfe', fontSize: 10, fontWeight: 700 }}><CalendarDays size={13}/>{activity.totalPracticeDays} practice days</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 7px', borderRadius: 6, background: 'rgba(251,146,60,.16)', color: '#fed7aa', fontSize: 10, fontWeight: 700 }}><Flame size={13}/>{activity.overallCurrent} trust streak</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 7px', borderRadius: 6, background: 'rgba(16,185,129,.16)', color: '#a7f3d0', fontSize: 10, fontWeight: 700 }}><BriefcaseBusiness size={13}/>{profileActivity.completedGigs ?? '...'} completed GIGs</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 7px', borderRadius: 6, background: 'rgba(168,85,247,.16)', color: '#e9d5ff', fontSize: 10, fontWeight: 700 }}><UsersRound size={13}/>{profileActivity.teamUps ?? '...'} team-ups</span>
+              </div>
             </div>
           </div>
-          <button onClick={onClose} style={{
+          <button ref={closeButtonRef} type="button" aria-label="Close profile" onClick={onClose} style={{
             background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white',
             width: 32, height: 32, borderRadius: '50%', fontSize: 16,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -230,7 +414,7 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
                     📷 {avatar ? 'Change Photo' : 'Add Photo'}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       style={{ display: 'none' }}
                       onChange={async e => {
                         await updateProfilePhoto(e.target.files?.[0], setAvatar)
@@ -261,21 +445,10 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
 
           {/* Skills */}
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Skills</div>
-            {verifiedSkills.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {verifiedSkills.map(s => (
-                  <span key={s} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: 'var(--primary-light)', color: 'var(--primary)',
-                    padding: '5px 12px', borderRadius: 100, fontSize: 13, fontWeight: 600,
-                  }}>
-                    {s} <span style={{ background: '#10B981', color: 'white', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 100 }}>✓</span>
-                  </span>
-                ))}
-              </div>
-            ) : <span style={{ color: 'var(--muted)', fontSize: 13 }}>No skills added yet</span>}
+            <ProfileSkills skills={skills} records={skillHubSkills} />
           </div>
+
+          <ProfileActivityHeatmap activityDays={activityDays} />
 
           {/* Intro Video */}
           <div>
@@ -288,7 +461,7 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
               )}
             </div>
             {videoUrl && (
-              <button onClick={toggle} style={{
+              <button type="button" onClick={toggle} style={{
                 marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '7px 18px', borderRadius: 7,
                 border: isPlaying ? '1.5px solid #FCA5A5' : '1.5px solid #DC2626',
@@ -304,10 +477,10 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
           {/* GitHub */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>GitHub</div>
-            {githubLink.length > 0 ? (
+            {githubLink.filter(link => safeExternalUrl(link.url)).length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {githubLink.map((l, i) => (
-                  <a key={i} href={l.url} target="_blank" rel="noreferrer" style={{
+                {githubLink.filter(link => safeExternalUrl(link.url)).map((l, i) => (
+                  <a key={i} href={safeExternalUrl(l.url)} target="_blank" rel="noreferrer" style={{
                     display: 'inline-flex', alignItems: 'center', gap: 8,
                     background: 'var(--dark)', color: 'white',
                     padding: '7px 16px', borderRadius: 7,
@@ -344,8 +517,8 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
                     <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--dark)', marginBottom: 6 }}>{p.name || 'Untitled'}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>{p.desc}</div>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                      <a href={getProjectLink(p, i)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>🔗 View</a>
-                      <a href={getProjectDemoLink(p, i)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>🧪 Demo Link</a>
+                      {getProjectLink(p) && <a href={getProjectLink(p)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>View project</a>}
+                      {getProjectDemoLink(p) && <a href={getProjectDemoLink(p)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>Open demo</a>}
                     </div>
                   </div>
                 ))}
@@ -359,12 +532,11 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
   )
 }
 
-function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile }) {
+function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, saveState, contactMethod, verificationMethod }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [githubInput, setGithubInput] = useState({})
   const [contactInput, setContactInput] = useState({ label: 'Phone', value: '' })
   const videoRef = useRef(null)
-  const verifiedSkills = skills.filter(s => VERIFIED_SKILL_SET.has(s))
 
   const togglePlay = async () => {
     if (!videoRef.current) return
@@ -382,11 +554,35 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
   const updateProject = (i, field, val) =>
     setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: val } : p))
 
-  const saveProject = (i) =>
-    setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, saved: true } : p))
+  const saveProject = (i) => {
+    const project = projects[i]
+    if (!project?.name.trim()) {
+      toast.warning('Add a project name before saving.', { title: 'Project Name Required' })
+      return
+    }
+    if ((project.link.trim() && !safeExternalUrl(project.link)) || (project.demoLink?.trim() && !safeExternalUrl(project.demoLink))) {
+      toast.warning('Project links must use http:// or https://.', { title: 'Invalid Project Link' })
+      return
+    }
+    setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, link: safeExternalUrl(p.link), demoLink: safeExternalUrl(p.demoLink), saved: true } : p))
+  }
 
   const editProject = (i) =>
     setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, saved: false } : p))
+
+  const addProfileLink = () => {
+    const url = safeExternalUrl(githubInput.url)
+    if (!url) {
+      toast.warning('Enter a valid http:// or https:// profile URL.', { title: 'Invalid Profile Link' })
+      return
+    }
+    if (githubLink.some(item => item.url === url)) {
+      toast.info('This profile link is already saved.', { title: 'Duplicate Link' })
+      return
+    }
+    setGithubLink(current => [...current, { icon: githubInput.icon || '🐙', url, saved: true }])
+    setGithubInput({})
+  }
 
   const card = { background: 'var(--white)', borderRadius: 14, padding: '20px 24px', border: '1px solid var(--border)', marginBottom: 16 }
   const sectionTitle = { fontSize: 15, fontWeight: 700, color: 'var(--dark)', marginBottom: 14 }
@@ -417,7 +613,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 11,
             }}>📷</div>
-            <input type="file" accept="image/*" style={{ display: 'none' }}
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }}
               onChange={async e => {
                 await updateProfilePhoto(e.target.files?.[0], setAvatar)
                 e.target.value = ''
@@ -426,7 +622,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ color: 'white', fontSize: 20, fontWeight: 800 }}>{name}</span>
-              <VerifiedBadge method="email" />
+              <VerifiedBadge contactMethod={contactMethod} verificationMethod={verificationMethod} />
               <button
                 onClick={onViewProfile}
                 style={{
@@ -445,7 +641,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
                 View Profile
               </button>
             </div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Student · Profile Active</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Student · Profile Active{saveState !== 'idle' && <span style={{ marginLeft: 8, color: saveState === 'error' ? '#fca5a5' : '#a5b4fc' }}>· {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save failed'}</span>}</div>
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
@@ -456,23 +652,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
 
       {/* 2. Skills */}
       <div style={card}>
-        <div style={sectionTitle}>Skills</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-          {verifiedSkills.map(s => (
-            <span key={s} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: 'var(--primary-light)', color: 'var(--primary)',
-              padding: '5px 12px', borderRadius: 100, fontSize: 13, fontWeight: 600,
-            }}>
-              {s}
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 16, height: 16, borderRadius: '50%',
-                background: '#10B981', color: 'white', fontSize: 10, fontWeight: 800,
-              }}>✓</span>
-            </span>
-          ))}
-        </div>
+        <ProfileSkills skills={skills} records={skillHubSkills} />
       </div>
 
       {/* 3. Intro Video */}
@@ -480,27 +660,24 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={sectionTitle}>Intro Video</div>
           <label style={{ background: 'var(--primary-light)', color: 'var(--primary)', padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-            Replace
+            {videoUrl ? 'Replace' : 'Add video'}
             <input
               type="file"
-              accept="video/*"
+              accept="video/mp4,video/webm"
               style={{ display: 'none' }}
               onChange={async e => {
-                const file = e.target.files[0]
-                if (!file) return
-
-                const videoDataUrl = await readFileAsDataUrl(file)
-                setVideoUrl(videoDataUrl)
+                await updateIntroVideo(e.target.files?.[0], setVideoUrl)
+                e.target.value = ''
               }}
             />
           </label>
         </div>
-        <div style={{ background: '#000', borderRadius: 12, overflow: 'hidden', aspectRatio: '16/7', maxWidth: 460 }}>
-          <video ref={videoRef} src={videoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onEnded={() => setIsPlaying(false)} />
+        <div style={{ background: videoUrl ? '#000' : 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', aspectRatio: '16/7', maxWidth: 460, display: 'grid', placeItems: 'center' }}>
+          {videoUrl ? <video ref={videoRef} src={videoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onEnded={() => setIsPlaying(false)} /> :
+            <span style={{ color: 'var(--muted)', fontSize: 13 }}>Add a short MP4 or WEBM introduction, up to 5 MB.</span>}
         </div>
-        <div className="responsive-stack" style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-          <button onClick={togglePlay} style={{
+        {videoUrl && <div className="responsive-stack" style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          <button type="button" onClick={togglePlay} style={{
             display: 'flex', alignItems: 'center', gap: 7,
             padding: '8px 20px', borderRadius: 8,
             border: isPlaying ? '1.5px solid #FCA5A5' : '1.5px solid #DC2626',
@@ -510,7 +687,8 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
           }}>
             {isPlaying ? '⏹ Stop' : '▶ Play'}
           </button>
-        </div>
+          <button type="button" className="btn-secondary" onClick={() => { setVideoUrl(null); setIsPlaying(false) }}>Remove video</button>
+        </div>}
       </div>
 
       {/* 4. Profile Links */}
@@ -537,11 +715,11 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
             <input placeholder="Paste your profile URL"
               value={githubInput.url || ''}
               onChange={e => setGithubInput(p => ({ ...p, url: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter' && githubInput.url?.trim()) { setGithubLink(p => [...p, { icon: githubInput.icon || '🐙', url: githubInput.url.trim(), saved: true }]); setGithubInput({}) } }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addProfileLink() } }}
               style={{ flex: 1, padding: '8px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
               onFocus={e => e.target.style.borderColor = 'var(--primary)'}
               onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-            <button onClick={() => { if (githubInput.url?.trim()) { setGithubLink(p => [...p, { icon: githubInput.icon || '🐙', url: githubInput.url.trim(), saved: true }]); setGithubInput({}) } }}
+            <button type="button" onClick={addProfileLink}
               className="btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>+ Add</button>
           </div>
         </div>
@@ -619,8 +797,8 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)' }}>{proj.name || 'Untitled'}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>{proj.desc || 'No description'}</div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <a href={getProjectLink(proj, i)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>🔗 View Project</a>
-                  <a href={getProjectDemoLink(proj, i)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>🧪 Demo Link</a>
+                  {getProjectLink(proj) && <a href={getProjectLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>View project</a>}
+                  {getProjectDemoLink(proj) && <a href={getProjectDemoLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>Open demo</a>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => editProject(i)} style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
@@ -659,81 +837,88 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, githubLin
   )
 }
 
-function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
-  const savedProjects = projects.filter(p => p.saved)
-  const verifiedSkills = skills.filter(skill => VERIFIED_SKILL_SET.has(skill)).length
-  const profileLinks = githubLink.length
-
-  const fallbackFactors = useMemo(() => [
-    { label: 'Daily Challenge Solved', icon: '⚡', desc: 'Solved today\'s daily challenge', points: 80, earned: true, category: 'Daily' },
-    { label: 'Retention Task Completed', icon: '🔒', desc: `Completed daily retention tasks · 5 day streak`, points: 20, earned: true, category: 'Daily' },
-    { label: 'Skill Verified', icon: '✅', desc: `${verifiedSkills} verified skill${verifiedSkills !== 1 ? 's' : ''} on profile`, points: 60, earned: verifiedSkills > 0, category: 'Skills' },
-    { label: 'New Skill Added', icon: '➕', desc: 'Added a new skill to your profile', points: 20, earned: true, category: 'Skills' },
-    { label: 'Skill Level Upgraded', icon: '📈', desc: 'Upgraded a skill from Beginner to Intermediate', points: 100, earned: false, category: 'Skills' },
-    { label: 'Project Uploaded', icon: '🚀', desc: `${savedProjects.length} project${savedProjects.length !== 1 ? 's' : ''} with GitHub / live link`, points: 80, earned: savedProjects.length > 0, category: 'Projects' },
-    { label: 'GIG Completed', icon: '💼', desc: 'Delivered a GIG with a company rating', points: 150, earned: false, category: 'GIGs' },
-    { label: 'Skill Re-Verified', icon: '🔄', desc: 'Re-verified a skill before expiry', points: 50, earned: true, category: 'Skills' },
-    { label: 'Profile Links Added', icon: '🔗', desc: profileLinks > 0 ? `${profileLinks} link${profileLinks !== 1 ? 's' : ''} added` : 'No GitHub / LinkedIn links yet', points: 50, earned: profileLinks > 0, category: 'Profile' },
-    { label: 'Intro Video Uploaded', icon: '🎥', desc: 'Short intro video uploaded to profile', points: 50, earned: true, category: 'Profile' },
-    { label: 'Skill Expired (Penalty)', icon: '⚠️', desc: 'UI/UX Design verification expired', points: -80, earned: false, category: 'Penalty' },
-    { label: 'Retention Task Missed (Penalty)', icon: '❌', desc: 'Missed 2 days of retention tasks', points: -30, earned: false, category: 'Penalty' },
-  ], [profileLinks, savedProjects.length, verifiedSkills])
+function TrustScoreSection({ trustScore }) {
   const [trustScoreData, setTrustScoreData] = useState(null)
+  const [isLoadingScore, setIsLoadingScore] = useState(true)
   const [showCriteria, setShowCriteria] = useState(false)
-
+  const [scoreError, setScoreError] = useState('')
+  const [retry, setRetry] = useState(0)
+  const criteriaDialogRef = useRef(null)
+  const criteriaCloseRef = useRef(null)
   useEffect(() => {
     let cancelled = false
-    const sessionToken = getStudentSessionToken()
+    setIsLoadingScore(true)
+    setScoreError('')
+    fetchStudentTrustScore(getStudentSessionToken()).then(result => {
+      if (!cancelled) setTrustScoreData(result.trustScore)
+    }).catch(error => { if (!cancelled) setScoreError(error.message || 'Could not load TrustScore.') })
+      .finally(() => { if (!cancelled) setIsLoadingScore(false) })
+    return () => { cancelled = true }
+  }, [retry, trustScore])
+  useEffect(() => {
+    if (!showCriteria) return undefined
 
-    setTrustScoreData({
-      trustScore,
-      factors: fallbackFactors,
-      summary: {
-        earnedPoints: fallbackFactors.filter(item => item.earned && item.points > 0).reduce((sum, item) => sum + item.points, 0),
-        penalties: fallbackFactors.filter(item => !item.earned && item.points < 0).reduce((sum, item) => sum + item.points, 0),
-        maxPoints: fallbackFactors.filter(item => item.points > 0).reduce((sum, item) => sum + item.points, 0),
-      },
-    })
-
-    async function loadTrustScore() {
-      if (!sessionToken) {
+    const previouslyFocused = document.activeElement
+    const previousBodyOverflow = document.body.style.overflow
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setShowCriteria(false)
         return
       }
+      if (event.key !== 'Tab') return
 
-      try {
-        const result = await fetchStudentTrustScore(sessionToken)
-
-        if (!cancelled) {
-          setTrustScoreData(result.trustScore)
-        }
-      } catch (error) {
-        // Keep the local fallback data if the backend read fails.
+      const focusable = Array.from(criteriaDialogRef.current?.querySelectorAll(focusableSelector) || [])
+      if (!focusable.length) {
+        event.preventDefault()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
       }
     }
 
-    loadTrustScore()
-
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handleKeyDown)
+    criteriaCloseRef.current?.focus()
     return () => {
-      cancelled = true
+      document.body.style.overflow = previousBodyOverflow
+      document.removeEventListener('keydown', handleKeyDown)
+      previouslyFocused?.focus?.()
     }
-  }, [fallbackFactors, trustScore])
-
-  const factors = trustScoreData?.factors || fallbackFactors
+  }, [showCriteria])
+  const factors = trustScoreData?.factors || []
+  const activity = trustScoreData?.activity || []
   const earnedPoints = trustScoreData?.summary?.earnedPoints ?? factors.filter(f => f.earned && f.points > 0).reduce((a, f) => a + f.points, 0)
-  const penalties = trustScoreData?.summary?.penalties ?? factors.filter(f => !f.earned && f.points < 0).reduce((a, f) => a + f.points, 0)
+  const penalties = trustScoreData?.summary?.penalties ?? factors.filter(f => f.earned && f.points < 0).reduce((a, f) => a + f.points, 0)
   const maxPoints = trustScoreData?.summary?.maxPoints ?? factors.filter(f => f.points > 0).reduce((a, f) => a + f.points, 0)
-
   const displayedTrustScore = trustScoreData?.trustScore ?? trustScore
+  const positiveEvents = activity.filter(item => item.points > 0)
+  const approvedActions = trustScoreData?.summary?.approvedActions ?? positiveEvents.length
+  const scoreProgress = Math.min(100, Math.max(0, displayedTrustScore * 100 / 1000))
+  const formatActivityDate = value => {
+    const date = value ? new Date(value) : null
+    return date && Number.isFinite(date.getTime())
+      ? new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }).format(date)
+      : 'Recorded recently'
+  }
+
   const scoreColor = displayedTrustScore >= 850 ? '#10B981' : displayedTrustScore >= 700 ? '#3B82F6' : '#F59E0B'
   const grade = displayedTrustScore >= 850 ? 'Excellent' : displayedTrustScore >= 700 ? 'Good' : 'Fair'
+  if (isLoadingScore) return <DashboardSkeleton section="trustscore" />
+  if (scoreError) return <div role="alert" className="work-error">{scoreError}<button className="btn-secondary" onClick={() => setRetry(value => value + 1)}>Retry</button></div>
   return (
-    <div>
+    <div className="trustscore-workspace">
       {showCriteria && (
         <div
           className="responsive-modal-shell"
-          role="dialog"
-          aria-modal="true"
-          aria-label="TrustScore criteria"
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
@@ -741,19 +926,20 @@ function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
           }}
           onClick={e => e.target === e.currentTarget && setShowCriteria(false)}
         >
-          <div className="responsive-modal-card" style={{
+          <div ref={criteriaDialogRef} className="responsive-modal-card" role="dialog" aria-modal="true" aria-label="TrustScore criteria" style={{
             position: 'relative', width: '100%', maxWidth: 1040, maxHeight: '90vh',
             overflowY: 'auto', background: 'var(--bg)', borderRadius: 18,
             border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', padding: 20,
           }}>
             <button
+              ref={criteriaCloseRef}
               type="button"
               aria-label="Close TrustScore criteria"
               onClick={() => setShowCriteria(false)}
               style={{
                 position: 'sticky', top: 0, zIndex: 2, float: 'right',
-                width: 36, height: 36, borderRadius: '50%', border: 'none',
-                background: 'rgba(255,255,255,0.16)', color: 'white',
+                width: 36, height: 36, borderRadius: '50%', border: '1px solid #c7d2fe',
+                background: '#eef2ff', color: '#3730a3',
                 fontSize: 18, fontWeight: 700, cursor: 'pointer', margin: '10px 10px -46px 0',
               }}
             >
@@ -764,77 +950,42 @@ function TrustScoreSection({ trustScore, skills, projects, githubLink }) {
         </div>
       )}
 
-      {/* Hero card */}
-      <div className="responsive-hero" style={{
-        background: 'linear-gradient(135deg, var(--dark) 0%, #1E1B4B 100%)',
-        borderRadius: 16, padding: '28px 32px', marginBottom: 20,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20,
-      }}>
-        <div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Your TrustScore™</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 64, fontWeight: 900, background: `linear-gradient(135deg, #A5B4FC, #60A5FA)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{displayedTrustScore}</span>
-            <span style={{ fontSize: 22, color: 'rgba(255,255,255,0.4)', fontWeight: 700, paddingBottom: 8 }}>/1000</span>
+      <section className="trustscore-compact" aria-label="TrustScore summary">
+        <div className="trustscore-score"><span>Your TrustScore</span><strong>{displayedTrustScore}<small>/1000</small></strong><em style={{ background: scoreColor }}>{grade}</em></div>
+        <div className="trustscore-progress" aria-label={`${displayedTrustScore} out of 1000 TrustScore`}><span style={{ width: `${scoreProgress}%` }} /></div>
+        <dl>
+          <div><dt>Earned</dt><dd>+{earnedPoints}</dd></div>
+          <div><dt>Penalties</dt><dd className={penalties < 0 ? 'is-negative' : ''}>{penalties}</dd></div>
+          <div><dt>Approved actions</dt><dd>{approvedActions}</dd></div>
+        </dl>
+        <button type="button" className="btn-secondary" onClick={() => setShowCriteria(true)}>Score criteria <ArrowRight size={16}/></button>
+      </section>
+
+      <div className="trustscore-grid">
+        <section className="trustscore-panel">
+          <header><div><span className="trustscore-kicker">Account ledger</span><h2>Recent score activity</h2></div><Activity size={19}/></header>
+          <p>Only completed, verified server workflows change your score.</p>
+          <div className="trustscore-activity-list">
+            {activity.map(item => <article key={item.id} className={item.points < 0 ? 'is-penalty' : ''}>
+              <div><strong>{item.label}</strong><span>{item.category} · {formatActivityDate(item.occurredAt)}</span></div>
+              <b>{item.points > 0 ? '+' : ''}{item.points}</b>
+            </article>)}
+            {!activity.length && <div className="trustscore-empty">No score events yet. Complete a reviewed Skill Hub task or verified workflow to build TrustScore.</div>}
           </div>
-          <span style={{ background: scoreColor, color: 'white', fontSize: 13, fontWeight: 700, padding: '4px 14px', borderRadius: 100 }}>{grade}</span>
-        </div>
-        <button
-          onClick={() => setShowCriteria(true)}
-          style={{
-            textAlign: 'right',
-            background: 'rgba(255,255,255,0.1)',
-            border: '1px solid rgba(255,255,255,0.24)',
-            borderRadius: 12,
-            padding: '16px 18px',
-            minWidth: 220,
-            cursor: 'pointer',
-            color: 'white',
-            boxShadow: '0 8px 20px rgba(0,0,0,0.16)',
-            transition: 'transform 0.15s, background 0.15s, border-color 0.15s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.38)'
-            e.currentTarget.style.transform = 'translateY(-2px)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.24)'
-            e.currentTarget.style.transform = 'translateY(0)'
-          }}
-        >
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 9 }}>TrustScore Criteria</div>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'linear-gradient(135deg, #6366F1, #818CF8)', color: 'white',
-            border: '1px solid rgba(255,255,255,0.28)', borderRadius: 9,
-            padding: '9px 16px', marginBottom: 9, fontSize: 16, fontWeight: 800,
-            boxShadow: '0 5px 14px rgba(99,102,241,0.4)',
-          }}>
-            View Details <span aria-hidden="true">→</span>
-          </span>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5 }}>
-            See what adds Trust, what can reduce it, and how your score changes over time.
-          </div>
-        </button>
+        </section>
+        <section className="trustscore-panel trustscore-summary-panel">
+          <header><div><span className="trustscore-kicker">Current score</span><h2>Score breakdown</h2></div></header>
+          <dl>
+            <div><dt>Current TrustScore</dt><dd>{displayedTrustScore} / 1000</dd></div>
+            <div><dt>Lifetime positive points</dt><dd>+{earnedPoints}</dd></div>
+            <div><dt>Recorded penalties</dt><dd>{penalties}</dd></div>
+            <div><dt>Available policy points</dt><dd>+{maxPoints}</dd></div>
+          </dl>
+          <button type="button" className="btn-secondary" onClick={() => setShowCriteria(true)}>Review score criteria <ArrowRight size={16}/></button>
+        </section>
       </div>
 
-      {/* Summary stat row */}
-      <div className="responsive-card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
-        {[
-          { label: 'Points Earned', value: `+${earnedPoints}`, color: '#065F46', bg: '#D1FAE5' },
-          { label: 'Penalties', value: `${penalties}`, color: '#991B1B', bg: '#FEE2E2' },
-          { label: 'Max Possible', value: `+${maxPoints}`, color: '#1D4ED8', bg: '#DBEAFE' },
-        ].map(s => (
-          <div key={s.label} style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '12px 16px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted)', marginBottom: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* What affects your score — scrollable */}
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--dark)', marginBottom: 14 }}>What affects your TrustScore™</div>
+      <div className="trustscore-section-title">Available score opportunities</div>
       <div className="responsive-scroll-panel" style={{
         display: 'flex', flexDirection: 'column', gap: 10,
         maxHeight: 'calc(100vh - 420px)', overflowY: 'auto', scrollbarWidth: 'thin',
@@ -901,63 +1052,165 @@ function ComingSoon({ icon, label }) {
 
 export default function StudentDashboard() {
   const navigate = useNavigate()
-  const { state } = useLocation()
+  const { state, search } = useLocation()
   const initialStudent = mergeStudentProfile(state?.student || state || {})
+  const sectionFromUrl = new URLSearchParams(search).get('section')
+  const storedSection = window.sessionStorage.getItem(STUDENT_ACTIVE_SECTION_KEY)
+  const requestedSection = NAV_ITEMS.some(item => item.key === sectionFromUrl)
+    ? sectionFromUrl
+    : (NAV_ITEMS.some(item => item.key === state?.activeSection)
+      ? state.activeSection
+      : (NAV_ITEMS.some(item => item.key === storedSection) ? storedSection : 'gig'))
   const sessionTokenRef = useRef(getStudentSessionToken())
   const didHydrateRef = useRef(false)
 
   const [active, setActive] = useState(() => {
-    const requestedSection = state?.activeSection || window.sessionStorage.getItem(STUDENT_ACTIVE_SECTION_KEY)
-    return NAV_ITEMS.some(item => item.key === requestedSection) ? requestedSection : 'gig'
+    return requestedSection
   })
   const [name, setName] = useState(initialStudent.name)
   const [trustScore, setTrustScore] = useState(initialStudent.trustScore)
+  const [contactMethod, setContactMethod] = useState(initialStudent.contactMethod || 'email')
+  const [verificationMethod, setVerificationMethod] = useState(initialStudent.verificationMethod || 'aadhaar')
   const [avatar, setAvatar] = useState(initialStudent.avatar)
   const [skills, setSkills] = useState(initialStudent.skills)
+  const [skillHubSkills, setSkillHubSkills] = useState([])
+  const [practiceStats, setPracticeStats] = useState(() => getPracticeStats(initialStudent))
+  const [activityDays, setActivityDays] = useState(() => getActivityDays(initialStudent))
+  const [profileActivity, setProfileActivity] = useState({ completedGigs: null, teamUps: null })
+  const handleSkillProfileChange = useCallback(hub => {
+    setSkillHubSkills(hub.skills)
+    setSkills(hub.skills.map(skill => skill.name))
+    setTrustScore(hub.trustScore)
+    setPracticeStats(getPracticeStats(hub))
+    setActivityDays(getActivityDays(hub))
+  }, [])
   const [githubLink, setGithubLink] = useState(initialStudent.githubLink)
   const [contactInfo, setContactInfo] = useState(initialStudent.contactInfo)
   const [projects, setProjects] = useState(initialStudent.projects)
   const [videoUrl, setVideoUrl] = useState(initialStudent.videoUrl)
   const [showProfile, setShowProfile] = useState(false)
+  const [isLoadingStudent, setIsLoadingStudent] = useState(() => Boolean(getStudentSessionToken()))
+  const [studentLoadError, setStudentLoadError] = useState('')
+  const [profileSaveState, setProfileSaveState] = useState('idle')
+  const [studentRetry, setStudentRetry] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const profileSaveQueueRef = useRef(Promise.resolve())
+  const profileSaveVersionRef = useRef(0)
+
+  const retryStudentWorkspace = useCallback(() => {
+    // Read the token again before retrying so a sign-in in another tab or a
+    // refreshed session can recover without requiring a full page reload.
+    sessionTokenRef.current = getStudentSessionToken()
+    setStudentLoadError('')
+    setIsLoadingStudent(true)
+    setStudentRetry(value => value + 1)
+  }, [])
+
+  useEffect(() => {
+    setActive(current => current === requestedSection ? current : requestedSection)
+  }, [requestedSection])
+
+  const selectSection = section => {
+    if (!NAV_ITEMS.some(item => item.key === section)) return
+    setActive(section)
+    window.sessionStorage.setItem(STUDENT_ACTIVE_SECTION_KEY, section)
+    navigate(`/student/dashboard?section=${encodeURIComponent(section)}`)
+  }
 
   useEffect(() => {
     window.sessionStorage.setItem(STUDENT_ACTIVE_SECTION_KEY, active)
   }, [active])
 
   useEffect(() => {
+    if (!showProfile) return undefined
+    const token = getStudentSessionToken()
+    if (!token) {
+      setProfileActivity({ completedGigs: 0, teamUps: 0 })
+      return undefined
+    }
+
+    let cancelled = false
+    setProfileActivity({ completedGigs: null, teamUps: null })
+
+    // Resolve each metric independently so a delayed network request cannot
+    // prevent the completed-GIG count from appearing.
+    fetchStudentGigs(token)
+      .then(result => {
+        if (cancelled) return
+        const completedGigs = Array.isArray(result?.gigState?.completedGigs) ? result.gigState.completedGigs.length : 0
+        setProfileActivity(current => ({ ...current, completedGigs }))
+      })
+      .catch(() => {
+        if (!cancelled) setProfileActivity(current => ({ ...current, completedGigs: 0 }))
+      })
+
+    fetchStudentNetwork(token)
+      .then(({ networkState }) => {
+        if (cancelled) return
+        const teamUpIds = new Set([
+          ...(networkState?.myTeamPosts || []),
+          ...(networkState?.memberships || []),
+        ].map(post => post?.id).filter(Boolean))
+        setProfileActivity(current => ({ ...current, teamUps: teamUpIds.size }))
+      })
+      .catch(() => {
+        if (!cancelled) setProfileActivity(current => ({ ...current, teamUps: 0 }))
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [showProfile])
+
+  useEffect(() => {
     let cancelled = false
 
     async function loadStudent() {
-      if (!sessionTokenRef.current) {
-        didHydrateRef.current = true
+      setIsLoadingStudent(true)
+      setStudentLoadError('')
+      const token = getStudentSessionToken()
+      sessionTokenRef.current = token
+      if (!token) {
+        navigate('/student', { replace: true })
         return
       }
 
       try {
-        const result = await fetchCurrentStudent(sessionTokenRef.current)
+        const [result, skillHub] = await Promise.all([
+          fetchCurrentStudent(token),
+          fetchStudentSkillHub(token).catch(() => null),
+        ])
 
         if (cancelled) return
 
         const student = mergeStudentProfile(result.student)
         setName(student.name)
         setTrustScore(student.trustScore)
+        setContactMethod(student.contactMethod || 'email')
+        setVerificationMethod(student.verificationMethod || 'aadhaar')
         setAvatar(student.avatar)
         setSkills(student.skills)
+        setSkillHubSkills(skillHub?.skillHub?.skills || result.student.skillHubSkills || [])
+        // The profile response includes the same server-derived summary. Keep it
+        // when the separate Skill Hub refresh is temporarily unavailable.
+        setPracticeStats(skillHub?.skillHub ? getPracticeStats(skillHub.skillHub) : getPracticeStats(result.student))
+        setActivityDays(skillHub?.skillHub ? getActivityDays(skillHub.skillHub) : getActivityDays(result.student))
         setGithubLink(student.githubLink)
         setContactInfo(student.contactInfo)
         setProjects(student.projects)
         setVideoUrl(student.videoUrl)
+        didHydrateRef.current = true
       } catch (error) {
         if (!cancelled) {
-          clearStudentSessionToken()
-          sessionTokenRef.current = ''
-          toast.warning('Your student session expired. Please sign in again.', { title: 'Authentication Required' })
-          navigate('/student', { replace: true })
+          if (error.status === 401) {
+            clearStudentSessionToken()
+            sessionTokenRef.current = ''
+            navigate('/student', { replace: true })
+          } else setStudentLoadError(error.message || 'Could not load your workspace. Please retry.')
         }
       } finally {
         if (!cancelled) {
-          didHydrateRef.current = true
+          setIsLoadingStudent(false)
         }
       }
     }
@@ -967,28 +1220,48 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true
     }
-  }, [navigate])
+  }, [navigate, studentRetry])
 
   useEffect(() => {
     if (!sessionTokenRef.current || !didHydrateRef.current) {
       return
     }
 
+    const version = ++profileSaveVersionRef.current
     const timeoutId = window.setTimeout(() => {
-      saveStudentProfile(sessionTokenRef.current, {
+      const payload = {
         name,
-        trustScore,
         avatar,
-        skills,
         githubLink,
         contactInfo,
         projects,
         videoUrl: isBundledStudentIntroVideoUrl(videoUrl) ? null : videoUrl,
-      }).catch(() => {})
+      }
+
+      // Profile edits send the complete profile snapshot. Serialize those
+      // writes so quick edits cannot finish out of order and overwrite newer data.
+      profileSaveQueueRef.current = profileSaveQueueRef.current
+        .catch(() => {})
+        .then(async () => {
+          if (version !== profileSaveVersionRef.current) return
+          setProfileSaveState('saving')
+          try {
+            const result = await saveStudentProfile(sessionTokenRef.current, payload)
+            if (version === profileSaveVersionRef.current) {
+              if (Number.isFinite(result?.student?.trustScore)) setTrustScore(result.student.trustScore)
+              setProfileSaveState('saved')
+            }
+          } catch (error) {
+            if (version === profileSaveVersionRef.current) {
+              setProfileSaveState('error')
+              toast.error(error.message || 'Your profile changes could not be saved. Please try again.', { title: 'Profile Save Failed' })
+            }
+          }
+        })
     }, 350)
 
     return () => window.clearTimeout(timeoutId)
-  }, [avatar, contactInfo, githubLink, name, projects, skills, trustScore, videoUrl])
+  }, [avatar, contactInfo, githubLink, name, projects, videoUrl])
 
   const handleLogout = async () => {
     const token = sessionTokenRef.current
@@ -1013,10 +1286,12 @@ export default function StudentDashboard() {
     <div className="dashboard-shell student-dashboard" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
 
       {showProfile && (
-        <ProfileViewModal
+          <ProfileViewModal
           onClose={() => setShowProfile(false)}
           name={name} trustScore={trustScore} avatar={avatar} setAvatar={setAvatar}
-          skills={skills} githubLink={githubLink} contactInfo={contactInfo} projects={projects} videoUrl={videoUrl}
+          skills={skills} skillHubSkills={skillHubSkills} githubLink={githubLink} contactInfo={contactInfo} projects={projects} videoUrl={videoUrl} practiceStats={practiceStats} activityDays={activityDays}
+          profileActivity={profileActivity}
+          contactMethod={contactMethod} verificationMethod={verificationMethod}
         />
       )}
 
@@ -1024,6 +1299,7 @@ export default function StudentDashboard() {
         avatar={avatar}
         name={name}
         trustScore={trustScore}
+        practiceStats={practiceStats}
         onOpenProfile={() => setShowProfile(true)}
         onToggleSidebar={() => setSidebarOpen(true)}
       />
@@ -1035,33 +1311,37 @@ export default function StudentDashboard() {
         <StudentSidebar
           navItems={NAV_ITEMS}
           active={active}
-          onSelect={setActive}
+          onSelect={selectSection}
           onLogout={handleLogout}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
 
         {/* Main content */}
-        <main className="dashboard-main" style={{ flex: 1, padding: '28px 32px', overflowY: 'auto' }}>
+        <main key={active} className={`dashboard-main student-viewport student-section-${active}`} style={{ flex: 1, padding: '28px 32px', overflowY: 'auto' }}>
 
+          {isLoadingStudent ? <DashboardSkeleton section={active} /> : studentLoadError ? <div role="alert" className="work-error"><span>{studentLoadError}</span><button type="button" className="btn-secondary" onClick={retryStudentWorkspace}>Retry</button></div> : <>
           {active === 'profile' && (
             <ProfileSection
               name={name} trustScore={trustScore}
               avatar={avatar} setAvatar={setAvatar}
-              skills={skills}
+              skills={skills} skillHubSkills={skillHubSkills}
               githubLink={githubLink} setGithubLink={setGithubLink}
               contactInfo={contactInfo} setContactInfo={setContactInfo}
               projects={projects} setProjects={setProjects}
               videoUrl={videoUrl} setVideoUrl={setVideoUrl}
               onViewProfile={() => setShowProfile(true)}
+              saveState={profileSaveState}
+              contactMethod={contactMethod} verificationMethod={verificationMethod}
             />
           )}
 
           {active === 'gig'        && <GigCenter />}
           {active === 'trustscore' && <TrustScoreSection trustScore={trustScore} skills={skills} projects={projects} githubLink={githubLink} />}
-          {active === 'skillhub'  && <SkillHub />}
+          {active === 'skillhub'  && <SkillHub onProfileChange={handleSkillProfileChange} />}
           {active === 'earning'   && <Earning />}
           {active === 'network'   && <Network />}
+          </>}
 
         </main>
       </div>

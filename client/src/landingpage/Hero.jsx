@@ -97,17 +97,20 @@ export default function Hero() {
             </a>
           </div>
 
-          <div className="animate-fadeup delay-3 landing-hero-actions" style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+          <div className="animate-fadeup delay-3 landing-hero-actions">
+            <div>
             <button className="btn-primary" style={{ fontSize: 16, padding: '14px 32px' }}
-              onClick={() => navigate('/student')}>
+              onClick={() => navigate('/student?mode=signup')}>
               🎓 Get Started
               <span style={{ opacity: 0.7, fontSize: 13, fontWeight: 400 }}>for students</span>
             </button>
             <button className="btn-accent" style={{ fontSize: 16, padding: '14px 32px' }}
-              onClick={() => navigate('/company')}>
+              onClick={() => navigate('/company?mode=signup')}>
               🏢 For Company
               <span style={{ opacity: 0.7, fontSize: 13, fontWeight: 400 }}>hire talent</span>
             </button>
+            </div>
+            <button className="landing-login-link" onClick={() => navigate('/login')}>Already have an account? Log in</button>
           </div>
 
           {/* Stats */}

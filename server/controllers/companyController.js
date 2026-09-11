@@ -1,6 +1,7 @@
 const Company = require('../models/Company')
 const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
+const { randomUUID } = require('node:crypto')
 const {
   buildDefaultCompanyDashboardState,
   buildDefaultCompanyGigManagementState,
@@ -8,6 +9,7 @@ const {
   buildDefaultCompanyProfile,
   buildDefaultCompanyWorkspaceState,
 } = require('../config/companyDefaults')
+const { buildDefaultCompanyTaskLibraryState } = require('../config/companyTaskDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
 const {
   appendSession,
@@ -17,6 +19,11 @@ const {
 } = require('../utils/session')
 const { consumeSectionOperation } = require('../utils/sectionUsage')
 const { clone, mergeTemplateState, reduceTemplateState } = require('../utils/templateState')
+
+const { buildWorkspaceState } = require('../utils/companyWorkspace')
+const { synchronizeCompanyGigMetrics } = require('../utils/companyGigMetrics')
+const { validateAssignment } = require('../utils/taskValidation')
+const { isVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
 
 function normalizeEmail(email) {
   return email?.trim().toLowerCase() || ''
@@ -34,10 +41,33 @@ function normalizeProfileText(value, fallback = '', maxLength = 500) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : fallback
 }
 
+const MAX_BUSINESS_LOGO_BYTES = 600 * 1024
+const MAX_BUSINESS_LOGO_DATA_URL_LENGTH = 850000
+
+function normalizeBusinessLogo(value) {
+  if (value === null || value === undefined || value === '') return ''
+  if (typeof value !== 'string') return ''
+  const logo = value.trim()
+
+  if (logo.length > 0 && logo.length <= 2048 && /^https?:\/\/[^\s]+$/i.test(logo)) return logo
+
+  const match = logo.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/i)
+  if (!match || logo.length > MAX_BUSINESS_LOGO_DATA_URL_LENGTH || match[2].length % 4 !== 0) return ''
+
+  const bytes = Buffer.from(match[2], 'base64')
+  const kind = match[1].toLowerCase()
+  const isPng = kind === 'png' && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  const isJpeg = kind === 'jpeg' && bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
+  const isWebp = kind === 'webp' && bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP'
+
+  return bytes.length <= MAX_BUSINESS_LOGO_BYTES && (isPng || isJpeg || isWebp) ? logo : ''
+}
+
 function sanitizeCompanyProfile(profile, fallback) {
   return {
     businessName: normalizeProfileText(profile?.businessName, fallback.businessName, 120),
     location: normalizeProfileText(profile?.location, fallback.location, 120),
+    logo: normalizeBusinessLogo(profile?.logo),
     industry: normalizeProfileText(profile?.industry, '', 120),
     website: normalizeProfileText(profile?.website, '', 240),
     teamSize: normalizeProfileText(profile?.teamSize, '', 80),
@@ -53,6 +83,9 @@ function sanitizeCompanyProfile(profile, fallback) {
 }
 
 function validateCompanyProfile(profile, fallback) {
+  if (Object.hasOwn(profile || {}, 'logo') && profile.logo && !normalizeBusinessLogo(profile.logo)) {
+    throw buildAuthError('Business logo must be a PNG, JPG, or WEBP image up to 600 KB, or a valid http(s) URL')
+  }
   const normalizedProfile = sanitizeCompanyProfile(profile, fallback)
   const phoneDigits = normalizedProfile.contactPhone.replace(/\D/g, '')
 
@@ -93,7 +126,6 @@ function sanitizeDashboardState(state) {
 }
 
 function buildCompanyDashboardOverview(company, { talentCount = 0, submissions = [] } = {}) {
-  const dashboardState = sanitizeDashboardState(company.dashboardState)
   const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, buildDefaultCompanyProfile({
     businessName: company.businessName,
@@ -103,11 +135,13 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
     ['active', 'in progress', 'hiring', 'reviewing'].includes(String(gig.status).toLowerCase())
   )).length
   const applicationCount = gigManagementState.gigs.reduce((total, gig) => total + (Number(gig.applicants) || 0), 0)
-  const matchedStudents = talentCount > 0 ? talentCount : dashboardState.matchedStudents
+  const matchedStudents = talentCount
   const statusLabels = {
     submitted: 'submitted an interview task for',
     reviewed: 'had their interview task reviewed for',
     ready_to_hire: 'is ready to hire for',
+    selected: 'was selected for', work_started: 'started work on', delivered: 'delivered work for',
+    approved: 'had work approved for', completed: 'completed', rejected: 'was not selected for',
     needs_revision: 'was asked to revise their task for',
   }
   const recentHiringActivity = submissions.length > 0
@@ -118,7 +152,7 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
       color: submission.status === 'ready_to_hire' ? '#065F46' : submission.status === 'needs_revision' ? '#92400E' : '#1D4ED8',
       bg: submission.status === 'ready_to_hire' ? '#D1FAE5' : submission.status === 'needs_revision' ? '#FEF3C7' : '#DBEAFE',
     }))
-    : dashboardState.recentHiringActivity
+    : []
   const checklist = [
     { label: 'Business name and location', done: Boolean(businessProfile.businessName && businessProfile.location) },
     { label: 'Industry, website, and team size', done: Boolean(businessProfile.industry && businessProfile.website && businessProfile.teamSize) },
@@ -155,36 +189,76 @@ function sanitizeGigManagementState(state) {
   }
 }
 
-const GIG_STATUS_VALUES = new Set(['Hiring', 'Reviewing', 'In Progress'])
+const GIG_STATUS_VALUES = new Set(['Hiring', 'Reviewing', 'In Progress', 'Closed'])
 const GIG_MODE_VALUES = new Set(['Remote', 'Hybrid', 'On-site'])
+const GIG_TYPE_VALUES = new Set(['Internship', 'Project GIG'])
 const OPEN_GIG_STATUSES = new Set(['Hiring', 'Reviewing', 'In Progress'])
+const COMPANY_TASK_TYPE_VALUES = new Set(['live_project', 'code', 'mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'])
+const COMPANY_TASK_DETAIL_KEYS = new Set([
+  'deliverables', 'acceptanceCriteria', 'submissionRequirements', 'language', 'testCases',
+  'questionCount', 'questions', 'options', 'answerKey', 'optionsAndAnswers', 'passingScore', 'wordLimit', 'evaluationCriteria', 'components',
+])
+
+function sanitizeCompanyTaskDetails(details) {
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return {}
+  return Object.fromEntries(Object.entries(details)
+    .filter(([key, value]) => COMPANY_TASK_DETAIL_KEYS.has(key) && (typeof value === 'string' || typeof value === 'number'))
+    .map(([key, value]) => [key, String(value).trim().slice(0, 2000)])
+    .filter(([, value]) => value))
+}
+
+function normalizeGigBudget(value, type) {
+  const amount = Number(String(value || '').replace(/[^0-9]/g, ''))
+
+  if (!Number.isInteger(amount) || amount < 100 || amount > 10000000) {
+    throw buildAuthError('GIG budget must be a whole number between ₹100 and ₹1,00,00,000')
+  }
+
+  const period = type === 'Project GIG' ? 'project' : 'month'
+  return `₹${amount.toLocaleString('en-IN')} / ${period}`
+}
 
 function normalizeGigPayload(payload, existing = {}) {
   const title = typeof payload?.title === 'string' ? payload.title.trim() : existing.title || ''
-  const budget = typeof payload?.budget === 'string' ? payload.budget.trim() : existing.budget || ''
+  const rawBudget = typeof payload?.budget === 'string' || typeof payload?.budget === 'number' ? payload.budget : existing.budget || ''
   const mode = typeof payload?.mode === 'string' ? payload.mode.trim() : existing.mode || 'Remote'
+  const location = typeof payload?.location === 'string' ? payload.location.trim() : existing.location || ''
+  const type = typeof payload?.type === 'string' ? payload.type.trim() : existing.type || 'Internship'
   const status = typeof payload?.status === 'string' ? payload.status.trim() : existing.status || 'Hiring'
-  const skills = Array.isArray(payload?.skills)
-    ? payload.skills.filter(skill => typeof skill === 'string' && skill.trim()).map(skill => skill.trim()).slice(0, 20)
-    : (Array.isArray(existing.skills) ? existing.skills : [])
+  const rawSkills = Array.isArray(payload?.skills) ? payload.skills : existing.skills
+  const skills = Array.isArray(rawSkills)
+    ? [...new Set(rawSkills
+      .filter(skill => typeof skill === 'string' && skill.trim().length >= 2 && skill.trim().length <= 60)
+      .map(skill => skill.trim()))].slice(0, 8)
+    : []
 
-  if (!title || title.length > 120) {
-    throw buildAuthError('GIG title is required and must be 120 characters or fewer')
-  }
-
-  if (!budget || budget.length > 120) {
-    throw buildAuthError('GIG budget is required and must be 120 characters or fewer')
+  if (title.length < 4 || title.length > 120) {
+    throw buildAuthError('GIG title must be between 4 and 120 characters')
   }
 
   if (!GIG_MODE_VALUES.has(mode)) {
     throw buildAuthError('A valid GIG work mode is required')
   }
 
+  if (location.length < 3 || location.length > 120) {
+    throw buildAuthError('GIG location must be between 3 and 120 characters')
+  }
+
+  if (!GIG_TYPE_VALUES.has(type)) {
+    throw buildAuthError('A valid GIG type is required')
+  }
+
+  const budget = normalizeGigBudget(rawBudget, type)
+
   if (!GIG_STATUS_VALUES.has(status)) {
     throw buildAuthError('A valid GIG status is required')
   }
 
-  return { title, mode, budget, status, skills: skills.length > 0 ? skills : ['General'] }
+  if (skills.length === 0) {
+    throw buildAuthError('Add at least one skill tag of 2 to 60 characters')
+  }
+
+  return { title, mode, location, type, budget, status, skills }
 }
 
 function updateGigStat(state, label, delta) {
@@ -205,6 +279,7 @@ function buildCreatedGigState(currentState, payload) {
   const nextId = nextState.gigs.reduce((highest, gig) => Math.max(highest, Number(gig.id) || 0), 0) + 1
   const newGig = {
     id: nextId,
+    publicId: randomUUID(),
     ...gigPayload,
     applicants: 0,
     shortlisted: 0,
@@ -249,6 +324,28 @@ function buildUpdatedGigState(currentState, gigId, payload) {
   return nextState
 }
 
+function buildDeletedGigState(currentState, gigId) {
+  const nextState = sanitizeGigManagementState(currentState)
+  const numericGigId = Number(gigId)
+  const gig = nextState.gigs.find(item => Number(item.id) === numericGigId)
+
+  if (!gig) {
+    throw buildAuthError('GIG not found', 404)
+  }
+
+  nextState.gigs = nextState.gigs.filter(item => Number(item.id) !== numericGigId)
+  nextState.applicantsByGig = Object.fromEntries(
+    Object.entries(nextState.applicantsByGig || {}).filter(([id]) => Number(id) !== numericGigId),
+  )
+
+  if (OPEN_GIG_STATUSES.has(gig.status)) {
+    updateGigStat(nextState, 'Open GIGs', -1)
+  }
+
+  nextState.recentActivity = [`${gig.title} was deleted by your team.`, ...nextState.recentActivity].slice(0, 8)
+  return nextState
+}
+
 function sanitizeProjectWorkspaceState(state) {
   const fallback = buildDefaultCompanyWorkspaceState()
   const mergedState = mergeTemplateState(fallback, state)
@@ -264,6 +361,15 @@ function sanitizeProjectWorkspaceState(state) {
   }
 }
 
+async function syncWorkspaceWithSelectedSubmissions(company) {
+  const submissions = await TaskSubmission.find({ companyId: company._id }).sort({ updatedAt: -1 })
+  const state = sanitizeGigManagementState(company.gigManagementState)
+  company.projectWorkspaceState = buildWorkspaceState(company.projectWorkspaceState, submissions, state.gigs)
+  synchronizeCompanyGigMetrics(state, submissions)
+  company.gigManagementState = state
+  return company
+}
+
 const WORKSPACE_PROJECT_STATUSES = new Set(['Planning', 'In Progress', 'Review', 'Completed'])
 const WORKSPACE_TASK_STATES = new Set(['Todo', 'In Review', 'Done'])
 
@@ -277,14 +383,14 @@ function sanitizeWorkspaceProject(project, index = 0) {
     }))
     : []
   const updates = Array.isArray(source.updates)
-    ? source.updates.slice(-20).map((update, updateIndex) => ({
+    ? source.updates.map((update, updateIndex) => ({
       id: typeof update?.id === 'string' ? update.id : `update-${updateIndex + 1}`,
       message: typeof update?.message === 'string' ? update.message.trim().slice(0, 500) : '',
       sharedAt: typeof update?.sharedAt === 'string' ? update.sharedAt : null,
     })).filter(update => update.message)
     : []
   const milestones = Array.isArray(source.milestones)
-    ? source.milestones.slice(-20).map((milestone, milestoneIndex) => ({
+    ? source.milestones.map((milestone, milestoneIndex) => ({
       id: typeof milestone?.id === 'string' ? milestone.id : `milestone-${milestoneIndex + 1}`,
       title: typeof milestone?.title === 'string' ? milestone.title.trim().slice(0, 120) : '',
       dueDate: typeof milestone?.dueDate === 'string' ? milestone.dueDate.trim().slice(0, 80) : '',
@@ -295,6 +401,14 @@ function sanitizeWorkspaceProject(project, index = 0) {
 
   return {
     id: typeof source.id === 'string' && source.id.trim() ? source.id.trim().slice(0, 80) : `p${index + 1}`,
+    submissionId: typeof source.submissionId === 'string' ? source.submissionId : '',
+    submissionStatus: source.submissionStatus || '',
+    submissionLink: source.submissionLink || '',
+    submissionContent: source.submissionContent || '',
+    feedback: source.feedback || '',
+    paymentStatus: source.paymentStatus || '',
+    companyGigId: source.companyGigId,
+    companyGigPublicId: source.companyGigPublicId || '',
     title: typeof source.title === 'string' ? source.title.trim().slice(0, 160) : 'Untitled Project',
     company: typeof source.company === 'string' ? source.company.trim().slice(0, 160) : '',
     status: WORKSPACE_PROJECT_STATUSES.has(source.status) ? source.status : 'Planning',
@@ -328,15 +442,16 @@ function buildWorkspaceUpdateState(currentState, projectId, message, sharedAt = 
 
   const projectIndex = findWorkspaceProject(nextState, projectId)
   const project = nextState.projects[projectIndex]
+  if (project.updates.length >= 1000) throw buildAuthError('Project update limit reached', 409)
   const update = {
-    id: `update-${Date.now()}`,
+    id: `update-${randomUUID()}`,
     message: normalizedMessage,
     sharedAt: sharedAt instanceof Date ? sharedAt.toISOString() : new Date().toISOString(),
   }
 
   nextState.projects[projectIndex] = {
     ...project,
-    updates: [...project.updates, update].slice(-20),
+    updates: [...project.updates, update],
   }
   nextState.selectedProjectId = project.id
   return nextState
@@ -344,6 +459,16 @@ function buildWorkspaceUpdateState(currentState, projectId, message, sharedAt = 
 
 function buildWorkspaceMilestoneState(currentState, projectId, payload, createdAt = new Date()) {
   const nextState = sanitizeProjectWorkspaceState(currentState)
+  const projectIndex = findWorkspaceProject(nextState, projectId)
+  const project = nextState.projects[projectIndex]
+  if (payload?.id) {
+    const milestone = project.milestones.find(item => item.id === payload.id)
+    if (!milestone) throw buildAuthError('Milestone not found', 404)
+    if (!['Open', 'Completed'].includes(payload.status)) throw buildAuthError('Invalid milestone status')
+    milestone.status = payload.status
+    nextState.selectedProjectId = project.id
+    return nextState
+  }
   const title = typeof payload?.title === 'string' ? payload.title.trim() : ''
   const dueDate = typeof payload?.dueDate === 'string' ? payload.dueDate.trim() : ''
 
@@ -351,14 +476,16 @@ function buildWorkspaceMilestoneState(currentState, projectId, payload, createdA
     throw buildAuthError('A milestone title is required and must be 120 characters or fewer')
   }
 
-  if (dueDate.length > 80) {
-    throw buildAuthError('Milestone date must be 80 characters or fewer')
+  if (project.milestones.length >= 100) throw buildAuthError('Project milestone limit reached', 409)
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+    || !Number.isFinite(Date.parse(`${dueDate}T00:00:00Z`))
+    || new Date(`${dueDate}T00:00:00Z`).toISOString().slice(0, 10) !== dueDate) {
+    throw buildAuthError('A valid milestone date in YYYY-MM-DD format is required')
   }
 
-  const projectIndex = findWorkspaceProject(nextState, projectId)
-  const project = nextState.projects[projectIndex]
   const milestone = {
-    id: `milestone-${Date.now()}`,
+    id: `milestone-${randomUUID()}`,
     title,
     dueDate,
     status: 'Open',
@@ -367,99 +494,15 @@ function buildWorkspaceMilestoneState(currentState, projectId, payload, createdA
 
   nextState.projects[projectIndex] = {
     ...project,
-    milestones: [...project.milestones, milestone].slice(-20),
+    milestones: [...project.milestones, milestone],
+    deadline: [dueDate, project.deadline].filter(Boolean).sort().at(-1),
   }
   nextState.selectedProjectId = project.id
   return nextState
 }
 
 function sanitizePaymentState(state) {
-  const fallback = buildDefaultCompanyPaymentState()
-  const mergedState = mergeTemplateState(fallback, state)
-
-  return {
-    summary: Array.isArray(mergedState?.summary) ? clone(mergedState.summary) : fallback.summary,
-    methods: Array.isArray(mergedState?.methods) ? clone(mergedState.methods) : fallback.methods,
-    transactions: Array.isArray(mergedState?.transactions) ? clone(mergedState.transactions) : fallback.transactions,
-    recommendedActions: Array.isArray(mergedState?.recommendedActions) ? clone(mergedState.recommendedActions) : fallback.recommendedActions,
-  }
-}
-
-function parsePaymentAmount(value) {
-  const amount = Number(String(value || '').replace(/[^0-9.-]/g, ''))
-  return Number.isFinite(amount) ? amount : 0
-}
-
-function formatPaymentAmount(value) {
-  return `₹${Math.round(value).toLocaleString('en-IN')}`
-}
-
-function formatPaymentDate(date = new Date()) {
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  })
-}
-
-function buildPaymentTransaction({ title, amount, date = new Date(), status, color, bg }) {
-  return {
-    id: `payment-${Date.now()}`,
-    title,
-    amount,
-    date: formatPaymentDate(date),
-    status,
-    color,
-    bg,
-  }
-}
-
-function buildCompanyFundsState(currentState, rawAmount) {
-  const nextState = sanitizePaymentState(currentState)
-  const amount = Math.round(parsePaymentAmount(rawAmount))
-
-  if (!Number.isInteger(amount) || amount < 100 || amount > 1000000) {
-    throw buildAuthError('Funds amount must be between ₹100 and ₹10,00,000')
-  }
-
-  const availableBalance = nextState.summary.find(item => item.label === 'Available Balance')
-  if (!availableBalance) {
-    throw buildAuthError('Available balance is not configured', 409)
-  }
-
-  availableBalance.value = formatPaymentAmount(parsePaymentAmount(availableBalance.value) + amount)
-  nextState.transactions = [
-    buildPaymentTransaction({
-      title: 'Wallet top-up',
-      amount: `+${formatPaymentAmount(amount)}`,
-      status: 'Added',
-      color: '#065F46',
-      bg: '#D1FAE5',
-    }),
-    ...nextState.transactions,
-  ].slice(0, 20)
-
-  return nextState
-}
-
-function buildCompanyPayoutSetupState(currentState) {
-  const nextState = sanitizePaymentState(currentState)
-  nextState.methods = nextState.methods.map(method => ({
-    ...method,
-    status: method.label === 'Primary Bank Account' ? 'Verified' : 'Active',
-  }))
-  nextState.transactions = [
-    buildPaymentTransaction({
-      title: 'Payout setup review',
-      amount: 'Updated',
-      status: 'Ready',
-      color: '#1D4ED8',
-      bg: '#DBEAFE',
-    }),
-    ...nextState.transactions,
-  ].slice(0, 20)
-
-  return nextState
+  return buildDefaultCompanyPaymentState()
 }
 
 function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
@@ -471,7 +514,7 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
 
   if (Array.isArray(skillHubSkills)) {
     skillHubSkills.forEach(skill => {
-      if (!skill || typeof skill.name !== 'string' || !skill.name.trim()) {
+      if (!skill || typeof skill.name !== 'string' || !skill.name.trim() || !isVerifiedSkill(skill)) {
         return
       }
 
@@ -484,7 +527,7 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
 
   fallbackSkills.forEach(skill => {
     if (!groupedSkills.Intermediate.includes(skill) && !groupedSkills.Beginner.includes(skill) && !groupedSkills.Pro.includes(skill)) {
-      groupedSkills.Intermediate.push(skill)
+      groupedSkills.Beginner.push(skill)
     }
   })
 
@@ -492,41 +535,75 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
 }
 
 function sanitizeTalentProfile(student) {
-  const profileSkills = Array.isArray(student.skills) ? student.skills : []
-  const skillHubSkills = Array.isArray(student.skillHubSkills) ? student.skillHubSkills : []
+  const profileSkills = Array.isArray(student.skills)
+    ? student.skills.filter(skill => typeof skill === 'string' && skill.trim()).map(skill => skill.trim())
+    : []
+  const verifiedSkillHubSkills = Array.isArray(student.skillHubSkills)
+    ? student.skillHubSkills
+      .filter(skill => skill && typeof skill.name === 'string' && skill.name.trim() && isVerifiedSkill(skill))
+      .map(skill => skill.name.trim())
+    : []
   const skills = [...new Set([
     ...profileSkills,
-    ...skillHubSkills.map(skill => skill?.name),
+    ...verifiedSkillHubSkills,
   ].filter(skill => typeof skill === 'string' && skill.trim()))]
   const savedProjects = Array.isArray(student.projects)
     ? student.projects
-      .filter(project => project && (project.name || project.desc))
+      .filter(project => project?.saved !== false && (project.name || project.desc))
       .map(project => ({
         name: project.name || 'Student Project',
-        desc: project.desc || 'Project details available on request.',
+        desc: project.desc || '',
+        link: project.link || '',
+        demoLink: project.demoLink || '',
       }))
     : []
 
   const skillsByLevel = buildSkillsByLevel(student.skillHubSkills, skills)
-  const streak = Array.isArray(student.skillHubSkills)
-    ? Math.max(0, ...student.skillHubSkills.map(skill => Number(skill.streak) || 0))
-    : 0
+  const skillHubByName = new Map(
+    (Array.isArray(student.skillHubSkills) ? student.skillHubSkills : [])
+      .filter(skill => skill && typeof skill.name === 'string' && skill.name.trim())
+      .map(skill => [skill.name.trim().toLowerCase(), skill]),
+  )
+  const skillDetails = skills.map(name => {
+    const skillHubEntry = skillHubByName.get(name.toLowerCase())
+    const verified = Boolean(skillHubEntry && isVerifiedSkill(skillHubEntry))
+    const level = verified && ['Beginner', 'Intermediate', 'Pro'].includes(skillHubEntry.stage)
+      ? skillHubEntry.stage
+      : null
+
+    return {
+      name,
+      verified,
+      level,
+      streak: verified ? activeStreak(skillHubEntry) : 0,
+    }
+  })
 
   return {
     id: student._id.toString(),
     name: student.name,
-    college: 'SkillBridge Verified',
+    avatar: student.avatar || null,
+    // Only publish verification types, never identity/contact credentials.
+    contactMethod: student.contactMethod === 'phone' ? 'phone' : 'email',
+    verificationMethod: student.verificationMethod === 'digilocker' ? 'digilocker' : 'aadhaar',
+    college: '',
+    verifiedSkills: verifiedSkillHubSkills,
     location: student.location || 'Location not added',
     skills,
+    skillDetails,
+    profileSkills: profileSkills.filter(skill => typeof skill === 'string' && skill.trim()),
     skillsByLevel,
-    streak,
-    score: Number(student.trustScore) || 0,
-    projects: Array.isArray(student.projects) ? student.projects.length : 0,
-    github: Array.isArray(student.githubLink) && student.githubLink[0] ? student.githubLink[0].url : '',
-    contactInfo: Array.isArray(student.contactInfo) ? clone(student.contactInfo) : [],
-    intro: student.preferredLanguage
-      ? `Verified student working confidently in ${student.preferredLanguage}.`
-      : 'Verified SkillBridge student open to project-based opportunities.',
+    profileSkillsByLevel: buildSkillsByLevel(student.skillHubSkills, profileSkills),
+    streak: Math.max(0, ...skillDetails.map(skill => skill.streak)),
+    score: Math.max(0, Math.min(1000, Number(student.trustScore) || 0)),
+    projects: savedProjects.length,
+    github: Array.isArray(student.githubLink)
+      ? (student.githubLink.find(link => link?.saved !== false && typeof link.url === 'string' && link.url.trim())?.url || '')
+      : '',
+    contactInfo: Array.isArray(student.contactInfo)
+      ? clone(student.contactInfo.filter(item => item?.saved !== false && item.label && item.value))
+      : [],
+    preferredLanguage: normalizeProfileText(student.preferredLanguage, '', 80),
     savedProjects,
     videoUrl: student.videoUrl || null,
   }
@@ -538,14 +615,16 @@ function normalizeTalentSearchFilters(filters = {}) {
   const pageSize = Number.parseInt(filters.pageSize, 10)
   const location = typeof filters.location === 'string' ? filters.location.trim().slice(0, 80) : ''
   const skill = typeof filters.skill === 'string' ? filters.skill.trim().slice(0, 80) : ''
+  const query = typeof filters.query === 'string' ? filters.query.trim().slice(0, 80) : ''
   const level = ['Beginner', 'Intermediate', 'Pro'].includes(filters.level) ? filters.level : 'All'
 
   return {
     minTrustScore: Number.isFinite(minTrustScore) ? Math.max(0, Math.min(1000, minTrustScore)) : 0,
     location: location === 'All' ? '' : location,
     skill: skill === 'All' ? '' : skill,
+    query,
     level,
-    page: Number.isFinite(page) ? Math.max(1, page) : 1,
+    page: Number.isFinite(page) ? Math.max(1, Math.min(1000, page)) : 1,
     pageSize: Number.isFinite(pageSize) ? Math.max(1, Math.min(50, pageSize)) : 50,
   }
 }
@@ -576,27 +655,34 @@ function enrichTalentProfile(profile, requiredSkills) {
   }
 }
 
+function compareTalentProfiles(left, right) {
+  return right.matchScore - left.matchScore
+    || right.score - left.score
+    || left.name.localeCompare(right.name)
+}
+
+function matchesTalentProfile(profile, normalizedFilters) {
+  const locationPass = !normalizedFilters.location
+    || normalizeTalentValue(profile.location) === normalizeTalentValue(normalizedFilters.location)
+    || normalizeTalentValue(profile.location).startsWith(`${normalizeTalentValue(normalizedFilters.location)},`)
+  const skillPass = !normalizedFilters.skill
+    || profile.skills.some(skill => normalizeTalentValue(skill) === normalizeTalentValue(normalizedFilters.skill))
+    || Object.values(profile.skillsByLevel || {}).some(skills => skills.some(skill => normalizeTalentValue(skill) === normalizeTalentValue(normalizedFilters.skill)))
+  const levelPass = normalizedFilters.level === 'All'
+    || (profile.skillsByLevel?.[normalizedFilters.level] || []).length > 0
+  const queryPass = !normalizedFilters.query
+    || normalizeTalentValue(profile.name).includes(normalizeTalentValue(normalizedFilters.query))
+
+  return profile.score >= normalizedFilters.minTrustScore && locationPass && skillPass && levelPass && queryPass
+}
+
 function buildTalentSearchResult(profiles, filters = {}, requiredSkills = '') {
   const normalizedFilters = normalizeTalentSearchFilters(filters)
   const requiredSkillList = parseRequiredSkills(requiredSkills)
   const filteredProfiles = profiles
-    .filter(profile => {
-      const locationPass = !normalizedFilters.location
-        || normalizeTalentValue(profile.location) === normalizeTalentValue(normalizedFilters.location)
-      const skillPass = !normalizedFilters.skill
-        || profile.skills.some(skill => normalizeTalentValue(skill) === normalizeTalentValue(normalizedFilters.skill))
-        || Object.values(profile.skillsByLevel || {}).some(skills => skills.some(skill => normalizeTalentValue(skill) === normalizeTalentValue(normalizedFilters.skill)))
-      const levelPass = normalizedFilters.level === 'All'
-        || (profile.skillsByLevel?.[normalizedFilters.level] || []).length > 0
-
-      return profile.score >= normalizedFilters.minTrustScore && locationPass && skillPass && levelPass
-    })
+    .filter(profile => matchesTalentProfile(profile, normalizedFilters))
     .map(profile => enrichTalentProfile(profile, requiredSkillList))
-    .sort((left, right) => (
-      right.matchScore - left.matchScore
-      || right.score - left.score
-      || left.name.localeCompare(right.name)
-    ))
+    .sort(compareTalentProfiles)
 
   const start = (normalizedFilters.page - 1) * normalizedFilters.pageSize
   return {
@@ -616,6 +702,7 @@ function sanitizeCompany(company) {
   const dashboardState = sanitizeDashboardState(company.dashboardState)
   const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
   const projectWorkspaceState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
+  const taskLibraryState = sanitizeTaskLibraryState(company.taskLibraryState)
   const paymentState = sanitizePaymentState(company.paymentState)
 
   return {
@@ -630,12 +717,35 @@ function sanitizeCompany(company) {
     dashboardState,
     gigManagementState,
     projectWorkspaceState,
+    taskLibraryState,
     paymentState,
   }
 }
 
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function sanitizeTaskLibraryState(state) {
+  const fallback = buildDefaultCompanyTaskLibraryState()
+  const tasks = Array.isArray(state?.tasks)
+    ? state.tasks.slice(0, 100).map((task, index) => ({
+      id: String(task?.id || `task-${index + 1}`),
+      type: COMPANY_TASK_TYPE_VALUES.has(task?.type) ? task.type : 'mixed',
+      title: normalizeProfileText(task?.title, '', 160),
+      instructions: normalizeProfileText(task?.instructions, '', 4000),
+      details: sanitizeCompanyTaskDetails(task?.details),
+      deadline: /^\d{4}-\d{2}-\d{2}$/.test(task?.deadline || '') ? task.deadline : '',
+      points: Math.min(100, Math.max(1, Number(task?.points) || 1)),
+      skills: Array.isArray(task?.skills)
+        ? task.skills.filter(skill => typeof skill === 'string' && skill.trim()).slice(0, 20).map(skill => skill.trim().slice(0, 60))
+        : [],
+      createdAt: task?.createdAt || new Date().toISOString(),
+      updatedAt: task?.updatedAt || task?.createdAt || new Date().toISOString(),
+    })).filter(task => task.title && task.instructions)
+    : fallback.tasks
+
+  return { tasks, revision: Number(state?.revision) || 0 }
 }
 
 async function findCompanyByToken(token) {
@@ -721,8 +831,38 @@ async function signInCompany(payload) {
 }
 
 async function getCurrentCompany(token) {
-  const company = await findCompanyByToken(token)
+  const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
   return sanitizeCompany(company)
+}
+
+async function getCurrentCompanyTaskLibraryState(token) {
+  const company = await findCompanyByToken(token)
+  return sanitizeTaskLibraryState(company.taskLibraryState)
+}
+
+async function updateCurrentCompanyTaskLibraryState(token, payload) {
+  const company = await findCompanyByToken(token)
+  const currentState = sanitizeTaskLibraryState(company.taskLibraryState)
+  const nextState = sanitizeTaskLibraryState(payload?.taskLibraryState)
+
+  const requestedTasks = payload?.taskLibraryState?.tasks
+  if (!Array.isArray(requestedTasks) || requestedTasks.length > 100 || requestedTasks.length !== nextState.tasks.length
+    || new Set(nextState.tasks.map(task => task.id)).size !== nextState.tasks.length) throw buildAuthError('Provide up to 100 complete tasks with unique IDs')
+  for (const task of requestedTasks) {
+    const previous = currentState.tasks.find(item => item.id === task?.id)
+    if (!previous || !sameJson(previous, task)) validateAssignment(task)
+  }
+  for (const task of nextState.tasks) {
+    const date = new Date(task.deadline)
+    if (!task.deadline || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== task.deadline) throw buildAuthError('Each task needs a valid deadline')
+  }
+  if (Number(payload.revision) !== (Number(company.taskLibraryState?.revision) || 0)) throw buildAuthError('The task library changed in another tab. Refresh before saving.', 409)
+  const filter = { _id: company._id }
+  filter['taskLibraryState.revision'] = company.taskLibraryState?.revision == null ? { $exists: false } : company.taskLibraryState.revision
+  const saved = await Company.findOneAndUpdate(filter, { $set: { taskLibraryState: { ...nextState, revision: (company.taskLibraryState?.revision || 0) + 1 } } }, { returnDocument: 'after' })
+  if (!saved) throw buildAuthError('The task library changed. Refresh before saving.', 409)
+  company.taskLibraryState = saved.taskLibraryState
+  return sanitizeTaskLibraryState(company.taskLibraryState)
 }
 
 async function getCurrentCompanyDashboard(token) {
@@ -749,8 +889,8 @@ async function updateCurrentCompany(token, payload) {
   const sectionLimit = Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2
 
   if (payload.businessProfile) {
-    const businessProfile = validateCompanyProfile(payload.businessProfile, fallbackProfile)
     const currentBusinessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
+    const businessProfile = validateCompanyProfile({ ...currentBusinessProfile, ...payload.businessProfile }, fallbackProfile)
 
     if (!sameJson(currentBusinessProfile, businessProfile)) {
       consumeSectionOperation(company, 'setup-business-profile', 'Setup Business Profile', sectionLimit)
@@ -765,48 +905,8 @@ async function updateCurrentCompany(token, payload) {
     company.location = businessProfile.location.trim()
   }
 
-  if (payload.dashboardState) {
-    const nextDashboardState = sanitizeDashboardState(payload.dashboardState)
-    const currentDashboardState = sanitizeDashboardState(company.dashboardState)
-
-    if (!sameJson(currentDashboardState, nextDashboardState)) {
-      consumeSectionOperation(company, 'my-business', 'My Business', sectionLimit)
-    }
-
-    company.dashboardState = reduceTemplateState(nextDashboardState, buildDefaultCompanyDashboardState())
-  }
-
-  if (payload.gigManagementState) {
-    const nextGigManagementState = sanitizeGigManagementState(payload.gigManagementState)
-    const currentGigManagementState = sanitizeGigManagementState(company.gigManagementState)
-
-    if (!sameJson(currentGigManagementState, nextGigManagementState)) {
-      consumeSectionOperation(company, 'gig-management', 'GIG Management', sectionLimit)
-    }
-
-    company.gigManagementState = reduceTemplateState(nextGigManagementState, buildDefaultCompanyGigManagementState())
-  }
-
-  if (payload.projectWorkspaceState) {
-    const nextWorkspaceState = sanitizeProjectWorkspaceState(payload.projectWorkspaceState)
-    const currentWorkspaceState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
-
-    if (!sameJson(currentWorkspaceState, nextWorkspaceState)) {
-      consumeSectionOperation(company, 'project-workspace', 'Project Workspace', sectionLimit)
-    }
-
-    company.projectWorkspaceState = reduceTemplateState(nextWorkspaceState, buildDefaultCompanyWorkspaceState())
-  }
-
-  if (payload.paymentState) {
-    const nextPaymentState = sanitizePaymentState(payload.paymentState)
-    const currentPaymentState = sanitizePaymentState(company.paymentState)
-
-    if (!sameJson(currentPaymentState, nextPaymentState)) {
-      consumeSectionOperation(company, 'payment', 'Payment', sectionLimit)
-    }
-
-    company.paymentState = reduceTemplateState(nextPaymentState, buildDefaultCompanyPaymentState())
+  if (['dashboardState', 'gigManagementState', 'projectWorkspaceState', 'paymentState'].some(key => payload[key] !== undefined)) {
+    throw buildAuthError('Use the section action to update workspace records', 400)
   }
 
   await company.save()
@@ -821,27 +921,84 @@ async function logoutCurrentCompany(token) {
 }
 
 async function getCurrentCompanyGigManagementState(token) {
-  const company = await findCompanyByToken(token)
+  const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
   return sanitizeGigManagementState(company.gigManagementState)
 }
 
-async function updateCurrentCompanyGigManagementState(token, payload) {
+async function getCompanyGigApplicants(token, gigId) {
   const company = await findCompanyByToken(token)
-  const currentState = sanitizeGigManagementState(company.gigManagementState)
-  const nextState = sanitizeGigManagementState(payload.gigManagementState)
+  const state = sanitizeGigManagementState(company.gigManagementState)
+  const gigIndex = state.gigs.findIndex(item => Number(item.id) === Number(gigId))
+  const gig = gigIndex === -1 ? null : state.gigs[gigIndex]
+  if (!gig) throw buildAuthError('GIG not found', 404)
 
-  if (!sameJson(currentState, nextState)) {
-    consumeSectionOperation(
-      company,
-      'gig-management',
-      'GIG Management',
-      Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-    )
+  if (!gig.publicId && typeof company.save === 'function') {
+    gig.publicId = randomUUID()
+    state.gigs[gigIndex] = gig
+    company.gigManagementState = reduceTemplateState(state, buildDefaultCompanyGigManagementState())
+    await company.save()
   }
 
-  company.gigManagementState = reduceTemplateState(nextState, buildDefaultCompanyGigManagementState())
-  await company.save()
-  return nextState
+  const applicants = state.applicantsByGig[gig.id] || []
+  const submissionQuery = {
+    companyId: company._id,
+    companyGigId: Number(gig.id),
+  }
+  if (gig.publicId) {
+    submissionQuery.companyGigPublicId = gig.publicId
+  }
+  const submissions = await TaskSubmission.find(submissionQuery)
+    .select('studentId').lean()
+  const studentIds = [...new Set([
+    ...applicants.map(item => String(item.studentId || item.id || '')),
+    ...submissions.map(item => String(item.studentId)),
+  ])].filter(id => /^[a-f0-9]{24}$/i.test(id))
+  const inviteMatch = {
+    companyId: company._id,
+    companyGigId: Number(gig.id),
+  }
+  if (gig.publicId) inviteMatch.companyGigPublicId = gig.publicId
+  const students = await Student.find({
+    $or: [
+      { _id: { $in: studentIds } },
+      { 'gigState.opportunities': { $elemMatch: inviteMatch } },
+    ],
+  })
+    .select('name avatar location skills skillHubSkills trustScore projects githubLink contactInfo videoUrl preferredLanguage gigState').lean()
+
+  return students.map(student => {
+    const profile = sanitizeTalentProfile(student)
+    const skills = profile.profileSkills
+    const opportunity = (Array.isArray(student.gigState?.opportunities) ? student.gigState.opportunities : [])
+      .find(item => (
+        String(item.companyId || '') === String(company._id)
+        && (gig.publicId
+          ? String(item.companyGigPublicId || '') === String(gig.publicId)
+          : Number(item.companyGigId) === Number(gig.id))
+      ))
+    return {
+      ...profile,
+      studentId: profile.id,
+      isLiveProfile: true,
+      pipelineSource: applicants.some(item => String(item.studentId || item.id || '') === String(student._id))
+        ? 'application'
+        : 'direct_invite',
+      skills,
+      skillsByLevel: Object.fromEntries(Object.entries(profile.skillsByLevel)
+        .map(([level, entries]) => [level, entries.filter(skill => skills.includes(skill))])),
+      profileSkillsByLevel: Object.fromEntries(Object.entries(profile.skillsByLevel)
+        .map(([level, entries]) => [level, entries.filter(skill => skills.includes(skill))])),
+      companyGigPublicId: gig.publicId || '',
+      interviewTaskSent: Boolean(opportunity),
+      interviewMessage: opportunity?.message || '',
+      taskTitle: opportunity?.taskTitle || '',
+      taskType: ['live_project', 'code', 'mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'].includes(opportunity?.taskType) ? opportunity.taskType : 'mixed',
+      taskDetails: opportunity?.taskDetails && typeof opportunity.taskDetails === 'object' ? opportunity.taskDetails : {},
+      taskInstructions: opportunity?.taskInstructions || '',
+      taskDeadline: opportunity?.taskDeadline || '',
+      taskPoints: Number(opportunity?.taskPoints) || 0,
+    }
+  })
 }
 
 async function createCompanyGig(token, payload) {
@@ -878,120 +1035,59 @@ async function updateCompanyGig(token, gigId, payload) {
   return nextState
 }
 
-async function getCurrentCompanyProjectWorkspaceState(token) {
+async function deleteCompanyGig(token, gigId) {
   const company = await findCompanyByToken(token)
-  return sanitizeProjectWorkspaceState(company.projectWorkspaceState)
-}
-
-async function updateCurrentCompanyProjectWorkspaceState(token, payload) {
-  const company = await findCompanyByToken(token)
-  const currentState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
-  const nextState = sanitizeProjectWorkspaceState(payload.projectWorkspaceState)
-
-  if (!sameJson(currentState, nextState)) {
-    consumeSectionOperation(
-      company,
-      'project-workspace',
-      'Project Workspace',
-      Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-    )
+  const currentState = sanitizeGigManagementState(company.gigManagementState)
+  if (await TaskSubmission.exists({ companyId: company._id, companyGigId: Number(gigId) })) {
+    throw buildAuthError('This GIG has submissions. Close it to preserve its work and payment history.', 409)
   }
+  const nextState = buildDeletedGigState(currentState, gigId)
 
-  company.projectWorkspaceState = reduceTemplateState(nextState, buildDefaultCompanyWorkspaceState())
+  consumeSectionOperation(
+    company,
+    'gig-management',
+    'GIG Management',
+    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
+  )
+
+  company.gigManagementState = reduceTemplateState(nextState, buildDefaultCompanyGigManagementState())
   await company.save()
   return nextState
 }
 
+async function getCurrentCompanyProjectWorkspaceState(token) {
+  const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
+  return sanitizeProjectWorkspaceState(company.projectWorkspaceState)
+}
+
 async function shareCompanyWorkspaceUpdate(token, projectId, payload) {
   const company = await findCompanyByToken(token)
+  const previous = company.projectWorkspaceState
+  await syncWorkspaceWithSelectedSubmissions(company)
   const currentState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
   const nextState = buildWorkspaceUpdateState(currentState, projectId, payload?.message)
 
-  consumeSectionOperation(
-    company,
-    'project-workspace',
-    'Project Workspace',
-    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-  )
-
-  company.projectWorkspaceState = reduceTemplateState(nextState, buildDefaultCompanyWorkspaceState())
-  await company.save()
+  await persistWorkspace(company._id, previous, nextState)
   return nextState
 }
 
 async function setCompanyWorkspaceMilestone(token, projectId, payload) {
   const company = await findCompanyByToken(token)
+  const previous = company.projectWorkspaceState
+  await syncWorkspaceWithSelectedSubmissions(company)
   const currentState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
   const nextState = buildWorkspaceMilestoneState(currentState, projectId, payload)
 
-  consumeSectionOperation(
-    company,
-    'project-workspace',
-    'Project Workspace',
-    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-  )
-
-  company.projectWorkspaceState = reduceTemplateState(nextState, buildDefaultCompanyWorkspaceState())
-  await company.save()
+  await persistWorkspace(company._id, previous, nextState)
   return nextState
 }
 
-async function getCurrentCompanyPaymentState(token) {
-  const company = await findCompanyByToken(token)
-  return sanitizePaymentState(company.paymentState)
-}
-
-async function updateCurrentCompanyPaymentState(token, payload) {
-  const company = await findCompanyByToken(token)
-  const currentState = sanitizePaymentState(company.paymentState)
-  const nextState = sanitizePaymentState(payload.paymentState)
-
-  if (!sameJson(currentState, nextState)) {
-    consumeSectionOperation(
-      company,
-      'payment',
-      'Payment',
-      Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-    )
-  }
-
-  company.paymentState = reduceTemplateState(nextState, buildDefaultCompanyPaymentState())
-  await company.save()
-  return nextState
-}
-
-async function addCompanyFunds(token, amount) {
-  const company = await findCompanyByToken(token)
-  const currentState = sanitizePaymentState(company.paymentState)
-  const nextState = buildCompanyFundsState(currentState, amount)
-
-  consumeSectionOperation(
-    company,
-    'payment',
-    'Payment',
-    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-  )
-
-  company.paymentState = reduceTemplateState(nextState, buildDefaultCompanyPaymentState())
-  await company.save()
-  return nextState
-}
-
-async function setupCompanyPayouts(token) {
-  const company = await findCompanyByToken(token)
-  const currentState = sanitizePaymentState(company.paymentState)
-  const nextState = buildCompanyPayoutSetupState(currentState)
-
-  consumeSectionOperation(
-    company,
-    'payment',
-    'Payment',
-    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
-  )
-
-  company.paymentState = reduceTemplateState(nextState, buildDefaultCompanyPaymentState())
-  await company.save()
-  return nextState
+async function persistWorkspace(companyId, previous, nextState) {
+  const result = await Company.updateOne({
+    _id: companyId,
+    projectWorkspaceState: previous === undefined ? { $exists: false } : previous,
+  }, { $set: { projectWorkspaceState: nextState } })
+  if (!result.matchedCount) throw buildAuthError('Workspace changed. Refresh before trying again.', 409)
 }
 
 async function getCompanyTalentProfiles(token, filters = {}) {
@@ -1004,7 +1100,7 @@ async function getCompanyTalentProfiles(token, filters = {}) {
   }
 
   if (normalizedFilters.location) {
-    query.location = new RegExp(`^${escapeRegExp(normalizedFilters.location)}$`, 'i')
+    query.location = new RegExp(`^${escapeRegExp(normalizedFilters.location)}(?:,|$)`, 'i')
   }
 
   if (normalizedFilters.skill) {
@@ -1014,22 +1110,47 @@ async function getCompanyTalentProfiles(token, filters = {}) {
     ]
   }
 
+  if (normalizedFilters.query) {
+    query.name = new RegExp(escapeRegExp(normalizedFilters.query), 'i')
+  }
+
   const fallbackProfile = buildDefaultCompanyProfile({
     businessName: company.businessName,
     location: company.location,
   })
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
-  const [students, availableLocations, profileSkills, skillHubSkills] = await Promise.all([
-    Student.find(query).sort({ trustScore: -1, createdAt: -1 }).limit(1000).lean(),
+  const [availableLocations, profileSkills, skillHubSkills] = await Promise.all([
     Student.distinct('location'),
     Student.distinct('skills'),
     Student.distinct('skillHubSkills.name'),
   ])
-  const profiles = students.map(sanitizeTalentProfile)
-  const result = buildTalentSearchResult(profiles, normalizedFilters, businessProfile.requiredSkills)
+  const requiredSkills = parseRequiredSkills(businessProfile.requiredSkills)
+  const start = (normalizedFilters.page - 1) * normalizedFilters.pageSize
+  const end = start + normalizedFilters.pageSize
+  const topCandidates = []
+  let total = 0
+
+  // Stream candidates in TrustScore order. This preserves accurate totals and pages without a
+  // hidden result cap or loading the entire talent directory into application memory.
+  const cursor = Student.find(query).sort({ trustScore: -1, createdAt: -1 }).lean().cursor()
+  for await (const student of cursor) {
+    const profile = sanitizeTalentProfile(student)
+    if (!matchesTalentProfile(profile, normalizedFilters)) continue
+
+    const candidate = enrichTalentProfile(profile, requiredSkills)
+    if (topCandidates.length < end || compareTalentProfiles(candidate, topCandidates[topCandidates.length - 1]) < 0) {
+      topCandidates.push(candidate)
+      topCandidates.sort(compareTalentProfiles)
+      if (topCandidates.length > end) topCandidates.pop()
+    }
+    total += 1
+  }
 
   return {
-    ...result,
+    talentProfiles: topCandidates.slice(start, end),
+    total,
+    page: normalizedFilters.page,
+    pageSize: normalizedFilters.pageSize,
     availableLocations: [...new Set(availableLocations.filter(location => typeof location === 'string' && location.trim()))].sort(),
     availableSkills: [...new Set([...profileSkills, ...skillHubSkills].filter(skill => typeof skill === 'string' && skill.trim()))].sort(),
   }
@@ -1041,9 +1162,9 @@ async function getPublicCompanyProfile(companyName) {
     throw buildAuthError('Company name is required')
   }
 
-  const company = await Company.findOne({
-    businessName: new RegExp(`^${escapeRegExp(normalizedName)}$`, 'i'),
-  })
+  const company = await Company.findOne(/^[a-f0-9]{24}$/i.test(normalizedName)
+    ? { _id: normalizedName }
+    : { businessName: new RegExp(`^${escapeRegExp(normalizedName)}$`, 'i') })
 
   if (!company) {
     throw buildAuthError('Company profile not found', 404)
@@ -1058,6 +1179,7 @@ async function getPublicCompanyProfile(companyName) {
   return {
     businessName: company.businessName,
     location: profile.location,
+    logo: profile.logo,
     industry: profile.industry,
     website: profile.website,
     teamSize: profile.teamSize,
@@ -1065,37 +1187,50 @@ async function getPublicCompanyProfile(companyName) {
     description: profile.description,
     hiringCategories: profile.hiringCategories,
     requiredSkills: profile.requiredSkills,
+    contactEmail: profile.contactEmail,
+    contactPhone: profile.contactPhone,
+    // Public proof only: these are method names, not registration or document values.
+    contactMethod: company.contactMethod === 'phone' ? 'phone' : 'email',
+    verificationMethod: company.verificationMethod === 'udyam' ? 'udyam' : 'gstin',
   }
 }
 
 module.exports = {
-  buildCompanyFundsState,
+  async getCompanyStudentProfile(token, studentId) {
+    await findCompanyByToken(token)
+    if (!/^[a-f0-9]{24}$/i.test(studentId)) throw buildAuthError('Invalid student ID', 400)
+    const student = await Student.findById(studentId).lean()
+    if (!student) throw buildAuthError('Student profile not found', 404)
+    return require('../utils/publicStudentProfile').publicStudentProfile(student, true)
+  },
+  getCompanyGigApplicants,
   buildCreatedGigState,
   buildCompanyDashboardOverview,
-  buildCompanyPayoutSetupState,
   buildTalentSearchResult,
   buildWorkspaceMilestoneState,
   buildWorkspaceUpdateState,
   buildUpdatedGigState,
+  buildDeletedGigState,
   createCompanyGig,
+  deleteCompanyGig,
   getCurrentCompany,
+  getCurrentCompanyTaskLibraryState,
   getCurrentCompanyDashboard,
   getCurrentCompanyGigManagementState,
-  getCurrentCompanyPaymentState,
   getCurrentCompanyProjectWorkspaceState,
   getCompanyTalentProfiles,
   getPublicCompanyProfile,
   normalizeTalentSearchFilters,
   sanitizeCompanyProfile,
+  sanitizeTalentProfile,
+  sanitizeTaskLibraryState,
   validateCompanyProfile,
   logoutCurrentCompany,
   signInCompany,
   signUpCompany,
   updateCurrentCompany,
-  updateCurrentCompanyGigManagementState,
+  updateCurrentCompanyTaskLibraryState,
   updateCompanyGig,
-  updateCurrentCompanyPaymentState,
-  updateCurrentCompanyProjectWorkspaceState,
   setCompanyWorkspaceMilestone,
   shareCompanyWorkspaceUpdate,
 }

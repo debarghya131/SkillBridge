@@ -9,6 +9,7 @@ function buildDefaultGigState() {
     browseGigs: [],
     savedGigIds: [],
     appliedGigIds: [],
+    appliedGigs: [],
     activeGigBase: [],
     completedGigs: [],
   }

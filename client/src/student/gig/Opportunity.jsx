@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import CompanyLogo from '../../ui/CompanyLogo'
 
 const ACTION_WARNING = 'AI can detect cheating. Copy-paste, no typing, very fast typing, tab switching, idle-then-submit, same answers, multiple logins, rapid submissions, DevTools, and camera signals can reduce your TrustScore.'
 
@@ -8,6 +9,13 @@ const TYPE_META = {
   'Part-Time GIG': { bg: '#F3E8FF', color: '#7C3AED' },
   'Project GIG': { bg: '#D1FAE5', color: '#065F46' },
 }
+const TASK_TYPE_LABELS = {
+  live_project: 'Live Project Assignment',
+  code: 'Code',
+  mcq: 'MCQ',
+  written: 'Written',
+  mixed: 'Mixed',
+}
 const TASK_STATUS_META = {
   reviewed: {
     badge: '📝 Reviewed',
@@ -15,11 +23,41 @@ const TASK_STATUS_META = {
     color: '#6D28D9',
     copy: 'Your interview task was reviewed. Open the task page to see the latest notes.',
   },
-  ready_to_hire: {
-    badge: '🎉 Ready to Hire',
+  submitted: {
+    badge: '📤 Submitted',
+    bg: '#EDE9FE',
+    color: '#6D28D9',
+    copy: 'Your task was submitted and is waiting for company review.',
+  },
+  selected: {
+    badge: '🎉 Selected',
     bg: '#D1FAE5',
     color: '#065F46',
-    copy: 'You moved forward in the company pipeline. Check your Active GIG tab for the next step.',
+    copy: 'You were selected. Complete the GIG work and submit the deliverable.',
+  },
+  work_started: {
+    badge: '🚀 Work Started',
+    bg: '#EDE9FE',
+    color: '#6D28D9',
+    copy: 'The company marked the GIG as started. Submit your completed work when ready.',
+  },
+  delivered: {
+    badge: '📦 Work Delivered',
+    bg: '#DBEAFE',
+    color: '#1D4ED8',
+    copy: 'Your completed work is with the company for review.',
+  },
+  approved: {
+    badge: '✅ Approved',
+    bg: '#D1FAE5',
+    color: '#065F46',
+    copy: 'Your work was approved. The company has not recorded an external payment yet.',
+  },
+  completed: {
+    badge: '✓ Completed',
+    bg: '#D1FAE5',
+    color: '#065F46',
+    copy: 'The GIG is complete. Check Earning for company-reported external payment records.',
   },
   needs_revision: {
     badge: '🔁 Needs Revision',
@@ -38,7 +76,10 @@ export default function Opportunity({
   const [expanded, setExpanded] = useState(null)
 
   const toggle = (id) => setExpanded(current => current === id ? null : id)
-  const visibleOpportunities = opportunities.filter(item => item.status !== 'declined')
+  const visibleOpportunities = opportunities.filter(item => (
+    item.status !== 'declined'
+    && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)
+  ))
   const newCount = visibleOpportunities.filter(item => item.status !== 'accepted').length
 
   return (
@@ -66,6 +107,8 @@ export default function Opportunity({
           const isAccepted = item.status === 'accepted'
           const typeMeta = TYPE_META[item.type] || { bg: 'var(--bg)', color: 'var(--muted)' }
           const taskStatusMeta = item.taskSubmissionStatus ? TASK_STATUS_META[item.taskSubmissionStatus] : null
+          const canOpenTask = isAccepted && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)
+          const deadlineLabel = /review/i.test(item.deadline || '') ? 'Review window' : 'Deadline'
 
           return (
             <div key={item.id} style={{
@@ -74,20 +117,14 @@ export default function Opportunity({
               boxShadow: isAccepted ? '0 0 0 3px #D1FAE5' : 'none',
               overflow: 'hidden', transition: 'all 0.2s',
             }}>
-              <div className="responsive-stack" style={{ padding: '16px 20px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                  background: item.companyColor,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontWeight: 900, fontSize: 18,
-                }}>
-                  {item.companyInitial}
-                </div>
+              <div className="responsive-stack" style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <CompanyLogo logo={item.companyLogo} name={item.company || item.companyInitial} size={44} style={{ background: item.companyColor || undefined }} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
                     <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--dark)' }}>{item.title}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, background: typeMeta.bg, color: typeMeta.color, padding: '2px 9px', borderRadius: 100 }}>{item.type}</span>
+                    {item.source === 'direct_invite' && <span style={{ fontSize: 11, fontWeight: 700, background: '#DBEAFE', color: '#1D4ED8', padding: '2px 9px', borderRadius: 100 }}>Direct invite</span>}
                     {isAccepted && <span style={{ fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46', padding: '2px 9px', borderRadius: 100 }}>✓ Accepted</span>}
                     {taskStatusMeta && <span style={{ fontSize: 11, fontWeight: 700, background: taskStatusMeta.bg, color: taskStatusMeta.color, padding: '2px 9px', borderRadius: 100 }}>{taskStatusMeta.badge}</span>}
                   </div>
@@ -104,19 +141,28 @@ export default function Opportunity({
                   </div>
                 </div>
 
-                <div className="responsive-opportunity-meta" style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary)' }}>{item.stipend}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>⏳ Deadline: {item.deadline}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>📅 {item.duration}</div>
+                <div className="responsive-opportunity-meta" style={{ textAlign: 'right', flexShrink: 0, minWidth: 150 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--primary)' }}>{item.stipend || 'Compensation not specified'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{deadlineLabel}: {item.deadline || 'Not specified'}</div>
+                  {item.duration && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{item.duration}</div>}
                 </div>
               </div>
 
-              <div style={{ padding: '0 20px 14px 20px' }}>
+              <div style={{ padding: '0 20px 16px' }}>
                 {isExpanded && (
                   <div style={{
                     background: '#F8FAFF', borderRadius: 10, padding: '12px 14px', marginBottom: 12,
                     border: '1px solid var(--border)', fontSize: 13, color: 'var(--dark)', lineHeight: 1.6,
                   }}>
+                    {item.taskTitle && (
+                      <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: 4 }}>Interview task</div>
+                        <div style={{ fontWeight: 800, marginBottom: 3 }}>{item.taskTitle}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                          {TASK_TYPE_LABELS[item.taskType] || 'Mixed'} · Due {item.taskDeadline || item.deadline || 'Not set'} · {Number(item.taskPoints) > 0 ? `${item.taskPoints} points` : 'Points not specified'}
+                        </div>
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       Message from {item.company}
                     </div>
@@ -124,67 +170,90 @@ export default function Opportunity({
                   </div>
                 )}
 
-                <div className="responsive-opportunity-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="responsive-opportunity-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
                   {!isAccepted ? (
                     <>
-                      <button
-                        onClick={async () => {
-                          const didAccept = await onAcceptOpportunity(item)
-                          if (didAccept === false) {
-                            return
-                          }
-                          setExpanded(null)
-                          navigate('/student/task', {
-                            state: {
-                              taskType: 'company-interview',
-                              opportunity: item,
-                              showIntegrityWarning: true,
-                              returnSection: 'gig',
-                            },
-                          })
-                        }}
-                        className="btn-primary"
-                        style={{ padding: '7px 18px', fontSize: 13 }}
-                      >
-                        Accept for Interview Task
-                      </button>
-                      <button
-                        onClick={() => onDeclineOpportunity(item)}
-                        style={{
-                          padding: '7px 14px', fontSize: 13, fontWeight: 600,
-                          background: 'var(--bg)', color: 'var(--muted)',
-                          border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer',
-                        }}
-                      >
-                        Decline
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          onClick={async () => {
+                            const didAccept = await onAcceptOpportunity(item)
+                            if (didAccept === false) return
+                            setExpanded(null)
+                            navigate('/student/task', {
+                              state: {
+                                taskType: 'company-interview',
+                                opportunity: { ...item, status: 'accepted' },
+                                showIntegrityWarning: true,
+                                returnSection: 'gig',
+                              },
+                            })
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '7px 14px', fontSize: 13 }}
+                        >
+                          Accept interview task
+                        </button>
+                        <button
+                          onClick={() => onDeclineOpportunity(item)}
+                          style={{
+                            padding: '7px 12px', fontSize: 13, fontWeight: 600,
+                            background: 'var(--bg)', color: 'var(--muted)',
+                            border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer',
+                          }}
+                        >
+                          Decline
+                        </button>
+                      </div>
                       <div style={{ width: '100%', fontSize: 11, fontWeight: 700, color: '#B91C1C', lineHeight: 1.5 }}>
                         {ACTION_WARNING}
                       </div>
                     </>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span style={{ fontSize: 13, color: taskStatusMeta ? taskStatusMeta.color : '#10B981', fontWeight: 700 }}>
-                        {taskStatusMeta ? taskStatusMeta.copy : '✓ You accepted this invite — company will contact you shortly'}
-                      </span>
-                      {item.companyFeedback ? (
-                        <span style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                          Feedback: {item.companyFeedback}
-                        </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: taskStatusMeta ? taskStatusMeta.color : '#059669', fontWeight: 750 }}>
+                          {taskStatusMeta ? taskStatusMeta.copy : 'Accepted. Your interview task is ready when you are.'}
+                        </div>
+                        {item.companyFeedback && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginTop: 4 }}>Feedback: {item.companyFeedback}</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {canOpenTask ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpanded(null)
+                            navigate('/student/task', {
+                              state: {
+                                taskType: 'company-interview',
+                                opportunity: item,
+                                showIntegrityWarning: false,
+                                returnSection: 'gig',
+                              },
+                            })
+                          }}
+                          className="btn-primary"
+                          style={{ padding: '7px 14px', fontSize: 13 }}
+                        >
+                          Open interview task
+                        </button>
                       ) : null}
+                      <button
+                        onClick={() => toggle(item.id)}
+                        className="responsive-opportunity-message-button"
+                        style={{ padding: '7px 12px', fontSize: 12, fontWeight: 700, background: 'var(--white)', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 8, cursor: 'pointer' }}
+                      >
+                        {isExpanded ? 'Hide message' : 'Read message'}
+                      </button>
+                      </div>
                     </div>
                   )}
-                  <button
+                  {!isAccepted && <button
                     onClick={() => toggle(item.id)}
                     className="responsive-opportunity-message-button"
-                    style={{
-                      marginLeft: 'auto', padding: '7px 14px', fontSize: 12, fontWeight: 600,
-                      background: 'none', color: 'var(--primary)',
-                      border: '1px solid var(--primary)', borderRadius: 8, cursor: 'pointer',
-                    }}
+                    style={{ marginLeft: 'auto', padding: '7px 12px', fontSize: 12, fontWeight: 700, background: 'var(--white)', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: 8, cursor: 'pointer' }}
                   >
-                    {isExpanded ? 'Hide Message ▲' : 'Read Message ▼'}
-                  </button>
+                    {isExpanded ? 'Hide message' : 'Read message'}
+                  </button>}
                 </div>
               </div>
             </div>

@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import DashboardSkeleton from '../../ui/DashboardSkeleton'
+import CompanyLogo from '../../ui/CompanyLogo'
+import { readTaskDraft, taskDraftKey } from './taskDraft'
 import {
   fetchStudentCompanyInterviewTask,
   getStudentSessionToken,
+  startStudentCompanyInterviewTask,
   submitStudentCompanyInterviewTask,
 } from '../studentApi'
 import { toast } from '../../ui/toast'
@@ -11,10 +16,49 @@ const TASK_STAGES = [
   { key: 'submission', label: 'Submission', icon: '📤' },
   { key: 'feedback', label: 'Feedback', icon: '💬' },
 ]
+const TASK_TYPE_LABELS = {
+  live_project: 'Live Project Assignment',
+  code: 'Code',
+  mcq: 'MCQ',
+  written: 'Written',
+  mixed: 'Mixed',
+  design: 'Design Challenge',
+  data_analysis: 'Data Analysis',
+  case_study: 'Case Study',
+  research: 'Research Report',
+  presentation: 'Presentation',
+}
+const TASK_DETAIL_LABELS = {
+  deliverables: 'Deliverables',
+  acceptanceCriteria: 'Acceptance Criteria',
+  submissionRequirements: 'Submission Requirements',
+  language: 'Preferred Language',
+  testCases: 'Test Cases / Expected Output',
+  questionCount: 'Number of Questions',
+  questions: 'Questions',
+  options: 'Answer Options',
+  passingScore: 'Passing Score',
+  wordLimit: 'Word Limit',
+  evaluationCriteria: 'Evaluation Criteria',
+  components: 'Included Components',
+}
+
+function getOpportunityIdentity(opportunity) {
+  // Active/completed GIG cards use a display-only synthetic id. The original
+  // invitation id is the stable key accepted by the task API.
+  return opportunity?.opportunityId
+    ?? opportunity?.id
+    ?? opportunity?.companyGigPublicId
+    ?? opportunity?.companyGigId
+    ?? ''
+}
 
 export default function CompanyTaskpage({ opportunity }) {
+  const [retry, setRetry] = useState(0)
+  const [reviewData, setReviewData] = useState(null)
   const [stage, setStage] = useState('brief')
   const [submissionLink, setSubmissionLink] = useState('')
+  const [submissionContent, setSubmissionContent] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [note, setNote] = useState('')
   const [submissionStatus, setSubmissionStatus] = useState('submitted')
@@ -24,12 +68,25 @@ export default function CompanyTaskpage({ opportunity }) {
   const [submissionNotice, setSubmissionNotice] = useState('')
   const [serverAssignment, setServerAssignment] = useState(null)
   const [assignmentError, setAssignmentError] = useState('')
+  const [draftKey, setDraftKey] = useState('')
+  const [draftVersion, setDraftVersion] = useState('')
+  const [draftNotice, setDraftNotice] = useState('')
+  const operation = useRef(false)
+
+  useEffect(() => {
+    if (!draftKey || !serverAssignment || submitted || isLoading) return
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ submissionLink, submissionContent, note, version: draftVersion, savedAt: Date.now() }))
+      setDraftNotice('Draft saved in this browser tab')
+    } catch { setDraftNotice('Draft could not be saved on this device') }
+  }, [draftKey, draftVersion, serverAssignment, submitted, isLoading, submissionLink, submissionContent, note])
 
   useEffect(() => {
     let cancelled = false
     const token = getStudentSessionToken()
 
     setSubmissionLink('')
+    setSubmissionContent('')
     setSubmitted(false)
     setNote('')
     setSubmissionStatus('submitted')
@@ -38,9 +95,14 @@ export default function CompanyTaskpage({ opportunity }) {
     setSubmissionNotice('')
     setServerAssignment(null)
     setAssignmentError('')
-    setIsLoading(false)
+    setIsLoading(true)
+    setReviewData(null)
+    setDraftKey('')
+    setDraftNotice('')
 
     if (!opportunity || !token) {
+      setAssignmentError('Sign in and reopen an accepted company invitation.')
+      setIsLoading(false)
       return () => {
         cancelled = true
       }
@@ -51,13 +113,24 @@ export default function CompanyTaskpage({ opportunity }) {
 
       try {
         const result = await fetchStudentCompanyInterviewTask(token, {
-          opportunityId: opportunity.id,
+          opportunityId: getOpportunityIdentity(opportunity),
           gigTitle: opportunity.title,
+          companyName: opportunity.company,
         })
 
+        if (!cancelled && !result.taskAssignment) throw new Error('The server did not return an assigned task.')
+        if (cancelled) return
+        const version = `${result.taskSubmission?.status || 'new'}:${result.taskSubmission?.updatedAt || result.taskSubmission?.submittedAt || ''}`
+        let key = ''
+        try { key = await taskDraftKey(token, [opportunity.companyId, getOpportunityIdentity(opportunity)]) } catch { /* Draft storage is optional. */ }
+        if (cancelled) return
+        const draft = key ? readTaskDraft(sessionStorage, key, version) : null
+        setDraftKey(key)
+        setDraftVersion(version)
         if (cancelled || !result.taskSubmission) {
           if (!cancelled && result.taskAssignment) {
             setServerAssignment(result.taskAssignment)
+            if (draft) { setSubmissionLink(draft.submissionLink); setSubmissionContent(draft.submissionContent); setNote(draft.note) }
           }
           return
         }
@@ -65,9 +138,12 @@ export default function CompanyTaskpage({ opportunity }) {
         if (result.taskAssignment) {
           setServerAssignment(result.taskAssignment)
         }
-        setSubmissionLink(result.taskSubmission.submissionLink || '')
-        setNote(result.taskSubmission.note || '')
-        setSubmitted(true)
+        setReviewData(result.taskSubmission)
+        const editable = ['submitted', 'needs_revision', 'work_started'].includes(result.taskSubmission.status)
+        setSubmissionLink(editable && draft ? draft.submissionLink : result.taskSubmission.submissionLink || '')
+        setSubmissionContent(editable && draft ? draft.submissionContent : result.taskSubmission.submissionContent || '')
+        setNote(editable && draft ? draft.note : result.taskSubmission.note || '')
+        setSubmitted(!(editable && draft))
         setSubmissionStatus(result.taskSubmission.status || 'submitted')
         setFeedback(result.taskSubmission.feedback || '')
       } catch (error) {
@@ -86,7 +162,7 @@ export default function CompanyTaskpage({ opportunity }) {
     return () => {
       cancelled = true
     }
-  }, [opportunity])
+  }, [opportunity, retry])
 
   if (!opportunity) {
     return (
@@ -97,18 +173,36 @@ export default function CompanyTaskpage({ opportunity }) {
     )
   }
 
-  const task = serverAssignment ? { ...opportunity, ...serverAssignment } : opportunity
-  const matchedSkills = Array.isArray(task.matchedSkills) && task.matchedSkills.length > 0
-    ? task.matchedSkills
-    : ['core skills']
-  const primarySkill = matchedSkills[0]
-  const secondarySkill = matchedSkills[1] || primarySkill
-  const tasks = [
-    { id: 1, title: `Build a sample ${primarySkill} project`, desc: `Create a small demo project showcasing your ${primarySkill} skills. It should be functional, well-structured, and hosted on GitHub.`, points: 40, required: true },
-    { id: 2, title: 'Submit a short intro video (60–90 sec)', desc: 'Record a 60–90 second video introducing yourself, your background, and why you are a good fit for this role.', points: 30, required: true },
-    { id: 3, title: `Write a brief on your ${secondarySkill} experience`, desc: 'Write 150–200 words about a real project or situation where you applied this skill.', points: 20, required: false },
-    { id: 4, title: 'Share portfolio or relevant links', desc: 'Provide links to your GitHub, portfolio, or any relevant work that demonstrates your abilities.', points: 10, required: false },
-  ]
+  if (!serverAssignment || assignmentError) {
+    return <div className="company-task-page">
+      {isLoading ? <DashboardSkeleton section="tasks" /> : <div role="alert" className="work-error">
+        <p>{assignmentError || 'This assigned task is unavailable.'}</p>
+        <button className="btn-primary" onClick={() => setRetry(value => value + 1)}>Retry</button>
+      </div>}
+    </div>
+  }
+
+  const task = { ...opportunity, ...serverAssignment }
+  const isWorkDelivery = ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(submissionStatus)
+    || (submissionStatus === 'needs_revision' && reviewData?.revisionReturnStatus === 'delivered')
+  if (isWorkDelivery) task.taskType = 'mixed'
+  const taskTitle = isWorkDelivery ? 'GIG work delivery' : task.taskTitle || 'Interview task'
+  const taskInstructions = isWorkDelivery
+    ? reviewData?.workBrief || 'No separate GIG work brief has been added. Confirm delivery requirements with the company.'
+    : task.taskInstructions || 'The company has not added task instructions yet. Contact the company before submitting your work.'
+  const taskDeadline = isWorkDelivery ? reviewData?.workspace?.deadline || 'Not set' : task.taskDeadline || task.deadline || 'Not set'
+  const taskPoints = Number(task.taskPoints) || 0
+  const taskTypeLabel = TASK_TYPE_LABELS[task.taskType] || 'Mixed'
+  const taskDetails = !isWorkDelivery && task.taskDetails && typeof task.taskDetails === 'object' ? task.taskDetails : {}
+  const needsLink = ['live_project', 'code'].includes(task.taskType)
+  const needsWrittenResponse = ['mcq', 'written'].includes(task.taskType)
+  const allowsWrittenResponse = ['mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'].includes(task.taskType)
+  const responseLabel = task.taskType === 'mcq' ? 'Your Answers *' : task.taskType === 'written' ? 'Written Response *' : 'Response / Explanation'
+  const responsePlaceholder = task.taskType === 'mcq'
+    ? 'Enter your answers and brief explanations where requested.'
+    : task.taskType === 'written'
+      ? 'Write your response according to the prompt and evaluation criteria.'
+      : 'Add your explanation, answers, or implementation notes.'
 
   const statusMeta = {
     submitted: {
@@ -116,7 +210,7 @@ export default function CompanyTaskpage({ opportunity }) {
       bg: '#EDE9FE',
       color: '#6D28D9',
       title: 'Submission Received!',
-      copy: `${task.company} has been notified. Expect a response within 5–7 business days.`,
+      copy: `${task.company} can now review your submission.`,
     },
     reviewed: {
       badge: 'Reviewed',
@@ -125,12 +219,47 @@ export default function CompanyTaskpage({ opportunity }) {
       title: 'Company Review Added',
       copy: `${task.company} reviewed your task. Check the feedback tab for their notes.`,
     },
-    ready_to_hire: {
-      badge: 'Ready to Hire',
+    selected: {
+      badge: 'Selected',
       bg: '#D1FAE5',
       color: '#065F46',
-      title: 'You Moved Forward',
-      copy: `${task.company} marked this submission as ready to hire.`,
+      title: 'You Were Selected',
+      copy: `${task.company} selected you. Complete the GIG work and submit the deliverable.`,
+    },
+    work_started: {
+      badge: 'Work Started',
+      bg: '#EDE9FE',
+      color: '#6D28D9',
+      title: 'GIG Work Started',
+      copy: `${task.company} marked the GIG as started. Submit your completed work when ready.`,
+    },
+    delivered: {
+      badge: 'Work Delivered',
+      bg: '#DBEAFE',
+      color: '#1D4ED8',
+      title: 'Work Delivered',
+      copy: `${task.company} received your completed GIG work and will review it.`,
+    },
+    approved: {
+      badge: 'Approved',
+      bg: '#D1FAE5',
+      color: '#065F46',
+      title: 'Work Approved',
+      copy: 'Your work is approved. External payment has not been recorded yet.',
+    },
+    completed: {
+      badge: 'Completed',
+      bg: '#D1FAE5',
+      color: '#065F46',
+      title: 'GIG Completed',
+      copy: 'The company marked this GIG complete. Any recorded external payment is shown in Feedback.',
+    },
+    rejected: {
+      badge: 'Not Selected',
+      bg: '#FEE2E2',
+      color: '#B91C1C',
+      title: 'Application Not Selected',
+      copy: `${task.company} did not select this submission for the GIG.`,
     },
     needs_revision: {
       badge: 'Needs Revision',
@@ -143,20 +272,32 @@ export default function CompanyTaskpage({ opportunity }) {
 
   const currentStatusMeta = statusMeta[submissionStatus] || statusMeta.submitted
   const handleSubmit = async () => {
+    if (operation.current) return
     const normalizedLink = submissionLink.trim()
-    if (!normalizedLink) {
+    const normalizedContent = submissionContent.trim()
+    if (needsLink && !normalizedLink) {
       setSubmitError('Add a public http:// or https:// link before submitting.')
       return
     }
-
-    try {
-      const parsedLink = new URL(normalizedLink)
-      if (!['http:', 'https:'].includes(parsedLink.protocol)) {
-        throw new Error('invalid protocol')
-      }
-    } catch {
-      setSubmitError('Use a valid public http:// or https:// link.')
+    if (needsWrittenResponse && !normalizedContent) {
+      setSubmitError('Add your response before submitting.')
       return
+    }
+    if (!normalizedLink && !normalizedContent) {
+      setSubmitError('Add a link or written response before submitting.')
+      return
+    }
+
+    if (normalizedLink) {
+      try {
+        const parsedLink = new URL(normalizedLink)
+        if (!['http:', 'https:'].includes(parsedLink.protocol)) {
+          throw new Error('invalid protocol')
+        }
+      } catch {
+        setSubmitError('Use a valid public http:// or https:// link.')
+        return
+      }
     }
 
     if (note.length > 2000) {
@@ -169,53 +310,90 @@ export default function CompanyTaskpage({ opportunity }) {
     setSubmissionNotice('')
 
     if (!token) {
-      setSubmitted(true)
-      setSubmissionStatus('submitted')
-      setFeedback('')
-      setSubmissionNotice('Saved in demo mode. Sign in to make this submission visible to the company.')
-      toast.info('Saved in demo mode only.', { title: 'Submission Not Synced' })
+      setSubmitError('Sign in again before submitting your work.')
       return
     }
 
     setIsLoading(true)
+    operation.current = true
 
     try {
       const result = await submitStudentCompanyInterviewTask(token, {
-        opportunityId: task.id,
+        opportunityId: getOpportunityIdentity(task),
         gigTitle: task.title,
+        companyName: task.company,
         submissionLink: normalizedLink,
+        submissionContent: normalizedContent,
         note,
       })
 
+      if (!result.taskSubmission?.id) throw new Error('Submission was not confirmed. Refresh before trying again.')
+      setReviewData(result.taskSubmission)
+      setDraftVersion(`${result.taskSubmission.status}:${result.taskSubmission.updatedAt || result.taskSubmission.submittedAt || ''}`)
+      try { sessionStorage.removeItem(draftKey) } catch { /* Server submission is already saved. */ }
+      setDraftNotice('')
       setSubmitted(true)
       setSubmissionLink(normalizedLink)
+      setSubmissionContent(normalizedContent)
       setSubmissionStatus(result.taskSubmission?.status || 'submitted')
       setFeedback(result.taskSubmission?.feedback || '')
       setSubmissionNotice('Your submission is now linked to the company review queue.')
-      toast.success('Interview task submitted successfully.', { title: 'Submission Sent' })
+      toast.success(isWorkDelivery ? 'GIG work submitted successfully.' : 'Interview task submitted successfully.', { title: 'Submission Sent' })
     } catch (error) {
       setSubmitError(error.message || 'Could not submit your work right now.')
     } finally {
+      operation.current = false
+      setIsLoading(false)
+    }
+  }
+
+  const handleStartWork = async () => {
+    if (operation.current) return
+    const token = getStudentSessionToken()
+    setSubmitError('')
+    setSubmissionNotice('')
+
+    if (!token) {
+      setSubmitError('Sign in again before starting work.')
+      return
+    }
+
+    setIsLoading(true)
+    operation.current = true
+    try {
+      const result = await startStudentCompanyInterviewTask(token, {
+        opportunityId: getOpportunityIdentity(task),
+        gigTitle: task.title,
+        companyName: task.company,
+      })
+      if (!result.taskSubmission?.id) throw new Error('Work start was not confirmed. Refresh before trying again.')
+      setDraftVersion(`${result.taskSubmission.status}:${result.taskSubmission.updatedAt || result.taskSubmission.submittedAt || ''}`)
+      setSubmissionLink(result.taskSubmission?.submissionLink || '')
+      setSubmissionContent(result.taskSubmission?.submissionContent || '')
+      setNote(result.taskSubmission?.note || '')
+      setSubmissionStatus(result.taskSubmission?.status || 'work_started')
+      setReviewData(result.taskSubmission)
+      setSubmitted(false)
+      setSubmissionNotice('Work started. Complete the assignment and submit your deliverable when ready.')
+      toast.success('GIG work started.', { title: 'Work Started' })
+    } catch (error) {
+      setSubmitError(error.message || 'Could not start the GIG right now.')
+    } finally {
+      operation.current = false
       setIsLoading(false)
     }
   }
 
   return (
     <div className="company-task-page">
+      <button type="button" className="btn-secondary" title="Refresh task status" aria-label="Refresh task status" disabled={isLoading} onClick={() => setRetry(value => value + 1)}><RefreshCw size={16} /></button>
       {/* Header */}
       <div className="company-task-header" style={{
         background: 'linear-gradient(135deg, #1E1B4B, #312E81)',
         borderRadius: 14, padding: '20px 24px', marginBottom: 20,
         display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
       }}>
-        <div style={{
-          width: 50, height: 50, borderRadius: 12, flexShrink: 0,
-          background: task.companyColor || 'var(--primary)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'white', fontWeight: 900, fontSize: 20,
-        }}>
-          {task.companyInitial || task.company?.charAt(0) || 'C'}
-        </div>
+        <CompanyLogo logo={task.companyLogo} name={task.company} size={50} style={{ background: task.companyColor || 'var(--primary)' }} />
         <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ color: 'white', fontWeight: 800, fontSize: 16 }}>{task.title}</div>
         <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, marginTop: 2 }}>
@@ -261,40 +439,43 @@ export default function CompanyTaskpage({ opportunity }) {
       {/* Brief tab */}
       {stage === 'brief' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{
-            background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 12,
-            padding: '14px 18px', fontSize: 13, color: '#166534',
-          }}>
-            <strong>🎉 You accepted this invite!</strong> Complete the tasks below and submit your work. {task.company} will review and get back to you within 5–7 days.
+          <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 12, padding: '14px 18px', fontSize: 13, color: '#166534' }}>
+            <strong>✓ You accepted this interview task.</strong> Complete the assignment below and submit the requested evidence. {task.company} will review your result.
           </div>
 
-          {tasks.map(task => (
-            <div key={task.id} className="company-task-card" style={{
-              background: 'var(--white)', borderRadius: 12, padding: '18px 20px',
-              border: '1px solid var(--border)',
-            }}>
-              <div className="company-task-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div className="company-task-row-main" style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                    background: 'var(--primary-light)', color: 'var(--primary)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 900, fontSize: 13, marginTop: 1,
-                  }}>{task.id}</div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--dark)', marginBottom: 4 }}>
-                      {task.title}
-                      {task.required && <span style={{ marginLeft: 8, fontSize: 11, background: '#FEE2E2', color: '#991B1B', padding: '2px 8px', borderRadius: 100, fontWeight: 700 }}>Required</span>}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>{task.desc}</div>
-                  </div>
-                </div>
-                <div className="company-task-points" style={{ flexShrink: 0, background: '#EFF6FF', color: '#1D4ED8', fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 100, marginLeft: 12 }}>
-                  +{task.points} pts
-                </div>
+          <div className="company-task-card" style={{ background: 'var(--white)', borderRadius: 12, padding: '20px', border: '1px solid var(--border)' }}>
+            <div className="company-task-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)', marginBottom: 6 }}>{taskTitle}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{taskTypeLabel} · {taskPoints > 0 ? `${taskPoints} points` : 'Points not specified'}</div>
+              </div>
+              <div className="company-task-points" style={{ flexShrink: 0, background: '#FEF3C7', color: '#92400E', fontSize: 12, fontWeight: 700, padding: '5px 10px', borderRadius: 100 }}>
+                Due {taskDeadline}
               </div>
             </div>
-          ))}
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', marginBottom: 6 }}>Instructions</div>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--dark)', lineHeight: 1.7 }}>{taskInstructions}</div>
+            {isWorkDelivery && reviewData?.workspace && <div className="student-workspace-notes">
+              <details><summary>Project milestones ({reviewData.workspace.milestones.length})</summary>
+                {reviewData.workspace.milestones.map(item => <p key={item.id}><strong>{item.title}</strong> · {item.dueDate} · {item.status}</p>)}
+                {!reviewData.workspace.milestones.length && <p>No milestones yet.</p>}
+              </details>
+              <details><summary>Company updates ({reviewData.workspace.updates.length})</summary>
+                {[...reviewData.workspace.updates].reverse().map(item => <p key={item.id}>{item.message} <time dateTime={item.sharedAt}>{item.sharedAt ? new Date(item.sharedAt).toLocaleDateString('en-IN') : ''}</time></p>)}
+                {!reviewData.workspace.updates.length && <p>No updates yet.</p>}
+              </details>
+            </div>}
+            {Object.entries(taskDetails).filter(([, value]) => value).length > 0 && (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {Object.entries(taskDetails).filter(([, value]) => value).map(([key, value]) => (
+                  <div key={key} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 800, marginBottom: 4 }}>{TASK_DETAIL_LABELS[key] || key}</div>
+                    <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--dark)', lineHeight: 1.55 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -327,17 +508,30 @@ export default function CompanyTaskpage({ opportunity }) {
               <div style={{ fontSize: 11, fontWeight: 700, background: 'white', color: currentStatusMeta.color, borderRadius: 100, display: 'inline-block', padding: '4px 10px', border: `1px solid ${currentStatusMeta.color}`, marginBottom: 16 }}>
                 {currentStatusMeta.badge}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', background: 'white', borderRadius: 8, padding: '8px 14px', display: 'inline-block', border: '1px solid var(--border)' }}>
+              {submissionLink && <div style={{ fontSize: 12, color: 'var(--muted)', background: 'white', borderRadius: 8, padding: '8px 14px', display: 'inline-block', border: '1px solid var(--border)', wordBreak: 'break-word' }}>
                 🔗 {submissionLink}
-              </div>
-              <div style={{ marginTop: 14 }}>
+              </div>}
+              {submissionContent && <div style={{ fontSize: 12, color: 'var(--muted)', background: 'white', borderRadius: 8, padding: '8px 14px', marginTop: submissionLink ? 8 : 0, textAlign: 'left', whiteSpace: 'pre-wrap', wordBreak: 'break-word', border: '1px solid var(--border)' }}>
+                <strong style={{ display: 'block', marginBottom: 4 }}>Response</strong>{submissionContent}
+              </div>}
+              {submissionStatus === 'selected' && <div style={{ marginTop: 14 }}>
+                <button
+                  onClick={handleStartWork}
+                  disabled={isLoading || Boolean(assignmentError)}
+                  className="btn-primary"
+                  style={{ padding: '8px 14px', fontSize: 12 }}
+                >
+                  {isLoading ? 'Starting...' : 'Start GIG Work'}
+                </button>
+              </div>}
+              {['submitted', 'needs_revision', 'work_started'].includes(submissionStatus) && <div style={{ marginTop: 14 }}>
                 <button
                   onClick={() => setSubmitted(false)}
                   style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'white', color: 'var(--text)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
                 >
-                  {submissionStatus === 'needs_revision' ? 'Update Submission' : 'Edit Submission'}
+                  {submissionStatus === 'work_started' ? 'Submit GIG Work' : submissionStatus === 'needs_revision' ? 'Update Submission' : 'Edit Submission'}
                 </button>
-              </div>
+              </div>}
             </div>
           ) : (
             <>
@@ -345,18 +539,35 @@ export default function CompanyTaskpage({ opportunity }) {
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--dark)', marginBottom: 14 }}>Submit Your Work</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>GitHub / Drive / Portfolio Link *</label>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>{needsLink ? 'GitHub / Drive / Portfolio Link *' : 'Reference Link (optional)'}</label>
                     <input
-                      placeholder="https://github.com/yourname/project"
+                      placeholder={needsLink ? 'https://github.com/yourname/project' : 'https://example.com (optional)'}
                       value={submissionLink}
                       onChange={e => setSubmissionLink(e.target.value)}
                       maxLength={500}
-                      required
+                      required={needsLink}
+                      aria-label={needsLink ? 'Submission link' : 'Reference link'}
+                      disabled={isLoading}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                       onFocus={e => e.target.style.borderColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderColor = 'var(--border)'}
                     />
                   </div>
+                  {allowsWrittenResponse && <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>{responseLabel}</label>
+                    <textarea
+                      placeholder={responsePlaceholder}
+                      value={submissionContent}
+                      onChange={e => setSubmissionContent(e.target.value)}
+                      maxLength={10000}
+                      aria-label="Task response"
+                      disabled={isLoading}
+                      rows={7}
+                      style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                      onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                      onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                    />
+                  </div>}
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Additional Note (optional)</label>
                     <textarea
@@ -364,6 +575,8 @@ export default function CompanyTaskpage({ opportunity }) {
                       value={note}
                       onChange={e => setNote(e.target.value)}
                       maxLength={2000}
+                      aria-label="Additional note"
+                      disabled={isLoading}
                       rows={4}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }}
                       onFocus={e => e.target.style.borderColor = 'var(--primary)'}
@@ -374,14 +587,15 @@ export default function CompanyTaskpage({ opportunity }) {
                     type="button"
                     onClick={handleSubmit}
                     className="btn-primary"
-                    disabled={!submissionLink.trim() || isLoading || Boolean(assignmentError)}
-                    style={{ padding: '10px 24px', fontSize: 14, alignSelf: 'flex-start', opacity: submissionLink.trim() && !isLoading && !assignmentError ? 1 : 0.5, cursor: submissionLink.trim() && !isLoading && !assignmentError ? 'pointer' : 'not-allowed' }}
+                    disabled={(!submissionLink.trim() && !submissionContent.trim()) || isLoading || Boolean(assignmentError)}
+                    style={{ padding: '10px 24px', fontSize: 14, alignSelf: 'flex-start', opacity: (submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError ? 1 : 0.5, cursor: (submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError ? 'pointer' : 'not-allowed' }}
                   >
                     {isLoading ? 'Submitting...' : 'Submit Work →'}
                   </button>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: -4 }}>
-                    {submissionLink.length}/500 link characters · {note.length}/2,000 note characters
+                    {submissionLink.length}/500 link characters · {submissionContent.length}/10,000 response characters · {note.length}/2,000 note characters
                   </div>
+                  {draftNotice && <p role="status" className="work-muted">{draftNotice}</p>}
                   {submitError && (
                     <div role="alert" style={{ fontSize: 12, color: '#B91C1C', fontWeight: 700 }}>
                       {submitError}
@@ -417,13 +631,15 @@ export default function CompanyTaskpage({ opportunity }) {
               </div>
               <div style={{ fontSize: 13, color: currentStatusMeta.color, lineHeight: 1.6 }}>
                 {feedback || `Once ${task.company} reviews your work, their feedback will appear here.`}
+                {reviewData?.score != null && <p>Score: {reviewData.score} / {taskPoints}</p>}
+                {reviewData?.externalPayment && <div><p>External payment recorded by {task.company}: INR {reviewData.externalPayment.amount}</p><p>Reference: {reviewData.externalPayment.reference}</p><p>Payment date: {reviewData.externalPayment.paidOn}</p><p>This is a company-reported record, not a payment processed or verified by SkillBridge.</p></div>}
               </div>
             </div>
 
             <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 20px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--dark)', marginBottom: 10 }}>Latest submission</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Link</div>
-              <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 600, marginBottom: 14, wordBreak: 'break-word' }}>{submissionLink}</div>
+              {submissionLink && <><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Link</div><div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 600, marginBottom: 14, wordBreak: 'break-word' }}>{submissionLink}</div></>}
+              {submissionContent && <><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Response</div><div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.6, marginBottom: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{submissionContent}</div></>}
               {note && (
                 <>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Your note</div>

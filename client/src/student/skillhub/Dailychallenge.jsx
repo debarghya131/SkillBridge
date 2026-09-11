@@ -1,372 +1,121 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Flame, Target, Trophy } from 'lucide-react'
 
-const ACTION_WARNING = 'AI can detect cheating. Copy-paste, no typing, fast typing, tab switching, idle submit, same answers, multiple logins, rapid submissions, DevTools, and camera signals may reduce TrustScore.'
+const dayLabel = value => new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const monthKey = (year, month, day) => `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
-const todaySeed = () => {
-  const d = new Date()
-  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()
+function StreakBadge({ skill, done }) {
+  const streak = Number(skill.streak) || 0
+  const longest = Math.max(streak, Number(skill.longestStreak) || 0)
+  const state = done ? 'done' : streak ? 'due' : 'idle'
+  const message = done ? 'Protected today' : streak ? 'Practice today to continue' : 'Complete practice to start'
+  return <div className={`sh-streak-badge sh-streak-${state}`}>
+    <Flame size={16}/><strong>{streak} day{streak === 1 ? '' : 's'}</strong><span>{message}</span>{longest > 0 && <small>Best {longest}</small>}
+  </div>
 }
 
-const VERIFIED_SKILLS = [
-  { name: 'React', level: 85, category: 'Frontend', stage: 'Pro', streak: 5, missedDays: 0, wrongAnswers: 2 },
-  { name: 'Node.js', level: 70, category: 'Backend', stage: 'Intermediate', streak: 2, missedDays: 2, wrongAnswers: 5 },
-  { name: 'UI/UX Design', level: 78, category: 'Design', stage: 'Intermediate', streak: 0, missedDays: 3, wrongAnswers: 8 },
-  { name: 'SQL', level: 58, category: 'Analytics', stage: 'Beginner', streak: 7, missedDays: 0, wrongAnswers: 1 },
-  { name: 'Power BI', level: 74, category: 'Analytics', stage: 'Intermediate', streak: 3, missedDays: 1, wrongAnswers: 4 },
-  { name: 'Content Marketing', level: 67, category: 'Marketing', stage: 'Intermediate', streak: 1, missedDays: 2, wrongAnswers: 6 },
-  { name: 'Figma', level: 88, category: 'Design', stage: 'Pro', streak: 9, missedDays: 0, wrongAnswers: 0 },
-  { name: 'REST APIs', level: 62, category: 'Backend', stage: 'Intermediate', streak: 4, missedDays: 0, wrongAnswers: 3 },
-]
+export function PracticeStreak({ skills = [], skillHubState }) {
+  const daily = skillHubState?.daily || {}
+  const streaks = skillHubState?.streaks || { current: 0, longest: 0, overallCurrent: 0, overallLongest: 0, totalPracticeDays: 0, activeSkills: 0, completedToday: 0, nextMilestone: 3, week: [] }
+  const ranked = [...skills].sort((left, right) => (Number(right.streak) || 0) - (Number(left.streak) || 0) || left.name.localeCompare(right.name))
+  const overallCurrent = Number(streaks.overallCurrent ?? streaks.current) || 0
+  const overallLongest = Number(streaks.overallLongest ?? streaks.longest) || 0
+  const totalPracticeDays = Number(streaks.totalPracticeDays) || 0
+  const daysToMilestone = streaks.nextMilestone ? Math.max(0, streaks.nextMilestone - overallCurrent) : 0
+  const serverToday = /^\d{4}-\d{2}-\d{2}$/.test(daily.date || '') ? daily.date : new Date().toISOString().slice(0, 10)
+  const today = new Date(`${serverToday}T00:00:00`)
+  const [viewYear, setViewYear] = useState(today.getFullYear())
+  const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const practiceDaysBySkill = (skillHubState?.skillLog || []).reduce((days, item) => {
+    if (item.eventType !== 'retention_completed' || !item.earnedDay || !item.skillName) return days
+    const skillName = item.skillName.toLowerCase()
+    if (!days[skillName]) days[skillName] = new Set()
+    days[skillName].add(item.earnedDay)
+    return days
+  }, {})
 
-const RETAIN_TASK_TYPES = ['mcq', 'puzzle', 'code', 'describe']
-const RETAIN_TASK_LABELS = {
-  mcq: '📝 MCQ Quiz',
-  puzzle: '🧩 Puzzle',
-  code: '💻 Code Task',
-  describe: '🗣 Describe Code',
-}
-
-const INITIAL_CHALLENGES = [
-  { id: 1, type: 'puzzle', title: 'Linked List Reversal Puzzle', skill: 'Data Structures', difficulty: 'Medium', trustGain: 60, time: '20 min', done: false },
-  { id: 2, type: 'project', title: 'Build a Form Validator in React', skill: 'React', difficulty: 'Easy', trustGain: 80, time: '30 min', done: false },
-  { id: 3, type: 'code', title: 'Write a REST API Endpoint in Node.js', skill: 'Node.js', difficulty: 'Medium', trustGain: 70, time: '25 min', done: false },
-  { id: 4, type: 'mcq', title: '10-Question SQL Mastery Quiz', skill: 'SQL', difficulty: 'Easy', trustGain: 40, time: '10 min', done: true },
-  { id: 5, type: 'describe', title: 'Explain this useEffect Cleanup Code', skill: 'React', difficulty: 'Easy', trustGain: 30, time: '5 min', done: false },
-  { id: 6, type: 'project', title: 'Design a Dashboard Component in Figma', skill: 'Figma', difficulty: 'Hard', trustGain: 100, time: '45 min', done: false },
-  { id: 7, type: 'code', title: 'Optimize a Python Data Pipeline', skill: 'Python', difficulty: 'Hard', trustGain: 90, time: '40 min', done: false },
-  { id: 8, type: 'mcq', title: 'Marketing Funnel Concepts Quiz', skill: 'Content Marketing', difficulty: 'Easy', trustGain: 40, time: '10 min', done: false },
-]
-
-const diffColor = {
-  Easy: ['#D1FAE5', '#065F46'],
-  Medium: ['#FEF3C7', '#92400E'],
-  Hard: ['#FEE2E2', '#991B1B'],
-}
-
-const typeIcon = { puzzle: '🧩', project: '🚀', code: '💻', mcq: '📝', describe: '🗣' }
-const typeLabel = { puzzle: 'Puzzle', project: 'Project', code: 'Coding', mcq: 'MCQ', describe: 'Describe' }
-
-const getWarning = (skill) => {
-  if (skill.missedDays >= 3 || skill.wrongAnswers >= 8) {
-    return {
-      level: 'critical',
-      text: `Critical: Risk losing ${skill.stage} verified status`,
-      detail: `${skill.missedDays} days missed · ${skill.wrongAnswers} wrong answers this week`,
-      bg: '#FEE2E2',
-      color: '#991B1B',
-    }
-  }
-  if (skill.missedDays >= 2 || skill.wrongAnswers >= 5) {
-    return {
-      level: 'warning',
-      text: `Warning: ${skill.missedDays} missed days may downgrade to ${skill.stage === 'Pro' ? 'Intermediate' : 'Beginner'}`,
-      detail: `${skill.wrongAnswers} wrong answers · miss 1 more day to trigger downgrade`,
-      bg: '#FEF3C7',
-      color: '#92400E',
-    }
-  }
-  if (skill.missedDays >= 1) {
-    return {
-      level: 'mild',
-      text: '1 day missed — stay consistent to keep your badge',
-      detail: 'Miss 2 more days to risk a level downgrade',
-      bg: '#FFFBEB',
-      color: '#A16207',
-    }
-  }
-  return null
-}
-
-const getRetainTaskType = (skillName, seed) => {
-  const types = RETAIN_TASK_TYPES
-  const hash = (skillName.split('').reduce((a, c) => a + c.charCodeAt(0), 0) + seed) % types.length
-  return types[hash]
-}
-
-const stageMeta = (stage) => {
-  if (stage === 'Pro') return { color: '#065F46', bg: '#D1FAE5' }
-  if (stage === 'Intermediate') return { color: '#1D4ED8', bg: '#DBEAFE' }
-  return { color: '#92400E', bg: '#FEF3C7' }
-}
-
-export default function DailyChallenge({ skills = [], skillHubState }) {
-  const navigate = useNavigate()
-  const seed = todaySeed()
-  const dailyState = skillHubState?.daily
-  const retainDone = Object.fromEntries((dailyState?.completedRetention || []).map(skillName => [skillName, true]))
-  const challenges = INITIAL_CHALLENGES.map(challenge => ({
-    ...challenge,
-    done: dailyState ? dailyState.completedChallenges.includes(challenge.id) : challenge.done,
-  }))
-  const verifiedSkills = (skills.length > 0 ? skills.filter(skill => skill.verified) : VERIFIED_SKILLS).map(skill => ({
-    ...skill,
-    wrongAnswers: Number(skill.wrongAnswers) || Number(dailyState?.wrongAnswers?.[skill.name.toLowerCase()]) || 0,
-  }))
-
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-  const retainCompleted = Object.values(retainDone).filter(Boolean).length
-  const challengeCompleted = challenges.filter(c => c.done).length
-  const totalTrustGain = challenges.filter(c => c.done).reduce((a, c) => a + c.trustGain, 0)
-
-  const criticalSkills = verifiedSkills.filter(s => getWarning(s)?.level === 'critical').length
-  const warningSkills = verifiedSkills.filter(s => getWarning(s)?.level === 'warning').length
-
-  const goToTask = (state) => navigate('/student/task', {
-    state: {
-      ...state,
-      showIntegrityWarning: true,
-      returnSection: 'skillhub',
-    },
-  })
-
-  const col = {
-    background: 'var(--white)',
-    borderRadius: 14,
-    border: '1px solid var(--border)',
-    padding: '20px',
-    height: 'calc(100vh - 310px)',
-    overflowY: 'auto',
-    scrollbarWidth: 'thin',
+  const moveMonth = direction => {
+    const next = new Date(viewYear, viewMonth + direction, 1)
+    setViewYear(next.getFullYear())
+    setViewMonth(next.getMonth())
   }
 
-  return (
-    <div>
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, var(--dark), #1E1B4B)',
-        borderRadius: 14,
-        padding: '20px 24px',
-        marginBottom: 18,
-        color: 'white',
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
-          Daily Challenge — {today}
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 10 }}>
-          Tasks reset at midnight · Keep your streak alive
-        </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
-            🔒 {retainCompleted}/{verifiedSkills.length} Retention Done
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
-            ⚡ {challengeCompleted}/{challenges.length} Challenges Done
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
-            +{totalTrustGain} Trust Earned Today
-          </span>
-          {criticalSkills > 0 && (
-            <span style={{ fontSize: 12, fontWeight: 700, background: '#FEE2E2', color: '#991B1B', padding: '4px 12px', borderRadius: 100 }}>
-              ⚠️ {criticalSkills} skill{criticalSkills > 1 ? 's' : ''} at risk of downgrade
-            </span>
-          )}
-          {warningSkills > 0 && (
-            <span style={{ fontSize: 12, fontWeight: 700, background: '#FEF3C7', color: '#92400E', padding: '4px 12px', borderRadius: 100 }}>
-              ⚠️ {warningSkills} skill{warningSkills > 1 ? 's' : ''} with warning
-            </span>
-          )}
-        </div>
+  return <section className="sh-habit-tracker" aria-labelledby="practice-streak-title">
+    <header className="sh-habit-header">
+      <div><span className="sh-section-kicker">Track your habit</span><h2 id="practice-streak-title">Practice consistency</h2><p>Each filled square is a reviewer-approved practice day for that skill.</p></div>
+      <div className="sh-habit-stats" aria-label="Practice totals">
+        <span><Flame size={15}/><strong>{overallCurrent}</strong> trust streak</span>
+        <span><CalendarDays size={15}/><strong>{totalPracticeDays}</strong> days practiced</span>
+        <span><Trophy size={15}/><strong>{overallLongest}</strong> best</span>
+        <span><Target size={15}/><strong>{streaks.activeSkills || 0}</strong> active skills</span>
       </div>
-
-      {/* Two-column layout */}
-      <div className="responsive-split-two" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-        {/* Column 1 — Retention Tasks */}
-        <div className="responsive-scroll-panel" style={col}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted)' }}>
-              🔒 Retention Tasks
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, background: '#E0E7FF', color: '#3730A3', padding: '3px 8px', borderRadius: 100 }}>
-              {retainCompleted}/{verifiedSkills.length} done
-            </span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 }}>
-            Solve one task per verified skill each day to keep your badge. Missing or submitting wrong answers reduces your TrustScore and can trigger a level downgrade.
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {verifiedSkills.map(skill => {
-              const taskType = getRetainTaskType(skill.name, seed)
-              const warning = getWarning(skill)
-              const done = !!retainDone[skill.name.toLowerCase()]
-              const sm = stageMeta(skill.stage)
-
-              return (
-                <div key={skill.name} style={{
-                  background: done ? '#F0FDF4' : 'var(--bg)',
-                  borderRadius: 10,
-                  padding: '12px 14px',
-                  border: `1px solid ${done ? '#BBF7D0' : warning?.level === 'critical' ? '#FECACA' : warning?.level === 'warning' ? '#FDE68A' : 'var(--border)'}`,
-                  opacity: done ? 0.78 : 1,
-                }}>
-                  <div className="responsive-stack" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--dark)' }}>{skill.name}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, background: sm.bg, color: sm.color, padding: '2px 7px', borderRadius: 100 }}>
-                          ✓ {skill.stage}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 7px', borderRadius: 100 }}>
-                          {skill.category}
-                        </span>
-                      </div>
-
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 5 }}>
-                        Today: <strong style={{ color: 'var(--dark)' }}>{RETAIN_TASK_LABELS[taskType]}</strong>
-                        &ensp;·&ensp;
-                        <span style={{ color: '#991B1B', fontWeight: 700 }}>-3 Trust if missed</span>
-                        &ensp;·&ensp;
-                        <span style={{ color: '#B45309', fontWeight: 600 }}>-1 per wrong answer</span>
-                      </div>
-
-                      <div style={{ fontSize: 11, color: skill.streak >= 5 ? '#065F46' : 'var(--muted)', fontWeight: 700, marginBottom: warning ? 6 : 0 }}>
-                        🔥 {skill.streak} day streak
-                        {skill.streak === 0 && <span style={{ color: '#991B1B', marginLeft: 6 }}>· streak broken!</span>}
-                      </div>
-
-                      {warning && (
-                        <div style={{ background: warning.bg, borderRadius: 7, padding: '6px 9px', marginTop: 4 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: warning.color }}>⚠️ {warning.text}</div>
-                          <div style={{ fontSize: 11, color: warning.color, opacity: 0.85, marginTop: 1 }}>{warning.detail}</div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="responsive-daily-action" style={{ flexShrink: 0, maxWidth: 220 }}>
-                      {done ? (
-                        <span style={{ fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46', padding: '5px 11px', borderRadius: 100 }}>
-                          ✓ Done
-                        </span>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => goToTask({
-                              skillName: skill.name,
-                              category: skill.category,
-                              level: skill.level,
-                              mode: 'retain',
-                              taskType,
-                              trustLoss: 3,
-                              currentStage: skill.stage,
-                            })}
-                            style={{
-                              background: 'var(--primary)',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: 8,
-                              padding: '7px 13px',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Solve Task
-                          </button>
-                          <div style={{ marginTop: 8, fontSize: 10.5, fontWeight: 700, color: '#B91C1C', lineHeight: 1.45 }}>
-                            {ACTION_WARNING}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
+    </header>
+    <div className="sh-habit-controls">
+      <div className="sh-habit-year"><span>Year</span><button type="button" onClick={() => setViewYear(year => year - 1)} aria-label="Previous year"><ChevronLeft size={15}/></button><strong>{viewYear}</strong><button type="button" onClick={() => setViewYear(year => year + 1)} aria-label="Next year"><ChevronRight size={15}/></button></div>
+      <div className="sh-habit-months" aria-label="Choose month">{MONTHS.map((label, index) => <button type="button" key={label} className={index === viewMonth ? 'is-selected' : ''} onClick={() => setViewMonth(index)}>{label}</button>)}</div>
+      <div className="sh-habit-step"><button type="button" onClick={() => moveMonth(-1)} aria-label="Previous month"><ArrowLeft size={15}/></button><button type="button" onClick={() => moveMonth(1)} aria-label="Next month"><ArrowRight size={15}/></button></div>
+    </div>
+    <div className="sh-habit-scroll">
+      <div className="sh-habit-grid" style={{ '--habit-days': daysInMonth }}>
+        <div className="sh-habit-skill-head">Skill</div>
+        {Array.from({ length: daysInMonth }, (_, index) => <div className="sh-habit-day-head" key={index + 1}><span>{dayLabel(monthKey(viewYear, viewMonth, index + 1))}</span>{index + 1}</div>)}
+        {ranked.map(skill => {
+          const eligible = skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
+          const skillDays = practiceDaysBySkill[skill.name.toLowerCase()] || new Set()
+          const current = Number(skill.streak) || 0
+          return <div className="sh-habit-row" key={skill.name}>
+            <div className="sh-habit-skill"><div><strong>{skill.name}</strong><span>{skill.category} · {skill.stage}</span></div><div className="sh-habit-skill-meta"><span><Flame size={13}/>{current} days</span>{eligible ? <small>Active</small> : <small className="is-locked">Verify first</small>}</div></div>
+            {Array.from({ length: daysInMonth }, (_, index) => {
+              const dateKey = monthKey(viewYear, viewMonth, index + 1)
+              const practiced = skillDays.has(dateKey)
+              const isToday = dateKey === daily.date
+              return <span className={`sh-habit-cell${practiced ? ' is-done' : ''}${isToday ? ' is-today' : ''}${eligible ? '' : ' is-disabled'}`} key={dateKey} title={`${skill.name}: ${practiced ? 'approved practice' : 'no approved practice'} on ${dateKey}`} aria-label={`${skill.name}, ${dateKey}: ${practiced ? 'approved practice' : 'no approved practice'}`}>{practiced && <Check size={12}/>}</span>
             })}
           </div>
-        </div>
-
-        {/* Column 2 — Daily Challenges */}
-        <div className="responsive-scroll-panel" style={col}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted)' }}>
-              ⚡ Daily Challenges
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46', padding: '3px 8px', borderRadius: 100 }}>
-              +{totalTrustGain} Trust Earned
-            </span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 }}>
-            Earn TrustScore by solving puzzles, building projects, answering MCQs, writing code, or describing code snippets. New challenges every day at midnight.
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {challenges.map(ch => (
-              <div key={ch.id} style={{
-                background: ch.done ? '#F0FDF4' : 'var(--bg)',
-                borderRadius: 10,
-                padding: '12px 14px',
-                border: `1px solid ${ch.done ? '#BBF7D0' : 'var(--border)'}`,
-                opacity: ch.done ? 0.78 : 1,
-              }}>
-                  <div className="responsive-stack" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--dark)', marginBottom: 6 }}>
-                      {typeIcon[ch.type]} {ch.title}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, background: diffColor[ch.difficulty][0], color: diffColor[ch.difficulty][1], padding: '2px 7px', borderRadius: 100 }}>
-                        {ch.difficulty}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 7px', borderRadius: 100 }}>
-                        {typeLabel[ch.type]}
-                      </span>
-                      <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--bg)', color: 'var(--muted)', padding: '2px 7px', borderRadius: 100, border: '1px solid var(--border)' }}>
-                        🏷 {ch.skill}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--muted)' }}>🕐 {ch.time}</span>
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#065F46' }}>
-                      +{ch.trustGain} Trust on completion
-                    </div>
-                  </div>
-
-                  <div className="responsive-daily-action" style={{ flexShrink: 0, maxWidth: 220 }}>
-                    {ch.done ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46', padding: '5px 11px', borderRadius: 100 }}>
-                        ✓ Done
-                      </span>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => goToTask({
-                            skillName: ch.skill,
-                            challengeId: ch.id,
-                            category: ch.skill,
-                            level: 65,
-                            mode: 'challenge',
-                            taskType: ch.type,
-                            challengeTitle: ch.title,
-                            trustGain: ch.trustGain,
-                            difficulty: ch.difficulty,
-                          })}
-                          style={{
-                            background: 'var(--primary)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: 8,
-                            padding: '7px 13px',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {ch.type === 'mcq' ? 'Start Quiz' : ch.type === 'puzzle' ? 'Solve Puzzle' : ch.type === 'describe' ? 'Describe Code' : 'Solve Task'}
-                        </button>
-                        <div style={{ marginTop: 8, fontSize: 10.5, fontWeight: 700, color: '#B91C1C', lineHeight: 1.45 }}>
-                          {ACTION_WARNING}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        })}
       </div>
+      {!ranked.length && <p className="sh-empty">Add a skill to start tracking your practice rhythm.</p>}
     </div>
-  )
+    <footer className="sh-habit-footer"><span>{streaks.completedToday || 0} skills practiced today</span><span>{streaks.nextMilestone ? `${daysToMilestone} more consecutive ${daysToMilestone === 1 ? 'day' : 'days'} to reach the ${streaks.nextMilestone}-day milestone.` : 'You have reached every available streak milestone.'}</span></footer>
+  </section>
+}
+
+export default function DailyChallenge({ skills = [], skillHubState, challenges = [], rewards, assessments = [] }) {
+  const navigate = useNavigate()
+  const daily = skillHubState?.daily || {}
+  const verified = skills.filter(skill => skill.verified && ['valid', 'due'].includes(skill.renewalStatus))
+  const open = (skill, mode, extra = {}) => navigate('/student/task', { state: { skillName: skill.name, mode, returnSection: 'skillhub', ...extra } })
+  const reviewState = (name, mode, challengeId) => assessments.find(item => item.skillName.toLowerCase() === name.toLowerCase() && item.mode === mode
+    && (mode !== 'challenge' || item.challengeId === challengeId) && ['pending', 'needs_revision'].includes(item.status))?.status
+  const actionLabel = (status, fallback) => status === 'pending' ? 'Awaiting review' : status === 'needs_revision' ? 'Revise submission' : fallback
+  return <div className="sh-daily-layout">
+    <div className="sh-columns">
+    <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Verified skills</span><h2>Daily Practice</h2></div><span>{daily.date} IST</span></header>
+      <p className="sh-policy">Up to +{rewards.retain} Trust per submission day after review. No automatic penalties for missed practice.</p>
+      <div className="sh-list">{verified.map(skill => {
+        const done = (daily.completedRetention || []).includes(skill.name.toLowerCase())
+        const status = reviewState(skill.name, 'retain')
+        return <article className="sh-skill" key={skill.name}><div className="sh-skill-main"><strong>{skill.name}</strong><p className="sh-meta">{skill.stage} · Approved evidence only</p><StreakBadge skill={skill} done={done}/></div>
+          {done ? <CheckCircle2 aria-label="Practice approved" size={20}/> : <button className="btn-secondary" onClick={() => open(skill, 'retain')}>{actionLabel(status, 'Submit practice')}<ArrowRight size={16}/></button>}</article>
+      })}{!verified.length && <p className="sh-empty">No actively verified skills available for practice.</p>}</div>
+    </section>
+    <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Evidence tasks</span><h2>Challenges</h2></div><span>+{daily.points || 0} Trust for today's submissions</span></header>
+      <p className="sh-policy">Up to +{rewards.challenge} Trust per submission day across all challenges. Original evidence and reviewer approval required.</p>
+      <div className="sh-list">{challenges.map(challenge => {
+        const skill = skills.find(item => item.name.toLowerCase() === challenge.skill.toLowerCase())
+        const done = (daily.completedChallenges || []).includes(challenge.id)
+        const status = skill ? reviewState(skill.name, 'challenge', challenge.id) : ''
+        return <article className="sh-assessment" key={challenge.id}><header><strong>{challenge.title}</strong><span>{challenge.skill}</span></header>
+          <p>{challenge.instructions}</p>
+          {done ? <span className="sh-positive">Approved</span> : <button className="btn-secondary" disabled={!skill} onClick={() => open(skill, 'challenge', { challengeId: challenge.id, challengeTitle: challenge.title, instructions: challenge.instructions })}>
+            {!skill ? 'Skill not on profile' : actionLabel(status, 'Open challenge')}<ArrowRight size={16}/>
+          </button>}
+        </article>
+      })}{!challenges.length && <p className="sh-empty">No challenges available.</p>}</div>
+    </section>
+    </div>
+  </div>
 }

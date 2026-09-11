@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { setStudentSessionToken, signInStudent, signUpStudent } from './studentApi'
 import { toast } from '../ui/toast'
 
@@ -48,7 +48,8 @@ function Field({ label, error, required, children }) {
 
 export default function StudentAuth() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState('signup')
+  const [searchParams] = useSearchParams()
+  const mode = searchParams.get('mode') === 'signin' ? 'signin' : 'signup'
   const [contactMethod, setContactMethod] = useState('email')
   const [idMethod, setIdMethod] = useState('aadhaar')
   const [form, setForm] = useState({
@@ -151,11 +152,11 @@ export default function StudentAuth() {
       padding: '40px 24px',
     }}>
       <div style={{ width: '100%', maxWidth: 500 }}>
-        <button onClick={() => navigate('/')} style={{
+        <button onClick={() => navigate(mode === 'signin' ? '/login' : '/')} style={{
           background: 'none', border: 'none', color: 'var(--muted)',
           fontSize: 14, fontWeight: 600, marginBottom: 16,
           display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-        }}>← Back to Home</button>
+        }}>← {mode === 'signin' ? 'Login options' : 'Back to Home'}</button>
 
         <div style={{
           background: 'var(--white)', borderRadius: 20,
@@ -171,20 +172,6 @@ export default function StudentAuth() {
             <p style={{ color: 'var(--muted)', fontSize: 12 }}>
               {mode === 'signup' ? 'Join thousands of students finding real opportunities' : 'Welcome back! Continue where you left off'}
             </p>
-          </div>
-
-          {/* Mode toggle */}
-          <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: 9, padding: 3, marginBottom: 16 }}>
-            {[{ v: 'signup', l: 'Create Account' }, { v: 'signin', l: 'Sign In' }].map(({ v, l }) => (
-              <button key={v} onClick={() => { setMode(v); setErrors({}) }} style={{
-                flex: 1, padding: '7px', borderRadius: 6, border: 'none',
-                background: mode === v ? 'var(--white)' : 'transparent',
-                color: mode === v ? 'var(--primary)' : 'var(--muted)',
-                fontWeight: 700, fontSize: 14,
-                boxShadow: mode === v ? 'var(--shadow-sm)' : 'none',
-                transition: 'all 0.2s', cursor: 'pointer',
-              }}>{l}</button>
-            ))}
           </div>
 
           {mode === 'signup' ? (
@@ -323,6 +310,7 @@ export default function StudentAuth() {
               <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
                 By registering you agree to our Terms of Service and Privacy Policy
               </p>
+              <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>Already registered?{' '}<button onClick={() => navigate('/login')} style={{ background: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 700 }}>Log in</button></p>
             </div>
           ) : (
             <div>
@@ -372,7 +360,7 @@ export default function StudentAuth() {
 
               <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 20 }}>
                 Don't have an account?{' '}
-                <button onClick={() => { setMode('signup'); setErrors({}) }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={() => navigate('/student?mode=signup')} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                   Create one
                 </button>
               </p>

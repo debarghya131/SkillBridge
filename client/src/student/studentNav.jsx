@@ -1,7 +1,10 @@
+import { CalendarDays, Flame } from 'lucide-react'
+
 export default function StudentNav({
   avatar,
   name,
   trustScore,
+  practiceStats,
   onOpenProfile,
   onToggleSidebar,
 }) {
@@ -25,6 +28,10 @@ export default function StudentNav({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="dashboard-activity-metrics" aria-label="SkillBridge practice activity">
+          <span title="Total approved practice days on SkillBridge"><CalendarDays size={15}/><strong>{practiceStats.totalPracticeDays}</strong><small>days</small></span>
+          <span title="Current trust streak"><Flame size={15}/><strong>{practiceStats.overallCurrent}</strong><small>trust streak</small></span>
+        </div>
         <div
           className="dashboard-user-meta"
           onClick={onOpenProfile}

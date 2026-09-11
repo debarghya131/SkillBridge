@@ -7,24 +7,18 @@ test('buildUtcDayKey uses UTC date formatting', () => {
   assert.equal(buildUtcDayKey(date), '2026-05-23')
 })
 
-test('consumeSectionOperation allows only two operations per section per day', () => {
+test('consumeSectionOperation records repeated operations without enforcing a daily limit', () => {
   const entity = {}
   const first = consumeSectionOperation(entity, 'gig-center', 'GIG Center', 2, new Date('2026-05-23T10:00:00.000Z'))
   const second = consumeSectionOperation(entity, 'gig-center', 'GIG Center', 2, new Date('2026-05-23T16:00:00.000Z'))
 
   assert.equal(first.used, 1)
-  assert.equal(first.remaining, 1)
+  assert.equal(first.remaining, null)
   assert.equal(second.used, 2)
-  assert.equal(second.remaining, 0)
+  assert.equal(second.remaining, null)
 
-  assert.throws(
-    () => consumeSectionOperation(entity, 'gig-center', 'GIG Center', 2, new Date('2026-05-23T20:00:00.000Z')),
-    error => {
-      assert.equal(error.statusCode, 429)
-      assert.match(error.message, /Daily GIG Center operation limit reached/i)
-      return true
-    },
-  )
+  const third = consumeSectionOperation(entity, 'gig-center', 'GIG Center', 2, new Date('2026-05-23T20:00:00.000Z'))
+  assert.equal(third.used, 3)
 })
 
 test('consumeSectionOperation tracks sections independently', () => {

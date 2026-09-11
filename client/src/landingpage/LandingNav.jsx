@@ -145,15 +145,12 @@ export default function LandingNav() {
         </div>
 
         {/* CTA buttons */}
-        <div className="landing-nav-cta" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="btn-secondary" style={{ padding: '9px 20px', fontSize: 14 }}
-            onClick={() => navigate('/student')}>
-            For Student
-          </button>
-          <button className="btn-primary" style={{ padding: '9px 20px', fontSize: 14 }}
-            onClick={() => navigate('/company')}>
-            For Company
-          </button>
+        <div className="landing-nav-cta landing-auth-actions">
+          <div>
+            <button className="btn-secondary" onClick={() => navigate('/student?mode=signup')}>For Student</button>
+            <button className="btn-primary" onClick={() => navigate('/company?mode=signup')}>For Company</button>
+          </div>
+          <button className="landing-login-link" onClick={() => navigate('/login')}>Already registered? Log in</button>
         </div>
 
         <button
@@ -189,12 +186,13 @@ export default function LandingNav() {
             ))}
           </div>
           <div className="landing-nav-mobile-actions">
-            <button className="btn-secondary" onClick={() => { setMenuOpen(false); navigate('/student') }}>
+            <button className="btn-secondary" onClick={() => { setMenuOpen(false); navigate('/student?mode=signup') }}>
               For Student
             </button>
-            <button className="btn-primary" onClick={() => { setMenuOpen(false); navigate('/company') }}>
+            <button className="btn-primary" onClick={() => { setMenuOpen(false); navigate('/company?mode=signup') }}>
               For Company
             </button>
+            <button className="landing-login-link" onClick={() => { setMenuOpen(false); navigate('/login') }}>Already registered? Log in</button>
           </div>
         </div>
       </div>
