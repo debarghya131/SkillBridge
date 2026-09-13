@@ -2075,3 +2075,187 @@ img, video { max-width: 100%; }
     width: 100%;
   }
 }
+
+/* Authenticated workspace responsiveness */
+@media (max-width: 1023px) {
+  .student-sidebar-heading,
+  .company-sidebar-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .student-sidebar-close,
+  .company-sidebar-close {
+    display: inline-grid !important;
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    flex: 0 0 40px;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--white);
+    color: var(--dark);
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .dashboard-sidebar {
+    width: min(88vw, 320px) !important;
+    box-shadow: 16px 0 36px rgba(15, 23, 42, 0.14);
+  }
+
+  .responsive-pill-nav-menu .responsive-pill-nav-header {
+    display: none !important;
+  }
+
+  .responsive-pill-nav-menu .responsive-pill-nav-list,
+  .responsive-pill-nav-menu .responsive-pill-nav-list.is-open,
+  .network-subnav,
+  .company-section-tabs,
+  .business-tabs,
+  .earning-tabs,
+  .company-task-stages {
+    display: flex !important;
+    width: 100%;
+    max-width: 100%;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 6px;
+    margin-top: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-pill-nav-menu .responsive-pill-nav-list::-webkit-scrollbar,
+  .network-subnav::-webkit-scrollbar,
+  .company-section-tabs::-webkit-scrollbar,
+  .business-tabs::-webkit-scrollbar,
+  .earning-tabs::-webkit-scrollbar,
+  .company-task-stages::-webkit-scrollbar {
+    display: none;
+  }
+
+  .responsive-pill-nav-menu .responsive-pill-nav-list button,
+  .network-subnav button,
+  .company-section-tabs button,
+  .business-tabs button,
+  .earning-tabs button,
+  .company-task-stages button {
+    width: auto;
+    min-height: 44px;
+    flex: 0 0 auto;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-nav {
+    padding-inline: 10px !important;
+    gap: 6px;
+  }
+
+  .dashboard-nav > div {
+    min-width: 0;
+    gap: 6px !important;
+  }
+
+  .mobile-menu-toggle,
+  .dashboard-user-meta {
+    min-height: 40px;
+  }
+
+  .responsive-form-grid,
+  .work-form-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :where(.dashboard-main, .responsive-modal-card) :where(input, select, textarea) {
+    max-width: 100%;
+    font-size: 16px;
+  }
+
+  .responsive-modal-shell {
+    align-items: stretch !important;
+    padding: 0 !important;
+  }
+
+  .responsive-modal-card {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+
+  .responsive-modal-header {
+    flex-shrink: 0;
+  }
+
+  .responsive-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 480px) {
+  .student-dashboard .dashboard-user-meta > div:last-child,
+  .company-dashboard .dashboard-user-meta > div:last-child {
+    display: none;
+  }
+
+  .student-dashboard .dashboard-user-meta,
+  .company-dashboard .dashboard-user-meta {
+    width: 40px;
+    max-width: 40px;
+    padding: 5px !important;
+    justify-content: center;
+  }
+
+  .dashboard-activity-metrics > span {
+    min-height: 38px;
+    padding-inline: 5px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-nav .skillbridge-wordmark {
+    display: none;
+  }
+
+  .dashboard-sidebar {
+    width: 100vw !important;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(.responsive-card-grid-2, .responsive-card-grid-3, .responsive-card-grid-4) > :where(article, div),
+  .business-metric {
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+
+  :where(.responsive-card-grid-2, .responsive-card-grid-3, .responsive-card-grid-4) > :where(article, div):hover,
+  .business-metric:hover {
+    border-color: #c7d2fe;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-main > :first-child {
+    animation: workspace-enter 180ms ease-out both;
+  }
+}
+
+@keyframes workspace-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}

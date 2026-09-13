@@ -49,7 +49,7 @@ export default function PublicStudentProfile({ profile, onClose, action, loading
         <section><h3>Contact</h3>{profile.contactVisible ? profile.contactInfo?.length ? profile.contactInfo.map((c, i) => <p key={i}><strong>{c.label}</strong><br/>{c.value}</p>) : <p>No contact details published.</p> : <p>Contact details become available after both students connect.</p>}</section>
         <section><h3>Projects</h3><div className="public-profile-projects">{profile.projects?.map((p,i) => <article key={i}><h4>{p.name}</h4><p>{p.desc}</p>{safeExternalUrl(p.link) && <a href={safeExternalUrl(p.link)} target="_blank" rel="noreferrer">View project</a>}{safeExternalUrl(p.demoLink) && <a href={safeExternalUrl(p.demoLink)} target="_blank" rel="noreferrer">Open demo</a>}</article>)}</div>{!profile.projects?.length && <p>No projects published.</p>}</section>
         </>}
-      </div><footer><button onClick={onClose}>Close</button>{action}</footer>
+      </div><footer><button type="button" onClick={onClose}>Close</button>{action}</footer>
     </section>
     {photoOpen && <div className="public-profile-photo-overlay" role="dialog" aria-modal="true" aria-label={`${profile.name}'s profile photo`} onMouseDown={event => event.target === event.currentTarget && setPhotoOpen(false)}><img src={profile.avatar} alt={`${profile.name}'s profile`}/><button type="button" aria-label="Close photo viewer" title="Close photo viewer" onClick={() => setPhotoOpen(false)}><X size={20}/></button></div>}
   </div>

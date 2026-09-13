@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Activity, ArrowRight, BadgeCheck, BriefcaseBusiness, CalendarDays, ChevronLeft, ChevronRight, Flame, RefreshCw, UsersRound } from 'lucide-react'
+import { Activity, ArrowRight, BadgeCheck, BriefcaseBusiness, CalendarDays, ChevronLeft, ChevronRight, Flame, FolderPlus, Plus, RefreshCw, UsersRound, X } from 'lucide-react'
 import StudentNav from './StudentNav'
 import StudentSidebar from './StudentSidebar'
 import DashboardSkeleton from '../ui/DashboardSkeleton'
@@ -556,10 +557,64 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
   )
 }
 
+function ProjectEditorModal({ project, isEditing, onChange, onSave, onClose }) {
+  const dialogRef = useRef(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previousOverflow = document.body.style.overflow
+    const previouslyFocused = document.activeElement
+    const focusable = () => [...dialog.querySelectorAll('button:not(:disabled), input, textarea, a[href]')]
+    const onKeyDown = event => {
+      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (!items.length) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onKeyDown)
+    const focusFrame = window.requestAnimationFrame(() => dialog?.querySelector('input')?.focus())
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus?.()
+    }
+  }, [onClose])
+
+  return createPortal(<div className="responsive-modal-shell project-editor-overlay" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+    <form ref={dialogRef} className="responsive-modal-card project-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="project-editor-title" onSubmit={event => { event.preventDefault(); onSave() }}>
+      <header className="responsive-modal-header project-editor-header">
+        <div className="project-editor-title"><span><FolderPlus size={20}/></span><div><small>PROFILE PROJECT</small><h2 id="project-editor-title">{isEditing ? 'Edit project' : 'Add a project'}</h2></div></div>
+        <button type="button" className="project-editor-close" onClick={onClose} aria-label="Close project editor"><X size={19}/></button>
+      </header>
+      <div className="responsive-modal-body project-editor-body">
+        <label><span>Project name *</span><input value={project.name} onChange={event => onChange('name', event.target.value)} maxLength={160} placeholder="Project name" required /></label>
+        <label><span>Description</span><textarea value={project.desc} onChange={event => onChange('desc', event.target.value)} maxLength={1200} rows={5} placeholder="Describe the problem, your contribution, and the outcome." /></label>
+        <div className="project-editor-link-grid">
+          <label><span>Project link</span><input type="url" value={project.link} onChange={event => onChange('link', event.target.value)} placeholder="https://github.com/..." /></label>
+          <label><span>Live demo</span><input type="url" value={project.demoLink || ''} onChange={event => onChange('demoLink', event.target.value)} placeholder="https://..." /></label>
+        </div>
+      </div>
+      <footer className="project-editor-footer"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button type="submit" className="btn-primary">{isEditing ? 'Save changes' : 'Add project'}</button></footer>
+    </form>
+  </div>, document.body)
+}
+
 function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, saveState, contactMethod, verificationMethod }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [githubInput, setGithubInput] = useState({})
   const [contactInput, setContactInput] = useState({ label: 'Phone', value: '' })
+  const [projectEditor, setProjectEditor] = useState(null)
   const videoRef = useRef(null)
   const hasStarterVideo = isBundledStudentIntroVideoUrl(videoUrl)
 
@@ -576,11 +631,8 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
     }
   }
 
-  const updateProject = (i, field, val) =>
-    setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: val } : p))
-
-  const saveProject = (i) => {
-    const project = projects[i]
+  const saveProject = () => {
+    const project = projectEditor?.project
     if (!project?.name.trim()) {
       toast.warning('Add a project name before saving.', { title: 'Project Name Required' })
       return
@@ -589,11 +641,15 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
       toast.warning('Project links must use http:// or https://.', { title: 'Invalid Project Link' })
       return
     }
-    setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, link: safeExternalUrl(p.link), demoLink: safeExternalUrl(p.demoLink), saved: true } : p))
+    const savedProject = { ...project, link: safeExternalUrl(project.link), demoLink: safeExternalUrl(project.demoLink), saved: true }
+    setProjects(prev => projectEditor.index === null ? [...prev, savedProject] : prev.map((item, index) => index === projectEditor.index ? savedProject : item))
+    setProjectEditor(null)
   }
 
-  const editProject = (i) =>
-    setProjects(prev => prev.map((p, idx) => idx === i ? { ...p, saved: false } : p))
+  const editProject = index => setProjectEditor({ index, project: { ...projects[index] } })
+  const addProject = () => setProjectEditor({ index: null, project: { name: '', desc: '', link: '', demoLink: '', saved: false } })
+  const updateProjectDraft = (field, value) => setProjectEditor(current => ({ ...current, project: { ...current.project, [field]: value } }))
+  const closeProjectEditor = useCallback(() => setProjectEditor(null), [])
 
   const addProfileLink = () => {
     const url = safeExternalUrl(githubInput.url)
@@ -796,55 +852,30 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
       </div>
 
       {/* 6. Projects */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div className="student-profile-project-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={sectionTitle}>Projects</div>
-        <button onClick={() => setProjects(p => [...p, { name: '', desc: '', link: '', demoLink: '', saved: false }])}
-          className="btn-primary" style={{ padding: '6px 16px', fontSize: 13 }}>+ Add Project</button>
+        <button type="button" onClick={addProject}
+          className="btn-primary" style={{ padding: '7px 14px', fontSize: 13 }}><Plus size={15}/>Add Project</button>
       </div>
       <div className="responsive-projects-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-        {projects.map((proj, i) => (
+        {projects.filter(proj => proj.saved).map((proj) => {
+          const i = projects.indexOf(proj)
+          return (
           <div key={i} style={{ background: 'var(--white)', borderRadius: 14, padding: '18px 20px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 200 }}>
-            {proj.saved ? (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)' }}>{proj.name || 'Untitled'}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>{proj.desc || 'No description'}</div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  {getProjectLink(proj) && <a href={getProjectLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>View project</a>}
-                  {getProjectDemoLink(proj) && <a href={getProjectDemoLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>Open demo</a>}
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => editProject(i)} style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
-                  <button onClick={() => setProjects(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: '1px solid #FCA5A5', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: '#EF4444', cursor: 'pointer', fontWeight: 600 }}>×</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Project {i + 1}</div>
-                <input placeholder="Project name" value={proj.name} onChange={e => updateProject(i, 'name', e.target.value)}
-                  style={{ padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit', width: '100%' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-                <textarea placeholder="Short description..." value={proj.desc} onChange={e => updateProject(i, 'desc', e.target.value)}
-                  rows={3} style={{ padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'none', width: '100%' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-                <input placeholder="Project link (optional)" value={proj.link} onChange={e => updateProject(i, 'link', e.target.value)}
-                  style={{ padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit', width: '100%' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-                <input placeholder="Demo link (optional)" value={proj.demoLink || ''} onChange={e => updateProject(i, 'demoLink', e.target.value)}
-                  style={{ padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit', width: '100%' }}
-                  onFocus={e => e.target.style.borderColor = '#10B981'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => saveProject(i)} className="btn-primary" style={{ flex: 1, padding: '7px', fontSize: 13, justifyContent: 'center' }}>Save</button>
-                  <button onClick={() => setProjects(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: '1px solid #FCA5A5', borderRadius: 7, padding: '7px 10px', fontSize: 12, color: '#EF4444', cursor: 'pointer', fontWeight: 600 }}>×</button>
-                </div>
-              </>
-            )}
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)' }}>{proj.name || 'Untitled'}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', flex: 1 }}>{proj.desc || 'No description'}</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {getProjectLink(proj) && <a href={getProjectLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>View project</a>}
+              {getProjectDemoLink(proj) && <a href={getProjectDemoLink(proj)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#10B981', fontWeight: 700 }}>Open demo</a>}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" onClick={() => editProject(i)} style={{ flex: 1, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+              <button type="button" aria-label={`Remove ${proj.name}`} onClick={() => setProjects(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: '1px solid #FCA5A5', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: '#EF4444', cursor: 'pointer', fontWeight: 600 }}><X size={14}/></button>
+            </div>
           </div>
-        ))}
+        )})}
       </div>
+      {projectEditor && <ProjectEditorModal project={projectEditor.project} isEditing={projectEditor.index !== null} onChange={updateProjectDraft} onSave={saveProject} onClose={closeProjectEditor} />}
     </div>
   )
 }
@@ -1049,9 +1080,22 @@ export default function StudentDashboard() {
   const selectSection = section => {
     if (!NAV_ITEMS.some(item => item.key === section)) return
     setActive(section)
+    setSidebarOpen(false)
     window.sessionStorage.setItem(STUDENT_ACTIVE_SECTION_KEY, section)
     navigate(`/student/dashboard?section=${encodeURIComponent(section)}`)
   }
+
+  useEffect(() => {
+    if (!sidebarOpen) return undefined
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = event => event.key === 'Escape' && setSidebarOpen(false)
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [sidebarOpen])
 
   const prefetchSection = useCallback(section => {
     SECTION_LOADERS[section]?.()

@@ -1,3 +1,5 @@
+import { X } from 'lucide-react'
+
 export default function StudentSidebar({
   navItems,
   active,
@@ -56,8 +58,9 @@ export default function StudentSidebar({
       padding: '18px 12px 14px', display: 'flex', flexDirection: 'column', gap: 5,
       position: 'sticky', top: 52, height: 'calc(100vh - 52px)', overflowY: 'auto',
     }}>
-      <div style={{ padding: '2px 14px 12px', color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-        Student workspace
+      <div className="student-sidebar-heading" style={{ padding: '2px 14px 12px', color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+        <span>Student workspace</span>
+        <button type="button" className="mobile-only student-sidebar-close" onClick={onClose} aria-label="Close student workspace navigation"><X size={20} /></button>
       </div>
       {primaryNavItems.map(renderNavItem)}
       <div style={{ flex: 1 }} />
