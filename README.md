@@ -712,6 +712,8 @@ erDiagram
 
 ## 🖼️ Product Screens
 
+<!-- markdownlint-disable MD033 -->
+
 ### 🌿 Landing page
 
 <img src="docs/assets/screenshots/landing-page.png" width="920" alt="SkillBridge landing page full-length screenshot" />
@@ -741,6 +743,8 @@ The primary authenticated workspaces are shown below at a consistent desktop vie
 | Review queue |
 | --- |
 | <img src="docs/assets/screenshots/reviewer-dashboard.png" width="460" alt="SkillBridge reviewer dashboard" /> |
+
+<!-- markdownlint-enable MD033 -->
 
 ## 🧰 Tech Stack
 
