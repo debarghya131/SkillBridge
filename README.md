@@ -459,8 +459,13 @@ Screenshots from the main SkillBridge student, company, and platform flows.
 | --- | --- |
 | Landing Page | <img src="client/src/assets/screenshots/landing-page.png" width="420" alt="SkillBridge landing page screenshot" /> |
 | Student — GIG Center | <img src="client/src/assets/screenshots/student-dashboard.png" width="420" alt="SkillBridge student GIG Center screenshot" /> |
+| Student — Browse GIGs | <img src="client/src/assets/screenshots/student-gig-center-browse-gigs.png" width="420" alt="SkillBridge student Browse GIGs screenshot" /> |
+| Student — TrustScore | <img src="client/src/assets/screenshots/student-trustscore.png" width="420" alt="SkillBridge student TrustScore screenshot" /> |
+| Student — Profile Preview | <img src="client/src/assets/screenshots/student-profile-preview.png" width="420" alt="SkillBridge student profile preview screenshot" /> |
 | Skill Hub — My Skills | <img src="client/src/assets/screenshots/skill-hub-my-skills.png" width="420" alt="SkillBridge Skill Hub My Skills screenshot" /> |
 | Skill Hub — Upgrade Your Skill | <img src="client/src/assets/screenshots/skill-hub-upgrade-skill.png" width="420" alt="SkillBridge Skill Hub Upgrade Your Skill screenshot" /> |
+| Skill Hub — Upgrade Task | <img src="client/src/assets/screenshots/skill-hub-upgrade-task.png" width="420" alt="SkillBridge Skill Hub upgrade task screenshot" /> |
+| Skill Hub — Anti-Cheating Warning | <img src="client/src/assets/screenshots/skill-hub-anti-cheating-warning.png" width="420" alt="SkillBridge Skill Hub anti-cheating warning screenshot" /> |
 | Skill Hub — Verify Your Skill | <img src="client/src/assets/screenshots/skill-hub-verify-skill.png" width="420" alt="SkillBridge Skill Hub Verify Your Skill screenshot" /> |
 | Skill Hub — Skill Gap Report | <img src="client/src/assets/screenshots/skill-hub-skill-gap-report.png" width="420" alt="SkillBridge Skill Hub Skill Gap Report screenshot" /> |
 | Skill Hub — Daily Task | <img src="client/src/assets/screenshots/skill-hub-daily-task.png" width="420" alt="SkillBridge Skill Hub Daily Task screenshot" /> |
