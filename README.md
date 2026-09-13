@@ -640,7 +640,7 @@ through `CORS_ORIGIN=https://skillbridge.debarghya.org`.
 
 ## 👤 Author Details
 
-**Debarghya Bandyopadhyay**
+### Debarghya Bandyopadhyay
 
 - Computer Science engineering student from kolkata
 
