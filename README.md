@@ -901,13 +901,11 @@ GitHub Actions runs backend syntax checks and tests plus the production client b
 
 ## 👤 Author Details
 
-<p align="left">
-  <img src="./docs/author-profile.png" width="140" alt="Debarghya Bandyopadhyay" />
-</p>
+<!-- markdownlint-disable MD033 -->
+<img src="docs/author-profile.png" width="100" alt="Debarghya Bandyopadhyay" />
+<!-- markdownlint-enable MD033 -->
 
-**Debarghya Bandyopadhyay**
-
-- Computer Science engineering student from Kolkata
+### Debarghya Bandyopadhyay
 
 ### 🤝 Be My Friend
 
