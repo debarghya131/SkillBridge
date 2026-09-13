@@ -11,6 +11,7 @@ const {
 } = require('../config/companyDefaults')
 const { buildDefaultCompanyTaskLibraryState } = require('../config/companyTaskDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
+const { hashVerificationReference } = require('../utils/verification')
 const {
   appendSession,
   buildAuthError,
@@ -23,7 +24,7 @@ const { clone, mergeTemplateState, reduceTemplateState } = require('../utils/tem
 const { buildWorkspaceState } = require('../utils/companyWorkspace')
 const { synchronizeCompanyGigMetrics } = require('../utils/companyGigMetrics')
 const { validateAssignment } = require('../utils/taskValidation')
-const { isVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
+const { isDiscoverableVerifiedSkill, publishedSkillNames, activeStreak } = require('../utils/skillPolicy')
 
 function normalizeEmail(email) {
   return email?.trim().toLowerCase() || ''
@@ -43,6 +44,8 @@ function normalizeProfileText(value, fallback = '', maxLength = 500) {
 
 const MAX_BUSINESS_LOGO_BYTES = 600 * 1024
 const MAX_BUSINESS_LOGO_DATA_URL_LENGTH = 850000
+const MAX_BUSINESS_VIDEO_BYTES = 5 * 1024 * 1024
+const MAX_BUSINESS_VIDEO_DATA_URL_LENGTH = 7000000
 
 function normalizeBusinessLogo(value) {
   if (value === null || value === undefined || value === '') return ''
@@ -63,11 +66,26 @@ function normalizeBusinessLogo(value) {
   return bytes.length <= MAX_BUSINESS_LOGO_BYTES && (isPng || isJpeg || isWebp) ? logo : ''
 }
 
+function normalizeBusinessIntroVideo(value) {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'string') return null
+  const video = value.trim()
+  if (video.length > 0 && video.length <= 2048 && /^https?:\/\/[^\s]+$/i.test(video)) return video
+  const match = video.match(/^data:video\/(mp4|webm);base64,([A-Za-z0-9+/]+={0,2})$/i)
+  if (!match || video.length > MAX_BUSINESS_VIDEO_DATA_URL_LENGTH || match[2].length % 4 !== 0) return null
+  const bytes = Buffer.from(match[2], 'base64')
+  const type = match[1].toLowerCase()
+  const isMp4 = type === 'mp4' && bytes.subarray(4, 8).toString() === 'ftyp'
+  const isWebm = type === 'webm' && bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+  return bytes.length <= MAX_BUSINESS_VIDEO_BYTES && (isMp4 || isWebm) ? video : null
+}
+
 function sanitizeCompanyProfile(profile, fallback) {
   return {
     businessName: normalizeProfileText(profile?.businessName, fallback.businessName, 120),
     location: normalizeProfileText(profile?.location, fallback.location, 120),
     logo: normalizeBusinessLogo(profile?.logo),
+    introVideoUrl: normalizeBusinessIntroVideo(profile?.introVideoUrl),
     industry: normalizeProfileText(profile?.industry, '', 120),
     website: normalizeProfileText(profile?.website, '', 240),
     teamSize: normalizeProfileText(profile?.teamSize, '', 80),
@@ -85,6 +103,9 @@ function sanitizeCompanyProfile(profile, fallback) {
 function validateCompanyProfile(profile, fallback) {
   if (Object.hasOwn(profile || {}, 'logo') && profile.logo && !normalizeBusinessLogo(profile.logo)) {
     throw buildAuthError('Business logo must be a PNG, JPG, or WEBP image up to 600 KB, or a valid http(s) URL')
+  }
+  if (Object.hasOwn(profile || {}, 'introVideoUrl') && profile.introVideoUrl && !normalizeBusinessIntroVideo(profile.introVideoUrl)) {
+    throw buildAuthError('Business intro video must be an MP4 or WEBM video up to 5 MB, or a valid http(s) URL')
   }
   const normalizedProfile = sanitizeCompanyProfile(profile, fallback)
   const phoneDigits = normalizedProfile.contactPhone.replace(/\D/g, '')
@@ -510,15 +531,16 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
     Beginner: [],
     Intermediate: [],
     Pro: [],
+    'Pro Mastery': [],
   }
 
   if (Array.isArray(skillHubSkills)) {
     skillHubSkills.forEach(skill => {
-      if (!skill || typeof skill.name !== 'string' || !skill.name.trim() || !isVerifiedSkill(skill)) {
+      if (!skill || typeof skill.name !== 'string' || !skill.name.trim() || !isDiscoverableVerifiedSkill(skill)) {
         return
       }
 
-      const stage = ['Beginner', 'Intermediate', 'Pro'].includes(skill.stage) ? skill.stage : 'Intermediate'
+      const stage = ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'].includes(skill.stage) ? skill.stage : 'Intermediate'
       if (!groupedSkills[stage].includes(skill.name)) {
         groupedSkills[stage].push(skill.name)
       }
@@ -526,7 +548,7 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
   }
 
   fallbackSkills.forEach(skill => {
-    if (!groupedSkills.Intermediate.includes(skill) && !groupedSkills.Beginner.includes(skill) && !groupedSkills.Pro.includes(skill)) {
+    if (!groupedSkills.Intermediate.includes(skill) && !groupedSkills.Beginner.includes(skill) && !groupedSkills.Pro.includes(skill) && !groupedSkills['Pro Mastery'].includes(skill)) {
       groupedSkills.Beginner.push(skill)
     }
   })
@@ -535,12 +557,10 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
 }
 
 function sanitizeTalentProfile(student) {
-  const profileSkills = Array.isArray(student.skills)
-    ? student.skills.filter(skill => typeof skill === 'string' && skill.trim()).map(skill => skill.trim())
-    : []
+  const profileSkills = publishedSkillNames(student.skills, student.skillHubSkills)
   const verifiedSkillHubSkills = Array.isArray(student.skillHubSkills)
     ? student.skillHubSkills
-      .filter(skill => skill && typeof skill.name === 'string' && skill.name.trim() && isVerifiedSkill(skill))
+      .filter(skill => skill && typeof skill.name === 'string' && skill.name.trim() && isDiscoverableVerifiedSkill(skill))
       .map(skill => skill.name.trim())
     : []
   const skills = [...new Set([
@@ -566,8 +586,8 @@ function sanitizeTalentProfile(student) {
   )
   const skillDetails = skills.map(name => {
     const skillHubEntry = skillHubByName.get(name.toLowerCase())
-    const verified = Boolean(skillHubEntry && isVerifiedSkill(skillHubEntry))
-    const level = verified && ['Beginner', 'Intermediate', 'Pro'].includes(skillHubEntry.stage)
+    const verified = Boolean(skillHubEntry && isDiscoverableVerifiedSkill(skillHubEntry))
+    const level = verified && ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'].includes(skillHubEntry.stage)
       ? skillHubEntry.stage
       : null
 
@@ -595,7 +615,7 @@ function sanitizeTalentProfile(student) {
     skillsByLevel,
     profileSkillsByLevel: buildSkillsByLevel(student.skillHubSkills, profileSkills),
     streak: Math.max(0, ...skillDetails.map(skill => skill.streak)),
-    score: Math.max(0, Math.min(1000, Number(student.trustScore) || 0)),
+    score: require('./trustScoreController').calculateTrustScore(student),
     projects: savedProjects.length,
     github: Array.isArray(student.githubLink)
       ? (student.githubLink.find(link => link?.saved !== false && typeof link.url === 'string' && link.url.trim())?.url || '')
@@ -616,7 +636,7 @@ function normalizeTalentSearchFilters(filters = {}) {
   const location = typeof filters.location === 'string' ? filters.location.trim().slice(0, 80) : ''
   const skill = typeof filters.skill === 'string' ? filters.skill.trim().slice(0, 80) : ''
   const query = typeof filters.query === 'string' ? filters.query.trim().slice(0, 80) : ''
-  const level = ['Beginner', 'Intermediate', 'Pro'].includes(filters.level) ? filters.level : 'All'
+  const level = ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'].includes(filters.level) ? filters.level : 'All'
 
   return {
     minTrustScore: Number.isFinite(minTrustScore) ? Math.max(0, Math.min(1000, minTrustScore)) : 0,
@@ -787,8 +807,10 @@ async function signUpCompany(payload) {
     passwordHash: hashPassword(payload.password),
     contactMethod,
     verificationMethod,
-    gstin: verificationMethod === 'gstin' ? payload.gstin.trim() : '',
-    businessDoc: verificationMethod === 'udyam' ? payload.businessDoc.trim() : '',
+    verificationReferenceHash: hashVerificationReference(
+      verificationMethod === 'gstin' ? payload.gstin : payload.businessDoc,
+      'company-registration',
+    ),
     location,
     businessProfile: buildDefaultCompanyProfile({ businessName, location }),
   })
@@ -810,12 +832,15 @@ async function signInCompany(payload) {
 
   const email = normalizeEmail(contact)
   const phone = normalizePhone(contact)
-  const company = await Company.findOne({
+  const query = Company.findOne({
     $or: [
       { email },
       { phone },
     ],
   })
+  const company = typeof query?.select === 'function'
+    ? await query.select('+passwordHash +sessions')
+    : await query
 
   if (!company || !verifyPassword(payload.password, company.passwordHash)) {
     throw buildAuthError('Invalid credentials', 401)
@@ -964,7 +989,7 @@ async function getCompanyGigApplicants(token, gigId) {
       { 'gigState.opportunities': { $elemMatch: inviteMatch } },
     ],
   })
-    .select('name avatar location skills skillHubSkills trustScore projects githubLink contactInfo videoUrl preferredLanguage gigState').lean()
+    .select('name avatar location skills skillHubSkills trustScore trustScoreState projects githubLink contactInfo videoUrl preferredLanguage gigState').lean()
 
   return students.map(student => {
     const profile = sanitizeTalentProfile(student)
@@ -1095,9 +1120,7 @@ async function getCompanyTalentProfiles(token, filters = {}) {
   const normalizedFilters = normalizeTalentSearchFilters(filters)
   const query = {}
 
-  if (normalizedFilters.minTrustScore > 0) {
-    query.trustScore = { $gte: normalizedFilters.minTrustScore }
-  }
+  // Apply score filtering after policy calculation; stored scores may use an older policy.
 
   if (normalizedFilters.location) {
     query.location = new RegExp(`^${escapeRegExp(normalizedFilters.location)}(?:,|$)`, 'i')
@@ -1119,22 +1142,26 @@ async function getCompanyTalentProfiles(token, filters = {}) {
     location: company.location,
   })
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
-  const [availableLocations, profileSkills, skillHubSkills] = await Promise.all([
-    Student.distinct('location'),
-    Student.distinct('skills'),
-    Student.distinct('skillHubSkills.name'),
-  ])
+  const availableLocations = await Student.distinct('location')
   const requiredSkills = parseRequiredSkills(businessProfile.requiredSkills)
   const start = (normalizedFilters.page - 1) * normalizedFilters.pageSize
   const end = start + normalizedFilters.pageSize
   const topCandidates = []
+  const availableSkillNames = new Set()
   let total = 0
 
   // Stream candidates in TrustScore order. This preserves accurate totals and pages without a
   // hidden result cap or loading the entire talent directory into application memory.
-  const cursor = Student.find(query).sort({ trustScore: -1, createdAt: -1 }).lean().cursor()
+  // Talent cards do not need private contact details, profile video, or full project payloads.
+  // Avoiding those fields prevents a single uploaded video from being read for every candidate.
+  const cursor = Student.find(query)
+    .select('_id name avatar location skills skillHubSkills trustScore trustScoreState.events.key trustScoreState.events.type trustScoreState.events.referenceId trustScoreState.events.occurredAt projects.name projects.desc projects.saved createdAt')
+    .sort({ trustScore: -1, createdAt: -1 })
+    .lean()
+    .cursor()
   for await (const student of cursor) {
     const profile = sanitizeTalentProfile(student)
+    profile.skills.forEach(skill => availableSkillNames.add(skill))
     if (!matchesTalentProfile(profile, normalizedFilters)) continue
 
     const candidate = enrichTalentProfile(profile, requiredSkills)
@@ -1152,7 +1179,7 @@ async function getCompanyTalentProfiles(token, filters = {}) {
     page: normalizedFilters.page,
     pageSize: normalizedFilters.pageSize,
     availableLocations: [...new Set(availableLocations.filter(location => typeof location === 'string' && location.trim()))].sort(),
-    availableSkills: [...new Set([...profileSkills, ...skillHubSkills].filter(skill => typeof skill === 'string' && skill.trim()))].sort(),
+    availableSkills: [...availableSkillNames].sort(),
   }
 }
 
@@ -1180,6 +1207,7 @@ async function getPublicCompanyProfile(companyName) {
     businessName: company.businessName,
     location: profile.location,
     logo: profile.logo,
+    introVideoUrl: profile.introVideoUrl,
     industry: profile.industry,
     website: profile.website,
     teamSize: profile.teamSize,

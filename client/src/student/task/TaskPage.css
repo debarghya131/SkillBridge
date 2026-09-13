@@ -1,0 +1,81 @@
+.assessment-page { position: relative; max-width: 1160px; margin: 0 auto; padding: 28px 24px 48px; min-width: 0; }
+.assessment-page .company-section-tabs { display: flex; align-items: stretch; gap: 0; border-bottom: 1px solid var(--border); }
+.assessment-page .company-section-tabs button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); white-space: nowrap; }
+.assessment-page .company-section-tabs button[aria-pressed="true"] { border-bottom-color: var(--accent); color: var(--dark); font-weight: 700; }
+.assessment-back { display: inline-flex; gap: 8px; align-items: center; border: 0; background: transparent; color: var(--muted); padding: 8px 0; margin-bottom: 16px; font-weight: 600; }
+.skill-assessment { display: grid; gap: 18px; }
+.assessment-heading, .assessment-history header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.assessment-heading { padding:22px 24px; border:1px solid var(--border); border-left:4px solid var(--primary); border-radius:8px; background:linear-gradient(90deg, var(--primary-light), #fff 58%); }
+.assessment-eyebrow { display:block; margin-bottom:7px; color:var(--primary); font-size:11px; font-weight:800; text-transform:uppercase; }
+.assessment-heading h1 { font-size:25px; margin:0; overflow-wrap:anywhere; }
+.assessment-heading p { color:var(--muted); margin:6px 0 0; }
+.assessment-heading .btn-secondary { display:grid; place-items:center; width:46px; min-width:46px; height:46px; padding:0; background:#fff; }
+.assessment-layout { display: grid; grid-template-columns:minmax(300px, .9fr) minmax(0, 1.4fr); gap:18px; align-items:start; }
+.assessment-brief { padding:20px; border:1px solid var(--border); border-radius:8px; background:var(--white); box-shadow:0 8px 24px rgba(15, 23, 42, .05); }
+.assessment-brief h2 { display: flex; gap: 8px; align-items: center; font-size: 16px; }
+.assessment-brief ul { padding-left: 20px; line-height: 1.8; }
+.assessment-form { min-width:0; }
+.assessment-form fieldset { border:1px solid var(--border); border-radius:8px; padding:20px; margin:0; min-width:0; display:grid; gap:14px; background:#fff; box-shadow:0 8px 24px rgba(15, 23, 42, .05); }
+.assessment-form label { display: grid; gap: 8px; font-size: 13px; font-weight: 600; }
+.assessment-form input, .assessment-form textarea { width: 100%; min-width: 0; padding: 12px; font: inherit; background: var(--white); border: 1px solid var(--border); border-radius: 6px; }
+.assessment-form textarea { resize: vertical; }
+.assessment-form button { display: inline-flex; align-items: center; gap: 8px; justify-self: start; }
+.assessment-awaiting { display:flex; align-items:flex-start; gap:14px; min-height:132px; padding:22px; border:1px solid #bfdbfe; border-left:4px solid #3b82f6; border-radius:8px; background:#eff6ff; color:#1e3a5f; }
+.assessment-awaiting svg { flex:0 0 auto; margin-top:1px; color:#2563eb; }
+.assessment-awaiting strong { display:block; font-size:16px; }
+.assessment-awaiting p { margin:7px 0 0; color:#526987; line-height:1.55; }
+.assessment-history { display: grid; gap: 16px; }
+.assessment-history > p { margin:0; padding:24px; border:1px dashed var(--border); border-radius:8px; color:var(--muted); text-align:center; }
+.assessment-history article { position:relative; padding:20px 22px; border:1px solid var(--border); border-left:4px solid #94a3b8; border-radius:8px; background:#fff; box-shadow:0 8px 24px rgba(15, 23, 42, .05); overflow-wrap:anywhere; }
+.assessment-history article.status-pending { border-left-color:#3b82f6; }
+.assessment-history article.status-approved { border-left-color:#10b981; }
+.assessment-history article.status-needs_revision { border-left-color:#f59e0b; }
+.assessment-history article.status-rejected { border-left-color:#ef4444; }
+.assessment-history header > div { display:grid; gap:6px; }
+.assessment-history header small { color:var(--muted); }
+.assessment-status { display:inline-flex; width:max-content; padding:5px 9px; border-radius:999px; background:#eef2f7; color:#475569; font-size:12px; font-weight:700; }
+.assessment-status.status-pending { background:#dbeafe; color:#1d4ed8; }
+.assessment-status.status-approved { background:#d1fae5; color:#047857; }
+.assessment-status.status-needs_revision { background:#fef3c7; color:#a16207; }
+.assessment-status.status-rejected { background:#fee2e2; color:#b91c1c; }
+.assessment-history p { white-space: pre-wrap; }
+.assessment-history time { color: var(--muted); font-size: 12px; }
+.assessment-history details { margin:12px 0 0; padding:12px 0 0; border-top:1px solid var(--border); }
+.assessment-history summary { cursor:pointer; font-weight:650; }
+.assessment-history details p { margin:10px 0 0; color:#334155; line-height:1.6; }
+.assessment-evidence-link { display:inline-flex; align-items:center; gap:7px; margin-top:16px; color:var(--primary); font-size:13px; font-weight:700; text-decoration:none; }
+.assessment-evidence-link:hover { text-decoration:underline; }
+@media (max-width: 700px) { .assessment-page { padding: 16px; } .assessment-layout { grid-template-columns: minmax(0, 1fr); } .assessment-history header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 600px) {
+  .assessment-page { padding:12px; }
+  .assessment-back { min-height:42px; margin-bottom:10px; }
+  .assessment-heading { display:flex; padding:16px; align-items:center; }
+  .assessment-heading h1 { font-size:21px; }
+  .assessment-heading .btn-secondary { position:static; display:grid; place-items:center; width:42px; min-width:42px; height:42px; min-height:42px; padding:0; margin:0; box-sizing:border-box; }
+  .assessment-page .company-section-tabs { overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; }
+  .assessment-page .company-section-tabs::-webkit-scrollbar { display:none; }
+  .assessment-page .company-section-tabs button { flex:0 0 auto; min-height:42px; }
+  .assessment-brief { padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--white); }
+  .assessment-brief ul { padding-left:18px; }
+  .assessment-form button { width:100%; min-height:44px; justify-content:center; }
+  .assessment-history article { padding:14px; }
+  .company-task-page { min-width:0; }
+  .company-task-page > .btn-secondary:first-child { display:inline-flex; align-items:center; justify-content:center; width:42px !important; min-width:42px !important; height:42px; min-height:42px; padding:0; margin-bottom:8px; box-sizing:border-box; overflow:visible; }
+  .company-task-header { padding:16px !important; border-radius:8px !important; gap:12px !important; align-items:flex-start !important; }
+  .company-task-header > div:nth-child(2) { flex-basis:calc(100% - 62px); }
+  .company-task-header > div:nth-child(2) > div:first-child { font-size:15px !important; line-height:1.35; }
+  .company-task-header > div:nth-child(2) > div:last-child { line-height:1.5; overflow-wrap:anywhere; }
+  .company-task-header > div:last-child { width:100%; text-align:center; white-space:normal !important; min-height:38px; display:flex; align-items:center; justify-content:center; }
+  .company-task-stages { width:100% !important; overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; margin-bottom:14px !important; }
+  .company-task-stages::-webkit-scrollbar { display:none; }
+  .company-task-stages button { flex:0 0 auto; min-height:42px; padding:8px 13px !important; }
+  .company-task-page .company-task-card,
+  .company-task-page .company-task-submission-panel,
+  .company-task-page .company-task-feedback-card { padding:14px !important; border-radius:8px !important; }
+  .company-task-row { flex-direction:column; gap:8px !important; }
+  .company-task-points { align-self:flex-start; }
+  .company-task-submission-panel input,
+  .company-task-submission-panel textarea { min-height:42px; }
+  .company-task-submission-panel .btn-primary { width:100%; min-height:44px; align-self:stretch !important; justify-content:center; }
+  .company-task-page [style*="padding: '32px 24px'"] { padding:22px 14px !important; }
+}

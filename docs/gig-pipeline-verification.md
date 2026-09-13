@@ -5,11 +5,13 @@
 1. A company posts a GIG and sends an interview assignment to an applicant.
 2. The student accepts the invitation and submits the assigned assessment.
 3. The company reviews the assessment, then selects or rejects the student (or requests revision).
-4. GIG work starts. Interview evidence and its review are archived separately from the live deliverable.
+4. The company starts GIG work with a required work brief. Interview evidence and its review are archived separately from the live deliverable.
 5. The student delivers the work. Delivery revisions return to delivery review, not interview review.
 6. Company approval creates an entry awaiting external payment.
 7. The company records an already-made external transfer, including amount, method, reference and date.
 8. The submission becomes completed. Both company Payment and student Earning read that same payment record.
+
+New GIG discovery, company talent search, application snapshots, and new interview-task snapshots use only skills published by the student. An archived skill is excluded from those matches without deleting its reviewed evidence or altering an already accepted or completed GIG.
 
 The platform does not hold money, release funds, or execute UPI withdrawals. Records are company-reported, not independently verified bank settlements. Legacy wallet balances are ignored, not converted into money or deleted. Old earning-write and withdrawal endpoints authenticate then return HTTP 410.
 
@@ -23,6 +25,7 @@ The platform does not hold money, release funds, or execute UPI withdrawals. Rec
 - Optimistic submission concurrency conflicts return HTTP 409.
 - CSV row delimiters, quoted values and formula escaping.
 - Client/server payment-date consistency at India/UTC day boundaries.
+- Archived skills are excluded from new GIG match percentages, company talent cards, application snapshots, and new assignment profiles while existing GIG records remain intact.
 - Client lint and production build; backend syntax checks.
 - Existing local backend readiness endpoint reported database connected.
 
@@ -33,16 +36,17 @@ The platform does not hold money, release funds, or execute UPI withdrawals. Rec
 - Exercise two simultaneous reviews/submissions/payment requests in staging. Optimistic version checks protect individual submissions, but company activity updates and student-related side effects are separate writes, not a database transaction.
 - Perform authenticated browser checks on desktop and mobile. Browser verification was attempted but the downloaded headless browser was incomplete and could not launch.
 - Verify task-specific authoring and submission expectations with representative code, MCQ, written, mixed and live-project assignments. Final GIG delivery accepts a link or response independently of the interview question format; it is not an automated assessment/grading engine.
-- Verify TrustScore completion awards separately. The old review-controller completion hook does not run when payment records complete a submission; do not advertise payment-triggered TrustScore awards until this is reconciled.
+- Verify the payment completion credit in staging: one approved external payment creates one idempotent `gig_completed` TrustScore event (+150 base GIG credit) for its submission.
 - Audit production dependencies and configure HTTPS, allowed origins, secrets, backups, monitoring and database access before deployment. A successful build and readiness response are not a security/deployment certification.
 
 ## Manual acceptance checklist
 
 - Send a saved task without navigating away from GIG Management.
 - Accept it as the intended student; refresh and reopen the task using its opportunity identity.
-- Submit, review, select, start work, deliver, request a delivery revision, resubmit and approve.
+- Submit, review, select, add the required work brief, start work, deliver, request a delivery revision, resubmit and approve.
 - Check that Earning shows payment pending without a wallet or withdrawal button.
 - Record an external payment once; retry the identical request and verify no duplicate.
 - Check both ledgers and Completed GIGs; reopen the work to inspect feedback/payment reference.
+- Archive an active skill and verify it disappears from new talent/GIG matching without changing an existing accepted GIG; restore it and verify it is eligible again.
 - Close the public GIG and verify completed work is still accessible.
 - Simulate a temporary API failure: the student should see Retry rather than losing their session.

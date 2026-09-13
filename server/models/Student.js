@@ -57,7 +57,7 @@ const opportunitySchema = new mongoose.Schema({
   sentOn: { type: String, default: '' },
   message: { type: String, default: '' },
   taskTitle: { type: String, default: '' },
-  taskType: { type: String, enum: ['live_project', 'code', 'mcq', 'written', 'mixed'], default: 'mixed' },
+  taskType: { type: String, enum: ['live_project', 'code', 'mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'], default: 'mixed' },
   taskDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
   taskInstructions: { type: String, default: '' },
   taskDeadline: { type: String, default: '' },
@@ -83,9 +83,11 @@ const gigStateSchema = new mongoose.Schema({
 const skillHubSkillSchema = new mongoose.Schema({
   name: { type: String, default: '' },
   level: { type: Number, default: 0 },
-  stage: { type: String, default: 'Beginner' },
+  stage: { type: String, enum: ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'], default: 'Beginner' },
   category: { type: String, default: 'Frontend' },
   verified: { type: Boolean, default: false },
+  archived: { type: Boolean, default: false },
+  archivedAt: { type: String, default: '' },
   renewalStatus: { type: String, default: 'unverified' },
   renewalDue: { type: String, default: '-' },
   verifiedAt: { type: String, default: '' },
@@ -105,13 +107,16 @@ const studentSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, unique: true, sparse: true, lowercase: true, trim: true, default: undefined },
   phone: { type: String, unique: true, sparse: true, trim: true, default: undefined },
-  passwordHash: { type: String, required: true },
+  passwordHash: { type: String, required: true, select: false },
   preferredLanguage: { type: String, default: '' },
   location: { type: String, default: '' },
   contactMethod: { type: String, enum: ['email', 'phone'], default: 'email' },
   verificationMethod: { type: String, enum: ['aadhaar', 'digilocker'], default: 'aadhaar' },
-  aadhaarNumber: { type: String, default: '' },
-  digilockerToken: { type: String, default: '' },
+  // Legacy raw fields remain readable only by the migration command. New
+  // accounts store an HMAC fingerprint instead of an identity reference.
+  aadhaarNumber: { type: String, default: '', select: false },
+  digilockerToken: { type: String, default: '', select: false },
+  identityVerificationHash: { type: String, default: '', select: false, maxlength: 100 },
   trustScore: { type: Number, default: 0 },
   trustScoreState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   avatar: { type: String, default: null },
@@ -128,9 +133,18 @@ const studentSchema = new mongoose.Schema({
   networkState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   earningState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   dailySectionUsage: { type: mongoose.Schema.Types.Mixed, default: undefined },
-  sessions: { type: [sessionSchema], default: [] },
+  sessions: { type: [sessionSchema], default: [], select: false },
 }, {
   timestamps: true,
+  optimisticConcurrency: ['trustScoreState', 'trustScore', 'skillHubSkills'],
+})
+
+studentSchema.post('save', function(error, doc, next) {
+  if (error.name === 'VersionError') {
+    error.statusCode = 409
+    error.message = 'Your account changed during this update. Refresh and retry.'
+  }
+  next(error)
 })
 
 studentSchema.index({ trustScore: -1, createdAt: -1 })

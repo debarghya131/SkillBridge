@@ -8,9 +8,8 @@ const { buildDefaultCompanyWorkspaceState } = require('../config/companyWorkspac
 const { buildWorkspaceState, isWorkSubmission } = require('../utils/companyWorkspace')
 const { mergeTemplateState, clone, reduceTemplateState } = require('../utils/templateState')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
-const { recordTrustScoreEvent } = require('./trustScoreController')
 const { validateAssignment, isLateSubmission } = require('../utils/taskValidation')
-const { activeStreak } = require('../utils/skillPolicy')
+const { activeStreak, isDiscoverableVerifiedSkill, publishedSkillNames } = require('../utils/skillPolicy')
 const { synchronizeCompanyGigMetrics } = require('../utils/companyGigMetrics')
 
 const TASK_TYPE_VALUES = new Set(['live_project', 'code', 'mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'])
@@ -148,15 +147,16 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
     Beginner: [],
     Intermediate: [],
     Pro: [],
+    'Pro Mastery': [],
   }
 
   if (Array.isArray(skillHubSkills)) {
     skillHubSkills.forEach(skill => {
-      if (!skill || typeof skill.name !== 'string' || !skill.name.trim()) {
+      if (!skill || typeof skill.name !== 'string' || !skill.name.trim() || !isDiscoverableVerifiedSkill(skill)) {
         return
       }
 
-      const stage = ['Beginner', 'Intermediate', 'Pro'].includes(skill.stage) ? skill.stage : 'Intermediate'
+      const stage = ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'].includes(skill.stage) ? skill.stage : 'Intermediate'
       if (!groupedSkills[stage].includes(skill.name)) {
         groupedSkills[stage].push(skill.name)
       }
@@ -168,6 +168,7 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
       !groupedSkills.Beginner.includes(skill)
       && !groupedSkills.Intermediate.includes(skill)
       && !groupedSkills.Pro.includes(skill)
+      && !groupedSkills['Pro Mastery'].includes(skill)
     ) {
       groupedSkills.Intermediate.push(skill)
     }
@@ -176,7 +177,7 @@ function buildSkillsByLevel(skillHubSkills, fallbackSkills) {
   return groupedSkills
 }
 
-function sanitizeTaskSubmission(submission) {
+function sanitizeTaskSubmission(submission, { includeStudentProfile = true } = {}) {
   if (!submission) {
     return null
   }
@@ -188,16 +189,18 @@ function sanitizeTaskSubmission(submission) {
     companyGigId: Number.isFinite(Number(submission.companyGigId)) ? Number(submission.companyGigId) : null,
     companyGigPublicId: submission.companyGigPublicId || '',
     studentName: submission.studentName,
-    studentAvatar: submission.studentAvatar || null,
-    studentLocation: submission.studentLocation || '',
-    studentTrustScore: Number(submission.studentTrustScore) || 0,
-    studentSkills: Array.isArray(submission.studentSkills) ? submission.studentSkills : [],
-    studentSkillsByLevel: submission.studentSkillsByLevel || {},
-    studentStreak: Number(submission.studentStreak) || 0,
-    studentGithub: submission.studentGithub || '',
-    studentContactInfo: Array.isArray(submission.studentContactInfo) ? submission.studentContactInfo : [],
-    studentProjects: Array.isArray(submission.studentProjects) ? submission.studentProjects : [],
-    studentVideoUrl: submission.studentVideoUrl || null,
+    ...(includeStudentProfile ? {
+      studentAvatar: submission.studentAvatar || null,
+      studentLocation: submission.studentLocation || '',
+      studentTrustScore: Number(submission.studentTrustScore) || 0,
+      studentSkills: Array.isArray(submission.studentSkills) ? submission.studentSkills : [],
+      studentSkillsByLevel: submission.studentSkillsByLevel || {},
+      studentStreak: Number(submission.studentStreak) || 0,
+      studentGithub: submission.studentGithub || '',
+      studentContactInfo: Array.isArray(submission.studentContactInfo) ? submission.studentContactInfo : [],
+      studentProjects: Array.isArray(submission.studentProjects) ? submission.studentProjects : [],
+      studentVideoUrl: submission.studentVideoUrl || null,
+    } : {}),
     opportunityId: submission.opportunityId,
     gigTitle: submission.gigTitle,
     companyName: submission.companyName || '',
@@ -426,10 +429,19 @@ function normalizeSubmissionContent(value) {
   return content
 }
 
+function externalMediaUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return null
+
+  try {
+    const url = new URL(value)
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : null
+  } catch {
+    return null
+  }
+}
+
 function buildStudentTaskProfile(student) {
-  const skills = Array.isArray(student.skills)
-    ? student.skills.filter(skill => typeof skill === 'string' && skill.trim())
-    : []
+  const skills = publishedSkillNames(student.skills, student.skillHubSkills)
   const projects = Array.isArray(student.projects)
     ? student.projects
       .filter(project => project && (project.name || project.desc))
@@ -442,12 +454,14 @@ function buildStudentTaskProfile(student) {
     : []
   const skillsByLevel = buildSkillsByLevel(student.skillHubSkills, skills)
   const streak = Array.isArray(student.skillHubSkills)
-    ? Math.max(0, ...student.skillHubSkills.map(skill => activeStreak(skill)))
+    ? Math.max(0, ...student.skillHubSkills.filter(isDiscoverableVerifiedSkill).map(skill => activeStreak(skill)))
     : 0
 
   return {
     studentName: student.name,
-    studentAvatar: student.avatar || null,
+    // Do not copy inline media into every submission. It is already owned by
+    // the student profile and can otherwise multiply document size quickly.
+    studentAvatar: externalMediaUrl(student.avatar),
     studentLocation: student.location || '',
     studentTrustScore: Number(student.trustScore) || 0,
     studentSkills: skills,
@@ -456,7 +470,7 @@ function buildStudentTaskProfile(student) {
     studentGithub: Array.isArray(student.githubLink) && student.githubLink[0] ? student.githubLink[0].url : '',
     studentContactInfo: Array.isArray(student.contactInfo) ? student.contactInfo : [],
     studentProjects: projects,
-    studentVideoUrl: student.videoUrl || null,
+    studentVideoUrl: externalMediaUrl(student.videoUrl),
   }
 }
 
@@ -761,7 +775,7 @@ async function getCompanyTaskSubmissions(token) {
     companyId: company._id,
   }).sort({ submittedAt: -1, updatedAt: -1 })
 
-  return submissions.map(submission => ({ ...sanitizeTaskSubmission(submission),
+  return submissions.map(submission => ({ ...sanitizeTaskSubmission(submission, { includeStudentProfile: false }),
     reviewGuide: company.taskReviewGuides?.[`${submission.studentId}:${submission.opportunityId}`] || {},
   }))
 }
@@ -810,48 +824,6 @@ async function syncCompanyPipelineAfterStudentSubmission(assignment, submission,
   await company.save()
 }
 
-async function startStudentCompanyInterviewTask(token, payload) {
-  const student = await findStudentByToken(token)
-  const { gigTitle, companyName: requestedCompanyName, opportunityId } = normalizeTaskIdentity(payload)
-  const assignment = findAcceptedOpportunity(student, opportunityId, gigTitle, requestedCompanyName)
-  const existingSubmission = await TaskSubmission.findOne(buildTaskSubmissionQuery(student._id, assignment)).sort({ updatedAt: -1 })
-
-  if (!existingSubmission) {
-    throw buildAuthError('Submit the interview task before starting GIG work', 409)
-  }
-
-  if (existingSubmission.status === 'work_started') {
-    return sanitizeTaskSubmission(existingSubmission)
-  }
-
-  if (existingSubmission.status !== 'selected') {
-    throw buildAuthError('The company must select this student before work can start', 409)
-  }
-
-  existingSubmission.interviewSubmission = existingSubmission.interviewSubmission || {
-    submissionLink: existingSubmission.submissionLink, submissionContent: existingSubmission.submissionContent,
-    note: existingSubmission.note, feedback: existingSubmission.feedback, score: existingSubmission.score,
-    submittedAt: existingSubmission.submittedAt,
-  }
-  existingSubmission.submissionLink = ''
-  existingSubmission.submissionContent = ''
-  existingSubmission.note = ''
-  existingSubmission.feedback = ''
-  existingSubmission.score = null
-  existingSubmission.status = 'work_started'
-  existingSubmission.reviewedAt = new Date()
-  await saveSubmission(existingSubmission)
-  await syncCompanyPipelineAfterStudentSubmission(assignment, existingSubmission, false)
-
-  const company = await Company.findById(assignment.companyId)
-  if (company) {
-    syncCompanyWorkspaceAfterSubmission(company, existingSubmission)
-    await company.save()
-  }
-
-  return sanitizeTaskSubmission(existingSubmission)
-}
-
 async function reviewCompanyTaskSubmission(token, submissionId, payload) {
   const company = await findCompanyByToken(token)
   const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
@@ -876,12 +848,13 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
   const requestedStatus = typeof payload?.status === 'string' ? payload.status : ''
   const nextStatus = requestedStatus === 'ready_to_hire' ? 'selected' : requestedStatus
   const previousStatus = taskSubmission.status
-  if (payload?.workBrief !== undefined) {
-    if (nextStatus !== 'work_started' || previousStatus !== 'selected') throw buildAuthError('Work brief can only be set at kickoff', 409)
+  if (nextStatus === 'work_started' && previousStatus === 'selected') {
     if (typeof payload.workBrief !== 'string' || !payload.workBrief.trim() || payload.workBrief.trim().length > 4000) {
       throw buildAuthError('A work brief of 1 to 4000 characters is required')
     }
     taskSubmission.workBrief = payload.workBrief.trim()
+  } else if (payload?.workBrief !== undefined) {
+    throw buildAuthError('Work brief can only be set at kickoff', 409)
   }
   const feedback = typeof payload?.feedback === 'string' ? payload.feedback.trim() : taskSubmission.feedback || ''
   if (feedback.length > 2000) throw buildAuthError('Feedback must be 2000 characters or fewer')
@@ -956,14 +929,6 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
       syncCompanyWorkspaceAfterSubmission(company, taskSubmission)
     }
 
-    if (taskSubmission.status === 'completed') {
-      const student = await Student.findById(taskSubmission.studentId)
-      if (student) {
-        recordTrustScoreEvent(student, 'gig_completed', taskSubmission._id.toString())
-        await student.save()
-      }
-    }
-
     await company.save()
   }
 
@@ -975,6 +940,8 @@ async function reviewCompanyTaskSubmission(token, submissionId, payload) {
 }
 
 module.exports = {
+  buildStudentTaskProfile,
+  externalMediaUrl,
   nextStudentSubmissionStatus,
   buildTaskSubmissionQuery,
   getCompanyTaskSubmissions,
@@ -987,5 +954,4 @@ module.exports = {
   sendCompanyInterviewTask,
   reviewCompanyTaskSubmission,
   submitStudentCompanyInterviewTask,
-  startStudentCompanyInterviewTask,
 }

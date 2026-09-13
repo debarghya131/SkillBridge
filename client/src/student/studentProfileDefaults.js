@@ -29,12 +29,13 @@ export const DEFAULT_STUDENT_PROFILE = {
   githubLink: [],
   contactInfo: [],
   projects: [],
-  videoUrl: null,
+  // A starter preview belongs to the application, not to the student's public profile.
+  videoUrl: studentIntroVideo,
 }
 
 export function mergeStudentProfile(student = {}) {
   const videoUrl = isBundledStudentIntroVideoUrl(student.videoUrl)
-    ? null
+    ? DEFAULT_STUDENT_PROFILE.videoUrl
     : student.videoUrl || DEFAULT_STUDENT_PROFILE.videoUrl
 
   return {

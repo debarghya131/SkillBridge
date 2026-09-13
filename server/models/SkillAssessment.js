@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 
 const schema = new mongoose.Schema({
-  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
   skillName: { type: String, required: true, maxlength: 100 },
   mode: { type: String, enum: ['verify', 'reverify', 'upgrade', 'retain', 'challenge'], required: true },
   targetStage: { type: String, default: '' },
@@ -36,4 +36,5 @@ const schema = new mongoose.Schema({
 schema.index({ studentId: 1, attemptKey: 1 }, { unique: true, partialFilterExpression: { status: 'pending' } })
 schema.index({ studentId: 1, attemptKey: 1, open: 1 }, { unique: true, partialFilterExpression: { open: true }, name: 'one_open_skill_assessment' })
 schema.index({ status: 1, assignedReviewerId: 1, createdAt: 1 })
+schema.index({ studentId: 1, status: 1, createdAt: -1 })
 module.exports = mongoose.models.SkillAssessment || mongoose.model('SkillAssessment', schema)

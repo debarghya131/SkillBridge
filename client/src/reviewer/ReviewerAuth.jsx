@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, LogIn } from 'lucide-react'
+import { ArrowLeft, LogIn } from 'lucide-react'
 import { getReviewerSessionToken, setReviewerSessionToken, signInReviewer } from './reviewerApi'
-import './reviewer.css'
+import SkillBridgeBrand from '../ui/SkillBridgeBrand'
+import './Reviewer.css'
 
 export default function ReviewerAuth() {
   const navigate = useNavigate()
@@ -27,8 +28,8 @@ export default function ReviewerAuth() {
   return <main className="reviewer-auth">
     <form onSubmit={submit} className="reviewer-auth-card">
       <button type="button" className="reviewer-auth-back" onClick={() => navigate('/login')}><ArrowLeft size={15}/>Login options</button>
-      <BadgeCheck size={34}/>
-      <div><span>SKILLBRIDGE OPERATIONS</span><h1>Reviewer sign in</h1><p>Authorized reviewers only. Decisions are logged and affect student reputation.</p></div>
+      <SkillBridgeBrand />
+      <div><span className="reviewer-auth-kicker">SKILLBRIDGE OPERATIONS</span><h1>Reviewer sign in</h1><p>Authorized reviewers only. Decisions are logged and affect student reputation.</p></div>
       <label>Email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)}/></label>
       <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)}/></label>
       {error && <p className="reviewer-error" role="alert">{error}</p>}

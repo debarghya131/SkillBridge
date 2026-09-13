@@ -12,9 +12,12 @@
     "skills:reset-legacy-demo": "node scripts/reset-legacy-demo-skillhub.js",
     "skills:reconcile": "node scripts/reconcile-skills.js",
     "trustscore:reconcile": "node scripts/reconcile-trustscores.js",
+    "db:audit": "node scripts/audit-database.js",
+    "db:indexes": "node scripts/reconcile-indexes.js",
+    "db:migrate-verification": "node scripts/migrate-verification-references.js",
     "test:skillhub:integration": "node scripts/test-skillhub-integration.js",
     "test:network:integration": "node scripts/test-network-integration.js",
-    "check": "node --check server.js && node --check controllers/companyController.js && node --check controllers/studentController.js && node --check controllers/taskBridgeController.js && node --check controllers/siteMetricController.js && node --check controllers/reviewerController.js && node --check controllers/skillAssessmentController.js && node --check controllers/networkController.js && node --check models/Reviewer.js && node --check models/SkillAssessment.js && node --check models/SiteMetric.js && node --check models/NetworkConnection.js && node --check models/TeamPost.js",
+    "check": "node --check server.js && node --check controllers/companyController.js && node --check controllers/studentController.js && node --check controllers/taskBridgeController.js && node --check controllers/siteMetricController.js && node --check controllers/reviewerController.js && node --check controllers/skillAssessmentController.js && node --check controllers/networkController.js && node --check models/Company.js && node --check models/Student.js && node --check models/Reviewer.js && node --check models/SkillAssessment.js && node --check models/SiteMetric.js && node --check models/NetworkConnection.js && node --check models/TeamPost.js && node --check utils/verification.js && node --check scripts/audit-database.js && node --check scripts/reconcile-indexes.js && node --check scripts/migrate-verification-references.js",
     "test": "node --test tests/*.test.js",
     "test:watch": "node --test --watch tests/*.test.js"
   },

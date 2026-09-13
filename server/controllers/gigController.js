@@ -6,9 +6,12 @@ const { buildDefaultCompanyGigManagementState } = require('../config/companyGigD
 const { consumeSectionOperation } = require('../utils/sectionUsage')
 const { mergeTemplateState, reduceTemplateState } = require('../utils/templateState')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
+const { publishedSkillNames } = require('../utils/skillPolicy')
+
+const GIG_STUDENT_FIELDS = '_id sessions name location trustScore skills skillHubSkills projects.name gigState'
 
 async function findStudentByToken(token) {
-  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), GIG_STUDENT_FIELDS)
 }
 
 function buildManagedGigId(companyId, gigIdentity) {
@@ -81,6 +84,29 @@ function sanitizeStudentTaskDetails(details) {
   return safeDetails
 }
 
+function compactGigStateMedia(gigState) {
+  const companyLogos = []
+  const logoIndexes = new Map()
+  const collections = ['opportunities', 'browseGigs', 'appliedGigs', 'activeGigBase', 'completedGigs']
+  const compacted = { ...gigState }
+
+  for (const collection of collections) {
+    if (!Array.isArray(gigState?.[collection])) continue
+    compacted[collection] = gigState[collection].map(item => {
+      const logo = typeof item?.companyLogo === 'string' ? item.companyLogo : ''
+      if (logo.length < 2048) return item
+      if (!logoIndexes.has(logo)) {
+        logoIndexes.set(logo, companyLogos.length)
+        companyLogos.push(logo)
+      }
+      const { companyLogo, ...rest } = item
+      return { ...rest, companyLogoRef: logoIndexes.get(logo) }
+    })
+  }
+
+  return companyLogos.length ? { ...compacted, companyLogos } : compacted
+}
+
 function incrementLabeledValue(items, label, delta) {
   return items.map(item => item.label === label
     ? { ...item, value: String(Math.max(0, (Number(item.value) || 0) + delta)) }
@@ -88,11 +114,10 @@ function incrementLabeledValue(items, label, delta) {
 }
 
 async function buildCompanyManagedGigs(student) {
-  const companies = await Company.find().select('_id businessName location businessProfile gigManagementState').lean()
-  const studentSkills = [
-    ...(Array.isArray(student.skills) ? student.skills : []),
-    ...(Array.isArray(student.skillHubSkills) ? student.skillHubSkills.map(skill => skill?.name) : []),
-  ].filter(Boolean)
+  // Listing GIGs must never load company descriptions, contact data, or an
+  // uploaded introduction video. Those are fetched only after View Company.
+  const companies = await Company.find().select('_id businessName location businessProfile.logo businessProfile.location gigManagementState.gigs gigManagementState.applicantsByGig').lean()
+  const studentSkills = publishedSkillNames(student.skills, student.skillHubSkills)
   const managedGigs = []
 
   companies.forEach(company => {
@@ -177,7 +202,10 @@ function buildBridgeCompletedGig(opportunity) {
 
 async function buildGigState(student) {
   const defaults = buildDefaultGigState()
-  const managedGigs = await buildCompanyManagedGigs(student)
+  const [managedGigs, taskSubmissions] = await Promise.all([
+    buildCompanyManagedGigs(student),
+    TaskSubmission.find({ studentId: student._id }).sort({ updatedAt: -1 }),
+  ])
   const storedOpportunities = Array.isArray(student.gigState?.opportunities)
     ? student.gigState.opportunities.map(toPlainGigStateItem)
     : []
@@ -204,7 +232,6 @@ async function buildGigState(student) {
     ...legacyStatuses,
     ...normalizeOpportunityStatusOverrides(student.gigState?.opportunityStatusById),
   }
-  const taskSubmissions = await TaskSubmission.find({ studentId: student._id }).sort({ updatedAt: -1 })
   const submissionsByOpportunityId = new Map()
   const submissionsByGigTitle = new Map()
 
@@ -407,10 +434,7 @@ async function applyToGig(token, gigId) {
                 name: student.name,
                 location: student.location || '',
                 trustScore: Number(student.trustScore) || 0,
-                skills: [...new Set([
-                  ...(Array.isArray(student.skills) ? student.skills : []),
-                  ...(Array.isArray(student.skillHubSkills) ? student.skillHubSkills.map(skill => skill?.name) : []),
-                ].filter(Boolean))],
+                skills: publishedSkillNames(student.skills, student.skillHubSkills),
                 projects: Array.isArray(student.projects) ? student.projects.map(project => project.name).filter(Boolean) : [],
               },
             ]
@@ -544,6 +568,7 @@ module.exports = {
   acceptOpportunity,
   applyToGig,
   calculateGigMatch,
+  compactGigStateMedia,
   declineOpportunity,
   getStudentGigState,
   isBrowsableGigStatus,

@@ -14,6 +14,7 @@ const statusMeta = {
 }
 
 const PROFILE_LEVEL_META = {
+  'Pro Mastery': { bg: '#FEF3C7', color: '#A16207' },
   Pro: { bg: '#F3E8FF', color: '#7C3AED' },
   Intermediate: { bg: '#EFF6FF', color: '#1D4ED8' },
   Beginner: { bg: '#F0FDF4', color: '#15803D' },
@@ -22,16 +23,34 @@ const REVIEW_STATUS_OPTIONS = [
   { value: 'reviewed', label: 'Mark Reviewed' },
   { value: 'selected', label: 'Select Student' },
   { value: 'rejected', label: 'Reject Submission' },
-  { value: 'work_started', label: 'Start GIG Work' },
   { value: 'approved', label: 'Approve Work' },
   { value: 'needs_revision', label: 'Needs Revision' },
 ]
+
+function GigFormMenu({ value, options, onChange, label }) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef(null)
+  const normalizedOptions = options.map(option => typeof option === 'string' ? { value: option, label: option } : option)
+  const closeWhenFocusLeaves = () => {
+    window.requestAnimationFrame(() => {
+      if (!menuRef.current?.contains(document.activeElement)) setOpen(false)
+    })
+  }
+
+  return <div ref={menuRef} className="gig-form-menu" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="gig-form-menu-trigger" aria-haspopup="listbox" aria-expanded={open}
+    onClick={() => setOpen(current => !current)}>{normalizedOptions.find(option => option.value === value)?.label || value}</button>
+    {open && <div className="gig-form-menu-options" role="listbox" aria-label={label}>
+      {normalizedOptions.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === value}
+        onClick={() => { onChange(option.value); setOpen(false) }}>{option.label}</button>)}
+    </div>}
+  </div>
+}
 
 function availableReviewOptions(status) {
   const next = {
     submitted: ['reviewed', 'rejected', 'needs_revision'],
     reviewed: ['selected', 'rejected', 'needs_revision'],
-    selected: ['work_started'],
     delivered: ['approved', 'needs_revision'],
     ready_to_hire: ['selected'],
   }
@@ -60,6 +79,7 @@ function buildApplicantProfile(applicant) {
     score: applicant.score ?? applicant.trustScore ?? applicant.studentTrustScore ?? 0,
     skills,
     skillsByLevel: applicant.profileSkillsByLevel || applicant.skillsByLevel || applicant.studentSkillsByLevel || {
+      'Pro Mastery': [],
       Pro: [],
       Intermediate: [],
       Beginner: [],
@@ -232,14 +252,10 @@ function CreateGigModal({ open, initialData, onClose, onCreate, onUpdate, onDele
             />
           </label>
 
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Work Mode</span>
-            <select value={form.mode} onChange={e => updateField('mode', e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--white)', fontFamily: 'inherit' }}>
-              <option>Remote</option>
-              <option>Hybrid</option>
-              <option>On-site</option>
-            </select>
-          </label>
+            <GigFormMenu label="Work Mode" value={form.mode} options={['Remote', 'Hybrid', 'On-site']} onChange={value => updateField('mode', value)} />
+          </div>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Location *</span>
@@ -252,23 +268,15 @@ function CreateGigModal({ open, initialData, onClose, onCreate, onUpdate, onDele
             />
           </label>
 
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>GIG Type</span>
-            <select value={form.type} onChange={e => updateField('type', e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--white)', fontFamily: 'inherit' }}>
-              <option>Internship</option>
-              <option>Project GIG</option>
-            </select>
-          </label>
+            <GigFormMenu label="GIG Type" value={form.type} options={['Internship', 'Project GIG']} onChange={value => updateField('type', value)} />
+          </div>
 
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Status</span>
-            <select value={form.status} onChange={e => updateField('status', e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--white)', fontFamily: 'inherit' }}>
-              <option>Hiring</option>
-              <option>Reviewing</option>
-              <option>In Progress</option>
-              <option>Closed</option>
-            </select>
-          </label>
+            <GigFormMenu label="GIG Status" value={form.status} options={['Hiring', 'Reviewing', 'In Progress', 'Closed']} onChange={value => updateField('status', value)} />
+          </div>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>{form.type === 'Project GIG' ? 'Project Budget *' : 'Monthly Budget *'}</span>
@@ -601,7 +609,7 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
             <div className="responsive-stack" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Skills</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {['All', 'Pro', 'Intermediate', 'Beginner'].map(level => {
+                {['All', 'Pro Mastery', 'Pro', 'Intermediate', 'Beginner'].map(level => {
                   const meta = level === 'All' ? { bg: '#F1F5F9', color: '#475569' } : PROFILE_LEVEL_META[level]
                   return (
                     <button
@@ -776,6 +784,9 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
                   />
                 </label>
+              </div> : applicant.taskSubmission.status === 'selected' ? <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+                <span>Student selected. Add the GIG work brief and start work in Task Center.</span>
+                <button type="button" className="btn-secondary" onClick={onOpenTaskCenter} style={{ justifySelf: 'start', padding: '8px 12px', fontSize: 12 }}>Open Task Center</button>
               </div> : <div style={{ fontSize: 13 }}>{applicant.taskSubmission.feedback || 'No review action available at this stage.'}</div>}
 
               {reviewError && (
@@ -806,14 +817,12 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
               {savedTasks.length > 0 ? (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Saved Assignment *</span>
-                  <select
+                  <GigFormMenu
                     value={selectedTaskId}
-                    onChange={event => setSelectedTaskId(event.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', fontSize: 13, boxSizing: 'border-box' }}
-                  >
-                    <option value="">Choose a saved assignment</option>
-                    {savedTasks.map(task => <option key={task.id} value={task.id}>{task.title} · {getCompanyTaskTypeLabel(task.type)}</option>)}
-                  </select>
+                    options={[{ value: '', label: 'Choose a saved assignment' }, ...savedTasks.map(task => ({ value: task.id, label: `${task.title} · ${getCompanyTaskTypeLabel(task.type)}` }))]}
+                    label="Saved Assignment"
+                    onChange={setSelectedTaskId}
+                  />
                 </label>
               ) : (
                 <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', color: 'var(--muted)', fontSize: 12 }}>

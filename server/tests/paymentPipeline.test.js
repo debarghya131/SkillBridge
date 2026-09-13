@@ -57,6 +57,7 @@ test('review -> selection -> start -> delivery -> revision -> approval -> paymen
   await reviewCompanyTaskSubmission('company-session', id, { status: 'selected' })
   assert.equal(submission.score, 42)
   assert.equal(submission.feedback, 'Good reasoning')
+  await assert.rejects(reviewCompanyTaskSubmission('company-session', id, { status: 'work_started' }), /work brief/)
   await reviewCompanyTaskSubmission('company-session', id, { status: 'work_started', workBrief: 'Deliver the API and integration tests.' })
   assert.equal(submission.workBrief, 'Deliver the API and integration tests.')
   assert.equal(submission.interviewSubmission.submissionContent, '1. A')
@@ -116,7 +117,7 @@ test('legacy wallet balances cannot be withdrawn or edited', async t => {
 test('payment validation rejects impossible dates, fractions of a paisa, and future dates', () => {
   const base = { amount: 1, reference: 'REF1', method: 'bank_transfer', paidOn: '2026-01-01' }
   const now = new Date('2026-09-10T12:00:00Z')
-  for (const change of [{ paidOn: '2026-02-30' }, { paidOn: '2027-01-01' }, { amount: 1.001 }, { amount: -1 }, { reference: '' }]) {
+  for (const change of [{ paidOn: '2026-02-30' }, { paidOn: '2027-01-01' }, { amount: 1.001 }, { amount: -1 }, { amount: true }, { amount: [100] }, { reference: '' }]) {
     assert.throws(() => validateExternalPayment({ ...base, ...change }, now))
   }
   assert.equal(buildExternalEarningState([{ _id: '1', externalPayment: { amount: .1 } }, { _id: '2', externalPayment: { amount: .2 } }]).totalRecorded, .3)

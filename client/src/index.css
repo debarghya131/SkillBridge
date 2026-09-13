@@ -33,6 +33,9 @@ body {
   overflow-x: hidden;
 }
 a { text-decoration: none; color: inherit; }
+.sidebar-author-link { font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.sidebar-author-link:hover { color: var(--primary); }
+.sidebar-author-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
 button { cursor: pointer; border: none; font-family: inherit; }
 img, video { max-width: 100%; }
 
@@ -61,10 +64,7 @@ img, video { max-width: 100%; }
 .dashboard-nav {
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02), 0 4px 14px rgba(15, 23, 42, 0.04);
 }
-.dashboard-nav > div:first-child img {
-  border: 1px solid rgba(79, 70, 229, 0.16);
-  box-shadow: 0 3px 8px rgba(79, 70, 229, 0.14);
-}
+.dashboard-nav .skillbridge-brand img { border: 0; box-shadow: none; }
 .dashboard-nav .dashboard-user-meta {
   transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }

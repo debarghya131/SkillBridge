@@ -2,8 +2,10 @@ const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 
+const EARNING_STUDENT_FIELDS = '_id sessions'
+
 async function findStudentByToken(token) {
-  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), EARNING_STUDENT_FIELDS)
 }
 
 function buildExternalEarningState(submissions) {
@@ -25,7 +27,11 @@ function buildExternalEarningState(submissions) {
 
 async function getStudentEarningState(token) {
   const student = await findStudentByToken(token)
-  const submissions = await TaskSubmission.find({ studentId: student._id, status: { $in: ['approved', 'completed'] } })
+  const query = TaskSubmission.find({ studentId: student._id, status: { $in: ['approved', 'completed'] } })
+  const compactQuery = typeof query.select === 'function'
+    ? query.select('_id gigTitle companyName status externalPayment reviewedAt updatedAt')
+    : query
+  const submissions = await compactQuery
     .sort({ updatedAt: -1 }).lean()
   return buildExternalEarningState(submissions)
 }

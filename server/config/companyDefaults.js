@@ -3,6 +3,7 @@ function buildDefaultCompanyProfile(overrides = {}) {
     businessName: overrides.businessName || 'Your Business',
     location: overrides.location || '',
     logo: '',
+    introVideoUrl: null,
     industry: '',
     website: '',
     teamSize: '',

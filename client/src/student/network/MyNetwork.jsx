@@ -28,12 +28,15 @@ export default function MyNetwork() {
   async function view(person) {
     const request = ++profileRequest.current
     setBusy(`profile-${person.id}`)
-    setProfile(null)
+    setProfile({ ...person, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true })
     try {
       const response = await fetchNetworkProfile(token, person.id)
-      if (request === profileRequest.current) setProfile(response.profile)
+      if (request === profileRequest.current) setProfile({ ...response.profile, loading: false })
     } catch (error) {
-      if (request === profileRequest.current) toast.error(error.message || 'Could not load the current profile. Please try again.')
+      if (request === profileRequest.current) {
+        setProfile(null)
+        toast.error(error.message || 'Could not load the current profile. Please try again.')
+      }
     }
     finally { if (request === profileRequest.current) setBusy('') }
   }
@@ -45,6 +48,6 @@ export default function MyNetwork() {
       <section className="network-panel"><header><div><h2>Requests sent</h2><p>Pending until the other student responds.</p></div><span>{outgoing.length}</span></header><div className="network-list">{outgoing.map(item => <PersonRow key={item.id} person={item.profile} actions={<button className="btn-secondary" disabled={Boolean(busy)} onClick={() => action(item.id, () => removeNetworkConnection(token, item.id))}><X size={14}/>Cancel</button>}/>) }{!outgoing.length && <div className="network-empty is-small"><Clock3 size={20}/><strong>No pending requests</strong></div>}</div></section>
     </div>
     <section className="network-panel network-connections"><header><div><h2>Connected students</h2><p>Contact details are shared while the connection remains active.</p></div><span>{connected.length}</span></header><div className="network-card-grid">{connected.map(person => <article className="network-person-card" key={person.id}><header><div className="network-avatar">{person.avatar ? <img src={person.avatar} alt=""/> : person.name[0]}</div><div><h2>{person.name}</h2><p>{person.role}</p></div><span className="network-score">{person.trustScore}</span></header><div className="network-tags">{person.skills?.slice(0, 5).map(skill => <span key={skill}>{skill}</span>)}</div><div className="network-card-actions"><button className="btn-secondary" onClick={() => view(person)}>View profile</button><button className="network-danger-button" disabled={Boolean(busy)} onClick={() => action(person.relationship.connectionId, () => removeNetworkConnection(token, person.relationship.connectionId), `${person.name} removed from your network.`)}><UserMinus size={14}/>Remove</button></div></article>)}</div>{!connected.length && <div className="network-empty"><Users size={22}/><strong>No connections yet</strong><p>Discover students and send a connection request.</p></div>}</section>
-    <NetworkProfileModal key={profile?.id || 'closed'} profile={profile} onClose={() => { profileRequest.current++; setProfile(null) }}/>
+    <NetworkProfileModal key={profile?.id || 'closed'} profile={profile} loading={profile?.loading} onClose={() => { profileRequest.current++; setProfile(null) }}/>
   </div>
 }

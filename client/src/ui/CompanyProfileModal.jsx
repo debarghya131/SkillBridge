@@ -1,7 +1,8 @@
 import { createElement, useEffect, useRef } from 'react'
-import { X, MapPin, Globe, Mail, Phone, Building2, Users, BriefcaseBusiness, Fingerprint } from 'lucide-react'
+import { X, MapPin, Globe, Mail, Phone, Building2, Users, BriefcaseBusiness, Fingerprint, Video } from 'lucide-react'
 import CompanyLogo from './CompanyLogo'
-import { safeExternalUrl } from '../lib/safeExternalUrl'
+import { safeExternalUrl, safeVideoUrl } from '../lib/safeExternalUrl'
+import companyIntroVideo from '../assets/companyintro.mp4'
 import './CompanyProfileModal.css'
 
 export default function CompanyProfileModal({ profile, gig, onClose, loading, error, onRetry }) {
@@ -29,6 +30,9 @@ export default function CompanyProfileModal({ profile, gig, onClose, loading, er
   const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(company.contactEmail || '') ? company.contactEmail : ''
   const skills = gig ? gig.tags || [] : String(company.requiredSkills || '').split(',').map(item => item.trim()).filter(Boolean)
   const modes = gig ? gig.workMode : company.workModes?.join(' · ')
+  // Every company starts with the application introduction. A saved company
+  // video replaces it as soon as one is published.
+  const introVideoUrl = safeVideoUrl(company.introVideoUrl) || companyIntroVideo
   return <div className="company-profile-overlay" onClick={event => event.target === event.currentTarget && onClose()}>
     <section className="company-profile-dialog" role="dialog" aria-modal="true" aria-label={`${name} details`}>
       <header className="company-profile-heading"><CompanyLogo logo={profile ? company.logo : gig?.companyLogo} name={name} size={50}/>
@@ -50,6 +54,7 @@ export default function CompanyProfileModal({ profile, gig, onClose, loading, er
           ].filter(([, , value]) => value).map(([IconComponent, label, value]) => <div key={label}><dt>{createElement(IconComponent, { size: 15 })}{label}</dt><dd>{value}</dd></div>)}</dl>
             <p>{company.description || 'No company description published.'}</p>
           </section>
+          <section><h3><Video size={15}/>Business introduction</h3><video className="company-profile-video" controls preload="metadata" src={introVideoUrl}>Your browser cannot play this video.</video></section>
           <section><details className="company-profile-account"><summary><Fingerprint size={16}/>Account details</summary>
             <p>Registered via {({ email: 'Business Email', phone: 'Phone Number' })[company.contactMethod] || 'unavailable method'}</p>
             <p>Business identity method: {({ gstin: 'GSTIN', udyam: 'Udyam' })[company.verificationMethod] || 'Not provided'}</p>

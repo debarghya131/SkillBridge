@@ -2,9 +2,10 @@ const Student = require('../models/Student')
 const Company = require('../models/Company')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { reconcileTrustScore, recordTrustScoreEvent } = require('./trustScoreController')
-const { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
+const { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, isArchivedSkill, isDiscoverableVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
 
-const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+const SKILL_HUB_STUDENT_FIELDS = '_id sessions skills skillHubSkills skillHubState trustScore trustScoreState'
+const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), SKILL_HUB_STUDENT_FIELDS)
 const APPROVED_ACTIVITY_EVENTS = new Set(['verify_completed', 'reverify_completed', 'upgrade_completed', 'retention_completed', 'challenge_completed'])
 
 function sanitizeSkill(input) {
@@ -14,7 +15,7 @@ function sanitizeSkill(input) {
   return {
     name: String(skill.name || '').trim(), category: CATEGORIES.includes(skill.category) ? skill.category : 'Other',
     stage: STAGES.includes(skill.stage) ? skill.stage : 'Beginner', level: Number(skill.level) || 0,
-    verified: isVerifiedSkill(skill), renewalStatus: status, renewalDue: expiryDay(skill.renewalDue) || '-',
+    verified: isVerifiedSkill(skill), archived: isArchivedSkill(skill), archivedAt: skill.archivedAt || '', renewalStatus: status, renewalDue: expiryDay(skill.renewalDue) || '-',
     verifiedAt: skill.verifiedAt || '', assessmentId: skill.assessmentId || '',
     lastRetentionDate: skill.lastRetentionDate || '', createdOn: skill.createdOn || '',
     lastEvent: skill.lastEvent || 'created', streak: activeStreak(skill),
@@ -41,7 +42,10 @@ function streakRuns(dayValues) {
 }
 
 function buildStreakSummary(skills, log, today = dayKey()) {
-  const retention = log.filter(item => item.eventType === 'retention_completed' && item.earnedDay)
+  const retention = (Array.isArray(log) ? log : []).filter(item => item?.eventType === 'retention_completed'
+    && typeof item.skillName === 'string' && item.skillName.trim()
+    && /^\d{4}-\d{2}-\d{2}$/.test(item.earnedDay || '') && Number.isFinite(Date.parse(item.earnedDay))
+    && new Date(item.earnedDay).toISOString().slice(0, 10) === item.earnedDay && item.earnedDay <= today)
   const practiceDays = [...new Set(retention.map(item => item.earnedDay))]
   const overall = streakRuns(practiceDays)
   const week = Array.from({ length: 7 }, (_, index) => {
@@ -60,7 +64,7 @@ function buildStreakSummary(skills, log, today = dayKey()) {
     overallCurrent: overall.lastDay && (Date.parse(today) - Date.parse(overall.lastDay)) <= DAY_MS ? overall.latest : 0,
     overallLongest: overall.longest,
     totalPracticeDays: overall.days.length,
-    activeSkills: skills.filter(skill => Number(skill.streak) > 0).length,
+    activeSkills: skills.filter(skill => !skill.archived && Number(skill.streak) > 0).length,
     completedToday: week.at(-1)?.count || 0,
     nextMilestone: milestones.find(value => value > current) || null,
     week,
@@ -168,19 +172,21 @@ function buildSkillGapReport(skills, companies) {
   let matchedRequirements = 0
   let totalRequirements = 0
   for (const company of companies) {
-    for (const gig of company.gigManagementState?.gigs || []) {
+    const storedGigs = company.gigManagementState?.gigs
+    const gigs = Array.isArray(storedGigs) ? storedGigs : (storedGigs ? [storedGigs] : [])
+    for (const gig of gigs) {
       if (!gig.title || !['Hiring', 'Reviewing', 'In Progress'].includes(gig.status)) continue
       const tags = [...new Set((gig.skills || []).filter(name => typeof name === 'string' && name.trim()).map(name => name.trim().toLowerCase()))]
       if (!tags.length) continue
       activeGigs++
       for (const name of tags) {
         const skill = skills.find(item => item.name.toLowerCase() === name)
-        const covered = Boolean(skill && isVerifiedSkill(skill))
+        const covered = Boolean(skill && isDiscoverableVerifiedSkill(skill))
         totalRequirements++
         if (covered) matchedRequirements++
         const previous = requirements.get(name)
         requirements.set(name, { skill: skill?.name || name, category: skill?.category || 'Other', gigs: (previous?.gigs || 0) + 1,
-          status: covered ? 'Verified' : skill ? skill.renewalStatus : 'Missing', covered })
+          status: covered ? 'Verified' : skill?.archived ? 'Archived' : skill ? skill.renewalStatus : 'Missing', covered })
       }
     }
   }
@@ -214,7 +220,12 @@ async function getStudentSkillHub(token) {
       'gigManagementState.gigs.status': { $in: ['Hiring', 'Reviewing', 'In Progress'] },
       'gigManagementState.gigs.skills.0': { $exists: true },
     } },
-    { $project: { _id: 0, gigManagementState: { gigs: ['$gigManagementState.gigs'] } } },
+    { $project: {
+      _id: 0,
+      'gigManagementState.gigs.title': 1,
+      'gigManagementState.gigs.status': 1,
+      'gigManagementState.gigs.skills': 1,
+    } },
   ])
   response.skillHubState.skillGapReport = buildSkillGapReport(response.skills, activeGigs)
   return response
@@ -249,6 +260,26 @@ async function updateStudentSkillHub(token, payload) {
   return buildSkillHubResponse(student)
 }
 
+async function setStudentSkillArchived(token, payload) {
+  const student = await findStudentByToken(token)
+  await reconcileSkillExpiry(student)
+  const name = typeof payload?.skillName === 'string' ? payload.skillName.trim() : ''
+  if (!name || name.length > 100) throw buildAuthError('Choose a valid skill')
+  if (typeof payload?.archived !== 'boolean') throw buildAuthError('Choose whether to archive or restore this skill')
+  const skills = buildStudentSkillHubSkills(student)
+  const skill = skills.find(item => item.name.toLowerCase() === name.toLowerCase())
+  if (!skill) throw buildAuthError('Skill not found', 404)
+  if (skill.archived === payload.archived) return buildSkillHubResponse(student)
+  skill.archived = payload.archived
+  skill.archivedAt = payload.archived ? new Date().toISOString() : ''
+  skill.lastEvent = payload.archived ? 'archived' : 'restored'
+  appendLog(student, { eventType: skill.lastEvent, skillName: skill.name, occurredAt: new Date().toISOString(), points: 0 })
+  student.skillHubSkills = skills
+  student.skills = skills.map(item => item.name)
+  await saveSkillStudent(student)
+  return buildSkillHubResponse(student)
+}
+
 async function recordStudentSkillHubEvent(token) {
   await findStudentByToken(token)
   throw buildAuthError('Submit assessment evidence for review. Completion cannot be self-reported.', 403)
@@ -259,6 +290,7 @@ async function applyReviewedSkillAssessment(student, payload, session) {
   const skills = buildStudentSkillHubSkills(student)
   const skill = skills.find(item => item.name.toLowerCase() === payload.skillName.toLowerCase())
   if (!skill) throw buildAuthError('A valid skill is required')
+  if (skill.archived) throw buildAuthError('Restore this skill before approving new evidence for it', 409)
   const key = skill.name.toLowerCase()
   const today = dayKey()
   const earnedDay = payload.earnedDay || today
@@ -295,10 +327,17 @@ async function applyReviewedSkillAssessment(student, payload, session) {
   const points = result.recorded ? result.event.points : 0
   appendLog(student, { eventType, skillName: skill.name, challengeId: payload.challengeId || null, earnedDay,
     occurredAt: new Date().toISOString(), assessmentId: payload.assessmentId, points })
+  if (eventType === 'retention_completed') {
+    const approvedDays = new Set(skillLog(student).filter(item => item.eventType === 'retention_completed').map(item => item.earnedDay)).size
+    for (let milestone = 30; milestone <= Math.min(240, approvedDays); milestone += 30) {
+      recordTrustScoreEvent(student, 'practice_milestone', String(milestone))
+    }
+  }
   student.skillHubSkills = skills
   student.skills = skills.map(item => item.name)
+  reconcileTrustScore(student)
   await saveSkillStudent(student, session)
   return points
 }
 
-module.exports = { applyReviewedSkillAssessment, buildActivityDays, buildStudentSkillHubSkills, buildSkillGapReport, buildStreakSummary, getStudentActivityHeatmap, normalizeHeatmapFilters, reconcileSkillExpiry, getStudentSkillHub, recordStudentSkillHubEvent, updateStudentSkillHub }
+module.exports = { applyReviewedSkillAssessment, buildActivityDays, buildStudentSkillHubSkills, buildSkillGapReport, buildStreakSummary, getStudentActivityHeatmap, normalizeHeatmapFilters, reconcileSkillExpiry, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub }

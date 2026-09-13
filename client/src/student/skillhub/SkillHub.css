@@ -5,6 +5,9 @@
 .sh-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; }
 .sh-tabs button[aria-pressed=true] { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
 .sh-refresh { width: 40px; height: 40px; padding: 0; display: grid; place-items: center; }
+.skillhub-subnav { padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--white); }
+.skillhub-subnav-current { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--dark); }
+.skillhub-subnav-current strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .sh-guide { --guide-accent: #818cf8; display: grid; grid-template-columns: minmax(260px, .9fr) minmax(520px, 1.1fr); gap: 24px; align-items: center; flex-shrink: 0; min-width: 0; padding: 16px 18px; border-left: 4px solid var(--guide-accent); border-radius: 6px; background: #171a35; color: white; box-shadow: 0 10px 24px rgba(15, 23, 42, .1); }
 .sh-guide-upgrade { --guide-accent: #f59e0b; }
 .sh-guide-verify { --guide-accent: #10b981; }
@@ -50,6 +53,7 @@
 .sh-skill:has(.sh-status-valid)::before, .sh-activity:has(.sh-positive)::before { background: #10b981; }
 .sh-skill:has(.sh-status-due)::before { background: #f59e0b; }
 .sh-skill:has(.sh-status-expired)::before, .sh-activity:has(.sh-negative)::before { background: #ef4444; }
+.sh-skill:has(.sh-status-archived)::before { background: #64748b; }
 .sh-skill { flex-wrap: wrap; }
 .sh-skill-main { min-width: 0; flex: 1 1 180px; }
 .sh-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
@@ -58,6 +62,9 @@
 .sh-status-due { color: #92400e; background: #fef3c7; }
 .sh-status-expired { color: #991b1b; background: #fee2e2; }
 .sh-status-unverified { color: #475569; background: #f1f5f9; }
+.sh-status-archived { color: #475569; background: #e2e8f0; }
+.sh-skill-actions { display: inline-flex; align-items: center; gap: 8px; }
+.sh-skill-actions .btn-secondary { white-space: nowrap; }
 .sh-positive { color: #047857; font-weight: 600; font-size: 12px; }
 .sh-negative { color: #b91c1c; font-weight: 600; font-size: 12px; }
 .sh-activity p, .sh-assessment p { margin: 5px 0; font-size: 13px; }
@@ -121,7 +128,7 @@
 .sh-streak-badge small { padding-left: 5px; border-left: 1px solid #dbe3ee; }
 .sh-streak-done, .sh-streak-done strong { color: #047857; }
 .sh-streak-due, .sh-streak-due strong { color: #c2410c; }
-.sh-habit-tracker { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; color: #172033; box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
+.sh-habit-tracker { display: flex; flex-direction: column; min-height: 0; overflow: visible; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; color: #172033; box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
 .sh-habit-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 18px 20px 15px; border-bottom: 1px solid #dbe3ee; background: linear-gradient(105deg, #eef2ff, #eff6ff 58%, #f0fdf4); }
 .sh-habit-header .sh-section-kicker { color: #4f46e5; }
 .sh-habit-header h2 { margin: 3px 0 4px; font-size: 19px; color: #172033; }
@@ -136,6 +143,92 @@
 .sh-habit-stats span:nth-child(3) svg { color: #d97706; }
 .sh-habit-stats span:nth-child(4) svg { color: #059669; }
 .sh-habit-stats strong { color: #172033; font-size: 13px; }
+.sh-metric-tooltip, .dashboard-metric-tooltip { position: relative; cursor: help; outline: none; }
+.sh-metric-tooltip::after, .dashboard-metric-tooltip::after {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 7px 9px;
+  border-radius: 5px;
+  background: #172033;
+  color: #fff;
+  content: attr(data-tooltip);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.sh-metric-tooltip::before, .dashboard-metric-tooltip::before {
+  position: absolute;
+  z-index: 201;
+  top: calc(100% + 3px);
+  left: 50%;
+  border: 5px solid transparent;
+  border-bottom-color: #172033;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.sh-metric-tooltip:hover::after, .sh-metric-tooltip:hover::before,
+.sh-metric-tooltip:focus-visible::after, .sh-metric-tooltip:focus-visible::before,
+.dashboard-metric-tooltip:hover::after, .dashboard-metric-tooltip:hover::before,
+.dashboard-metric-tooltip:focus-visible::after, .dashboard-metric-tooltip:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.sh-habit-stats .sh-metric-tooltip:first-child::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child::after {
+  left: 0;
+  transform: translateY(-4px);
+}
+.sh-habit-stats .sh-metric-tooltip:first-child::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child::before {
+  left: 18px;
+  transform: translateY(-4px);
+}
+.sh-habit-stats .sh-metric-tooltip:last-child::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child::after {
+  right: 0;
+  left: auto;
+  transform: translateY(-4px);
+}
+.sh-habit-stats .sh-metric-tooltip:last-child::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child::before {
+  right: 18px;
+  left: auto;
+  transform: translateY(-4px);
+}
+.sh-habit-stats .sh-metric-tooltip:first-child:hover::after,
+.sh-habit-stats .sh-metric-tooltip:first-child:focus-visible::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:hover::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:focus-visible::after,
+.sh-habit-stats .sh-metric-tooltip:last-child:hover::after,
+.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:hover::after,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:focus-visible::after {
+  transform: translateY(0);
+}
+.sh-habit-stats .sh-metric-tooltip:first-child:hover::before,
+.sh-habit-stats .sh-metric-tooltip:first-child:focus-visible::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:hover::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:focus-visible::before,
+.sh-habit-stats .sh-metric-tooltip:last-child:hover::before,
+.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:hover::before,
+.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:focus-visible::before {
+  transform: translateY(0);
+}
 .sh-habit-controls { display: grid; grid-template-columns: auto minmax(510px, 1fr) auto; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #dbe3ee; background: #f8fafc; }
 .sh-habit-year, .sh-habit-step { display: flex; align-items: center; gap: 5px; }
 .sh-habit-year > span { margin-right: 4px; color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -174,6 +267,7 @@
 .sh-count-due { background: #fef3c7; color: #92400e; }
 .sh-count-expired { background: #fee2e2; color: #991b1b; }
 .sh-count-unverified { background: #e0e7ff; color: #3730a3; }
+.sh-count-archived { background: #e2e8f0; color: #475569; }
 .skillhub-page input, .skillhub-page select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--white); color: var(--dark); font: inherit; font-size: 13px; }
 .sh-add-form fieldset { border: 0; padding: 12px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 180px); gap: 10px; }
 .sh-add-form label { display: grid; gap: 6px; min-width: 0; font-size: 12px; }
@@ -226,6 +320,39 @@
   .sh-assessment footer small { flex: 0 0 auto; }
   .sh-assessment footer button { width: 100%; min-width: 0; }
 }
+@media (max-width: 600px) {
+  .student-viewport.student-section-skillhub { padding: 12px !important; }
+  .skillhub-page { gap: 12px; }
+  .sh-toolbar { flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+  .skillhub-subnav { flex: 1; width: auto; min-width: 0; }
+  .skillhub-subnav .responsive-pill-nav-list { display: none; width: 100%; flex-direction: column; margin-top: 8px; }
+  .skillhub-subnav .responsive-pill-nav-list.is-open { display: flex; }
+  .skillhub-subnav .sh-tabs button { min-height: 42px; padding: 8px 10px !important; font-size: 11px; white-space: nowrap; }
+  .skillhub-subnav .sh-tabs button[aria-pressed="true"] { background: var(--primary); border-bottom-color: transparent; color: white; }
+  .sh-refresh { flex: 0 0 42px; width: 42px; height: 42px; min-height: 42px; }
+  .sh-body { overflow: visible; }
+  .sh-columns { gap: 16px; }
+  .sh-panel { gap: 12px; }
+  .sh-section-heading { align-items: flex-start; gap: 10px; }
+  .sh-skills-heading > .btn-primary { width: 100%; min-height: 42px; order: 4; }
+  .sh-skills-heading .sh-status-summary { display: flex; flex-wrap: nowrap; width: 100%; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
+  .sh-skills-heading .sh-status-summary::-webkit-scrollbar { display: none; }
+  .sh-status-summary span { flex: 0 0 auto; }
+  .sh-filters { grid-template-columns: 1fr; }
+  .sh-filters input, .sh-filters select { min-height: 42px; }
+  .sh-add-form fieldset { gap: 10px; }
+  .sh-actions { display: grid; grid-template-columns: 1fr 44px; }
+  .sh-actions button { min-height: 42px; }
+  .sh-skill { align-items: stretch; gap: 10px; padding: 13px; }
+  .sh-skill > .btn-secondary { width: 100%; min-height: 42px; }
+  .sh-activity { align-items: flex-start; }
+  .sh-activity > span { white-space: nowrap; }
+  .sh-summary { grid-template-columns: 1fr; }
+  .sh-summary > div + div { border-top: 1px solid var(--border); border-left: 0; }
+  .sh-summary > div:nth-child(3), .sh-summary > div:nth-child(4) { border-left: 0; }
+  .sh-habit-controls { padding: 10px 12px; }
+  .sh-habit-scroll { padding: 10px; }
+}
 @media (max-height: 650px) {
   .student-viewport.student-section-skillhub { overflow-y: auto !important; }
   .sh-body { overflow: visible; }
@@ -240,4 +367,64 @@
 }
 @media (max-height: 650px) and (min-width: 1151px) {
   .sh-streak-overview { grid-template-columns: minmax(220px, .8fr) auto minmax(300px, 1fr); }
+}
+.sh-status-picker { position: relative; min-width: 0; }
+.sh-status-picker-trigger { width: 100%; min-height: 40px; padding: 9px 11px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 7px; background: var(--white); color: var(--dark); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.sh-status-picker-trigger span { color: var(--muted); font-size: 11px; }
+.sh-status-picker-options { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; max-height: 210px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--white); box-shadow: 0 10px 24px rgba(15,23,42,.16); }
+.sh-status-picker-options button { display: block; width: 100%; padding: 9px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--dark); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.sh-status-picker-options button:hover, .sh-status-picker-options button[aria-selected="true"] { background: var(--primary-light); color: var(--primary); }
+
+@media (max-width: 600px) {
+  .skillhub-page,
+  .skillhub-page .sh-body,
+  .skillhub-page .sh-columns,
+  .skillhub-page .sh-panel,
+  .skillhub-page .sh-add-form,
+  .skillhub-page .sh-add-form fieldset,
+  .skillhub-page .sh-filters { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+
+  .skillhub-page .sh-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 42px; width: 100%; max-width: 100%; align-items: start; }
+  .skillhub-page .skillhub-subnav { width: 100%; max-width: 100%; box-sizing: border-box; }
+  .skillhub-page .responsive-pill-nav-header { width: 100%; box-sizing: border-box; }
+  .skillhub-page .sh-refresh { width: 42px; min-width: 42px; margin: 0; }
+
+  .skillhub-page .sh-section-heading { width: 100%; max-width: 100%; box-sizing: border-box; }
+  .skillhub-page .sh-skills-heading .sh-status-summary { flex: 1 1 100%; display: flex; flex-wrap: wrap; width: 100%; overflow: visible; gap: 5px; }
+  .skillhub-page .sh-status-summary span { flex: 0 1 auto; padding: 4px 7px; font-size: 9px; }
+  .skillhub-page .sh-skills-heading > .btn-primary { width: 100%; max-width: 100%; }
+
+  .skillhub-page .sh-add-form fieldset { display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 0; overflow: visible; }
+  .skillhub-page .sh-add-form label,
+  .skillhub-page .sh-status-picker { width: 100%; max-width: 100%; min-width: 0; }
+  .skillhub-page .sh-actions { display: grid; grid-template-columns: minmax(0, 1fr) 42px; width: 100%; max-width: 100%; min-width: 0; gap: 6px; }
+  .skillhub-page .sh-actions > button { width: 100%; min-width: 0; max-width: 100%; margin: 0; padding-inline: 8px; box-sizing: border-box; }
+  .skillhub-page .sh-actions > .btn-secondary { width: 42px; padding: 0; }
+
+  .skillhub-page .sh-filters { grid-template-columns: minmax(0, 1fr); }
+  .skillhub-page .sh-filters > *,
+  .skillhub-page .sh-skill,
+  .skillhub-page .sh-skill-main { max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .skillhub-page .sh-meta { gap: 5px; }
+
+  /* Keep metric explanations inside the mobile viewport, whose horizontal overflow is hidden. */
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip::after {
+    width: min(190px, calc(100vw - 48px));
+    max-width: min(190px, calc(100vw - 48px));
+    box-sizing: border-box;
+  }
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child::after {
+    right: auto;
+    left: 0;
+  }
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child::before {
+    right: auto;
+    left: 18px;
+  }
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child:hover::after,
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::after,
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child:hover::before,
+  .skillhub-page .sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::before {
+    transform: translateY(0);
+  }
 }

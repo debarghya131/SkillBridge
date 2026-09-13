@@ -1,390 +1,589 @@
 # SkillBridge 🚀
 
-SkillBridge is a full-stack platform that connects Tier-2 and Tier-3 college students with real work opportunities from local MSMEs. It uses verified skills, TrustScore, tasks, gigs, networking, and payments to promote merit-based hiring. 🎓🤝🏢
+**Merit-first student talent discovery for local businesses.**
+
+SkillBridge connects students from Tier-2 and Tier-3 colleges with MSMEs through reviewer-verified skills, practical assignments, auditable TrustScore, and real project delivery. Hiring decisions are based on demonstrated work rather than college brand or an inflated resume.
 
 ## 🔗 Live Demo
 
-https://skillbridge.debarghya.org    👈
+[https://skillbridge.debarghya.org](https://skillbridge.debarghya.org) 👈
 
-## 💡 Motivation
+## 💡 Problem and Approach
 
-Many talented students from Tier-2 and Tier-3 colleges struggle to access real work opportunities because hiring often depends on college reputation, networks, or location instead of actual skills. SkillBridge was built to reduce that gap by helping students prove what they can do through verified skills, TrustScore, practical tasks, and project-based gigs.
+Capable students often lack access to credible work, while local businesses struggle to find affordable, evidence-backed talent. SkillBridge closes both gaps with one end-to-end workflow:
 
-For local MSMEs, the platform creates a simple way to discover skilled student talent, assign meaningful work, review submissions, manage projects, and handle payments in one connected workflow.
+1. Students build a portfolio and submit evidence to verify their skills.
+2. Platform reviewers assess the evidence with a structured rubric.
+3. Companies discover candidates through verified skills, TrustScore, and practical interview tasks.
+4. Selected students complete work in a shared project pipeline.
+5. Companies approve delivery and record the payment made outside SkillBridge.
 
-## ✨ Features
+## ✨ Product Capabilities
 
-### 🎓 Student Side
+| Experience | What is implemented |
+| --- | --- |
+| **🎓 Student** | Profile and portfolio, GIG discovery, saved/applied/active work, direct invites, interview assignments, Skill Hub, TrustScore, peer network, Team-Up, and earnings history. |
+| **🏢 Company** | Business profile, GIG publishing, applicant pipeline, talent search, direct opportunities, task library, submission review, project workspace, and external payment records. |
+| **🧑‍⚖️ Reviewer** | Protected reviewer access, blind assessment queue, claim ownership, scoring rubric, revision requests, approval/rejection, and review history. |
+| **📈 Merit layer** | Verified skill stages, renewal and retention, approved-activity streaks, skill-gap analysis, event-ledger TrustScore, and public evidence-backed profiles. |
 
-- GIG Center to discover opportunities, manage applied gigs, track active work, view completed gigs, and save interesting roles
-- Direct company invites with accept, decline, and interview-task flows
-- Practical task submission system with project links, notes, and company review visibility
-- TrustScore dashboard that reflects skill verification, project work, consistency, and task behavior
-- Skill Hub for verified skills, skill upgrades, daily retention tasks, and skill-gap reports
-- Profile and portfolio builder with skills, projects, GitHub links, contact details, and intro video support
-- Peer networking through student discovery, saved connections, and team-up collaboration requests
-- Earnings dashboard with payment history and withdrawal flow
+### 🛡️ Core Guarantees
 
-### 🏢 Company Side
-
-- Business profile setup with hiring categories, work modes, location, and company details
-- GIG Management for creating gigs, editing roles, tracking posted gigs, and reviewing applicants
-- Talent Search with TrustScore, skill, location, and experience-level filters
-- Student profile previews with verified skills, TrustScore, projects, contact details, and intro video
-- Interview-task review workflow with statuses like reviewed, ready to hire, and needs revision
-- Project Workspace for active project tracking, team members, task progress, and delivery status
-- Payment Center with company wallet, escrow tracking, payment methods, and payout history
-- Persistent dashboard state for gigs, workspace, payments, and business profile data
+- Unreviewed profile content does not award TrustScore.
+- Reviewer approval is required before a skill becomes verified or upgraded.
+- Duplicate assessment, payment, and TrustScore events are guarded at the database and service layers.
+- SkillBridge records externally completed payments; it does not hold funds, provide escrow, or offer withdrawals.
 
 ## 🏗️ Architecture
 
-### 1. 3-Tier Client-Server Architecture
+### 1. 🧱 3-Tier Client-Server Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                      Presentation Layer                     │
-│                                                             │
-│  React + Vite Client                                        │
-│  - Landing Page                                             │
-│  - Student Dashboard                                        │
-│  - Company Dashboard                                        │
-│  - GIG, Skill Hub, Network, Workspace, Payment UI            │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               │ HTTP / JSON API
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                       Application Layer                     │
-│                                                             │
-│  Node.js Backend                                            │
-│  - Native HTTP Server                                       │
-│  - API Routing                                              │
-│  - Controllers                                              │
-│  - Auth Sessions                                            │
-│  - Rate Limiting                                            │
-│  - Business Logic                                           │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               │ Mongoose ODM
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│                          Data Layer                         │
-│                                                             │
-│  MongoDB Database                                           │
-│  - Students                                                 │
-│  - Companies                                                │
-│  - Task Submissions                                         │
-│  - Dashboard State                                          │
-│  - Sessions                                                 │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         1. PRESENTATION TIER                             │
+│                         React + Vite Client                              │
+│                                                                          │
+│  Public Experience        Student Workspace         Company Workspace    │
+│  - Landing and login      - Profile and portfolio  - Business profile    │
+│  - Public profiles        - GIG Center             - GIG Management      │
+│                           - Skill Hub and tasks     - Talent Search      │
+│  Reviewer Portal          - TrustScore             - Project Workspace   │
+│  - Blind review queue     - Network and Team-Up    - External Payments   │
+│  - Rubric and decisions   - Earnings                                     │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │
+                                     │ HTTPS / JSON API
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          2. APPLICATION TIER                             │
+│                       Node.js Native HTTP Server                         │
+│                                                                          │
+│  Request Pipeline                         Domain Services                │
+│  - Routing and JSON parsing               - Student and Company          │
+│  - Session authentication                 - GIG and Interview Tasks      │
+│  - Student, Company and Reviewer roles    - Skill Assessments            │
+│  - CORS and rate limiting                 - Blind Reviewer Queue         │
+│  - Payload and ownership validation       - TrustScore Policy Engine     │
+│  - Conflict and error handling            - Network and Team-Up          │
+│                                           - Workspace and Payments       │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │
+                                     │ Mongoose ODM
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                             3. DATA TIER                                 │
+│                            MongoDB Database                              │
+│                                                                          │
+│  Core Accounts            Evidence and Work        Community and Metrics │
+│  - Students               - SkillAssessments       - NetworkConnections  │
+│  - Companies              - TaskSubmissions        - TeamPosts           │
+│  - Reviewers              - Review history         - SiteMetrics         │
+│  - Role sessions          - External payment data                        │
+│                                                                          │
+│  Embedded account state: profiles, Skill Hub activity, TrustScore ledger,│
+│  GIG state, company task library and project workspace                   │
+│  Payment and earnings history is derived from completed TaskSubmissions  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. System Architecture & Workflow Diagram
+> ⚡ **Quick flow:** React interface → secured Node.js API → Mongoose models → MongoDB persistence.
+
+### 2. 🔄 System Architecture & Workflow Diagram
+
+```mermaid
+flowchart TB
+    subgraph Actors[Platform Actors]
+        Student[Student]
+        Company[Company or MSME]
+        Reviewer[Authorized platform reviewer]
+        Visitor[Public visitor]
+    end
+
+    subgraph Client[React and Vite Presentation Layer]
+        Landing[Landing and authentication]
+        StudentUI[Student workspace: Profile, GIG Center, TrustScore, Skill Hub, Network and Earnings]
+        CompanyUI[Company workspace: Business Profile, GIG Management, Talent Search, Projects and Payments]
+        ReviewerUI[Blind reviewer portal: Available, My Reviews and History]
+        PublicUI[Public student and company profiles]
+        ApiClient[Shared HTTP and JSON API client]
+
+        Landing --> ApiClient
+        StudentUI --> ApiClient
+        CompanyUI --> ApiClient
+        ReviewerUI --> ApiClient
+        PublicUI --> ApiClient
+    end
+
+    Student --> Landing
+    Student --> StudentUI
+    Company --> Landing
+    Company --> CompanyUI
+    Reviewer --> Landing
+    Reviewer --> ReviewerUI
+    Visitor --> PublicUI
+
+    subgraph Backend[Node.js Application Layer]
+        Router[Native HTTP router]
+        Security[Session authentication, role checks, CORS, rate limiting and request-size limits]
+        Validation[Payload validation, URL safety, ownership checks and conflict handling]
+
+        StudentController[Student profile controller]
+        SkillController[Skill Hub and assessment controllers]
+        ReviewerController[Reviewer queue and rubric controller]
+        TrustController[TrustScore ledger and policy engine]
+        GigController[GIG discovery and application controller]
+        TaskController[Interview, delivery and workspace bridge]
+        CompanyController[Company, talent and project controller]
+        NetworkController[Connection and Team-Up controller]
+        PaymentController[External payment and earnings controllers]
+
+        Router --> Security --> Validation
+        Validation --> StudentController
+        Validation --> SkillController
+        Validation --> ReviewerController
+        Validation --> TrustController
+        Validation --> GigController
+        Validation --> TaskController
+        Validation --> CompanyController
+        Validation --> NetworkController
+        Validation --> PaymentController
+    end
+
+    ApiClient -->|HTTPS requests and JSON responses| Router
+
+    subgraph Database[MongoDB Data Layer through Mongoose]
+        Students[(Students: profile, sessions, Skill Hub state, GIG state and TrustScore ledger)]
+        Companies[(Companies: profile, GIG state, task library and project workspace)]
+        Reviewers[(Reviewers: credentials, role and sessions)]
+        Assessments[(SkillAssessments: evidence, rubric, claim and review history)]
+        Submissions[(TaskSubmissions: interview, delivery, payment and completion state)]
+        Connections[(NetworkConnections and TeamPosts)]
+        Metrics[(SiteMetrics)]
+    end
+
+    StudentController <--> Students
+    SkillController <--> Students
+    SkillController <--> Assessments
+    SkillController --> Companies
+    ReviewerController <--> Reviewers
+    ReviewerController <--> Assessments
+    ReviewerController --> Students
+    TrustController <--> Students
+    GigController <--> Students
+    GigController <--> Companies
+    TaskController <--> Submissions
+    TaskController <--> Students
+    TaskController <--> Companies
+    CompanyController <--> Companies
+    CompanyController --> Students
+    CompanyController --> Submissions
+    NetworkController <--> Connections
+    NetworkController --> Students
+    PaymentController <--> Submissions
+    PaymentController --> Students
+    PaymentController --> Companies
+    Router --> Metrics
+
+    subgraph Workflows[Cross-Role Workflows]
+        SkillFlow[Skill evidence submitted]
+        BlindReview[Blind rubric review]
+        SkillResult[Verified skill, activity log and TrustScore update]
+        GigFlow[GIG published, discovered and applied to]
+        InterviewFlow[Interview assignment, review and student selection]
+        WorkFlow[Project work, milestones, delivery and approval]
+        PayFlow[External payment recorded, GIG completed and TrustScore updated]
+
+        SkillFlow --> BlindReview --> SkillResult
+        GigFlow --> InterviewFlow --> WorkFlow --> PayFlow
+    end
+
+    StudentUI -.-> SkillFlow
+    SkillFlow -.-> SkillController
+    ReviewerUI -.-> BlindReview
+    BlindReview -.-> ReviewerController
+    SkillResult -.-> TrustController
+    SkillResult -.-> StudentUI
+
+    CompanyUI -.-> GigFlow
+    StudentUI -.-> GigFlow
+    GigFlow -.-> GigController
+    InterviewFlow -.-> TaskController
+    WorkFlow -.-> CompanyController
+    PayFlow -.-> PaymentController
+    PayFlow -.-> StudentUI
+    PayFlow -.-> CompanyUI
+```
+
+> ⚡ **Quick flow:** Platform user → role-based workspace → authenticated controller → shared database → synchronized result across roles.
+
+### 3. 💼 Full GIG Pipeline
 
 ```mermaid
 flowchart TD
-    A[User opens SkillBridge] --> B{Choose user type}
+    subgraph CompanySetup[Company GIG Management]
+        Create[Create GIG with title, skills, budget, location, type and deadline]
+        Publish[Publish with Hiring status]
+        CompanyState[(Company gigManagementState)]
+        Create --> Publish --> CompanyState
+    end
 
-    B --> C[Student Experience]
-    B --> D[Company Experience]
+    subgraph StudentDiscovery[Student GIG Center]
+        Browse[Load browsable company GIGs]
+        Match[Calculate profile-skill match percentage]
+        Save[Save or unsave GIG]
+        Apply[Apply to GIG]
+        StudentGigState[(Student gigState)]
 
-    C --> C1[Build profile and portfolio]
-    C1 --> C2[Verify skills in Skill Hub]
-    C2 --> C3[Improve TrustScore]
-    C3 --> C4[Browse gigs and receive company invites]
-    C4 --> C5[Complete interview tasks]
-    C5 --> C6[Track active gigs and earnings]
-    C6 --> API[Backend API]
+        Browse --> Match
+        Match --> Save --> StudentGigState
+        Match --> Apply --> StudentGigState
+    end
 
-    D --> D1[Set up business profile]
-    D1 --> D2[Create and manage gigs]
-    D2 --> D3[Search talent using skills and TrustScore]
-    D3 --> D4[Review student profiles and task submissions]
-    D4 --> D5[Manage workspace and payments]
-    D5 --> API
+    CompanyState -->|Hiring, Reviewing or In Progress listings| Browse
+    Apply -->|Add applicant and update company metrics| CompanyState
 
-    API --> E[Controllers and Business Logic]
-    E --> F[Session Auth and Rate Limiting]
-    F --> G[(MongoDB Database)]
+    subgraph CandidateSelection[Applicant and Invitation Flow]
+        Applicants[Company reviews current applicant profiles]
+        Talent[Company discovers talent directly]
+        Assignment[Create or select a validated interview assignment]
+        Send[Send interview task]
+        Opportunity[(Student opportunity snapshot)]
+        Choice{Student decision}
+        Declined[Declined opportunity]
+        Accepted[Accepted opportunity]
 
-    G --> H[Students]
-    G --> I[Companies]
-    G --> J[Task Submissions]
-    G --> K[Dashboard State]
+        Applicants --> Assignment
+        Talent -->|Direct invite| Assignment
+        Assignment --> Send --> Opportunity --> Choice
+        Choice -->|Decline| Declined
+        Choice -->|Accept| Accepted
+    end
+
+    CompanyState --> Applicants
+    StudentGigState --> Applicants
+
+    subgraph Interview[Interview Assessment]
+        OpenTask[Open accepted assignment]
+        TaskType{Assignment type}
+        Written[Written or MCQ response]
+        Project[Code or live-project link]
+        Mixed[Mixed evidence]
+        SubmitInterview[Submit interview evidence]
+        Submission[(TaskSubmission document)]
+        ReviewInterview{Company review}
+        InterviewRevision[Needs revision with feedback]
+        InterviewRejected[Rejected]
+        Reviewed[Reviewed and scored]
+        Selected[Student selected]
+
+        OpenTask --> TaskType
+        TaskType --> Written
+        TaskType --> Project
+        TaskType --> Mixed
+        Written --> SubmitInterview
+        Project --> SubmitInterview
+        Mixed --> SubmitInterview
+        SubmitInterview -->|Status: submitted| Submission --> ReviewInterview
+        ReviewInterview -->|Needs revision| InterviewRevision --> SubmitInterview
+        ReviewInterview -->|Reject| InterviewRejected
+        ReviewInterview -->|Review| Reviewed
+        Reviewed -->|Select or ready to hire| Selected
+    end
+
+    Accepted --> OpenTask
+
+    subgraph Delivery[Active Work and Delivery]
+        Kickoff[Company starts work and records work brief]
+        WorkStarted[Status: work started]
+        Workspace[Project Workspace generated from selected submission]
+        Updates[Company shares project updates]
+        Milestones[Company creates, completes or reopens milestones]
+        StudentWork[Student views workspace and completes real work]
+        Deliver[Student submits final delivery]
+        DeliveryReview{Company reviews delivery}
+        DeliveryRevision[Needs revision with delivery-stage return state]
+        Approved[Status: approved]
+
+        Selected --> Kickoff --> WorkStarted --> Workspace
+        Workspace --> Updates
+        Workspace --> Milestones
+        Workspace --> StudentWork --> Deliver
+        Deliver -->|Status: delivered| DeliveryReview
+        DeliveryReview -->|Needs revision| DeliveryRevision --> StudentWork
+        DeliveryReview -->|Approve| Approved
+    end
+
+    subgraph ExternalPayment[External Payment Recording]
+        Pending[Approved work appears as awaiting payment]
+        PayOutside[Company pays student outside SkillBridge]
+        Confirm[Company confirms payment was already made]
+        ValidatePayment[Validate ownership, amount, INR date, method and unique reference]
+        PaymentTransaction[Atomic payment and reputation transaction]
+        Completed[Status: completed]
+        PaymentRecord[(TaskSubmission externalPayment record)]
+
+        Approved --> Pending --> PayOutside --> Confirm --> ValidatePayment --> PaymentTransaction
+        PaymentTransaction --> Completed
+        PaymentTransaction --> PaymentRecord
+    end
+
+    subgraph Results[Shared Results]
+        StudentCompleted[Student Completed GIGs]
+        CompanyHistory[Company payment history and project history]
+        StudentEarnings[Student read-only earnings history]
+        TrustEvent[(TrustScore event: gig completed)]
+        TrustScore[Recalculate TrustScore with +150 base GIG credit]
+        Profile[Updated student profile and company talent view]
+
+        Completed --> StudentCompleted
+        Completed --> CompanyHistory
+        PaymentRecord --> StudentEarnings
+        PaymentTransaction --> TrustEvent --> TrustScore --> Profile
+    end
+
+    Submission -.->|Stable company, GIG, opportunity and student IDs| Workspace
+    Completed -.->|Removed from Active GIGs| StudentCompleted
 ```
 
-### 3. Full GIG Pipeline
+> ⚡ **Quick flow:** Company publishes GIG → student applies and completes interview → company selects → student delivers work → company approves and records external payment → GIG completes and TrustScore updates.
+
+### 4. 🎓 Full Skill Hub Pipeline
 
 ```mermaid
 flowchart TD
-    subgraph Company[Company]
-        Publish[GIG Management: Publish GIG]
-        Applicants[Review applications]
-        Assign[Send saved or new interview assignment]
-        Review{Review interview submission}
-        Reject[Reject application]
-        Select[Select student]
-        Start[Project Workspace: Start GIG work]
-        Track[Track updates and milestones]
-        Delivery{Review final delivery}
-        Approve[Approve work]
-        Pending[Payment: Awaiting payment]
-        Pay[Pay student outside SkillBridge]
-        Record[Record amount, date, method and transaction reference]
-        History[Payment History]
+    subgraph StudentActions[Student Skill Hub]
+        Add[Add skill to profile]
+        Archive[Archive a skill from public matching]
+        Restore[Restore archived skill]
+        Select{Choose assessment action}
+        Verify[Verify an unverified skill]
+        Reverify[Renew a due or expired skill]
+        Upgrade[Upgrade an active verified skill]
+        Retain[Submit daily practice for an active skill]
+        Challenge[Complete a challenge for its matching skill]
+        Evidence[Submit written response and optional evidence link]
+
+        Add -->|No TrustScore credit| Select
+        Add --> Archive
+        Archive -->|Keep reviewed history; hide from profile and matching| Restore
+        Restore --> Select
+        Select --> Verify
+        Select --> Reverify
+        Select --> Upgrade
+        Select --> Retain
+        Select --> Challenge
+        Verify --> Evidence
+        Reverify --> Evidence
+        Upgrade --> Evidence
+        Retain --> Evidence
+        Challenge --> Evidence
     end
 
-    subgraph Student[Student]
-        Browse[GIG Center: Browse and save GIGs]
-        Apply[Apply for GIG]
-        Invite{Opportunity: Accept invitation?}
-        Decline[Decline invitation]
-        Task[Complete and submit interview task]
-        ReviseTask[Revise interview task]
-        Active[Active GIG: Complete project work]
-        Submit[Submit final deliverable]
-        ReviseWork[Revise project work]
-        EarningsPending[Earnings: Pending payment]
-        EarningsRecorded[Earnings: Company-recorded external payment]
-        Complete[Completed GIGs]
+    subgraph SubmissionAPI[Student API and Validation]
+        Validate{Validate assessment}
+        Rules[Check skill ownership, mode eligibility, response length, URL, next level and challenge match]
+        Duplicate{Open or same-day attempt already exists?}
+        Assessment[(SkillAssessment document)]
+        Pending[Status: pending]
+
+        Validate --> Rules --> Duplicate
+        Duplicate -->|Yes| Conflict[Return conflict without changing TrustScore]
+        Duplicate -->|No| Assessment --> Pending
     end
 
-    Publish --> Browse --> Apply --> Applicants --> Assign --> Invite
-    Invite -->|No| Decline
-    Invite -->|Yes| Task --> Review
-    Review -->|Revision requested| ReviseTask --> Task
-    Review -->|Rejected| Reject
-    Review -->|Selected| Select --> Start
-    Start --> Track
-    Start --> Active --> Submit --> Delivery
-    Track -.-> Delivery
-    Delivery -->|Revision requested| ReviseWork --> Submit
-    Delivery -->|Approved| Approve --> Pending --> Pay --> Record
-    Approve --> EarningsPending
-    Record --> History
-    Record --> EarningsRecorded
-    Record --> Complete
+    Evidence -->|POST student assessments| Validate
 
-    subgraph Trust[Trust and Reputation]
-        Evidence[Task evidence and work outcomes]
-        Center[Trust Center: Evidence review]
-        Score[TrustScore]
-        Reconcile[Completion hook reconciliation pending]
-        Evidence -.-> Center -.-> Score
-        Reconcile -.-> Score
+    subgraph ReviewerPipeline[Blind Platform Reviewer]
+        Queue[Available review queue]
+        Blind[Student identity, college, location, photo and TrustScore hidden]
+        Claim[Reviewer claims assessment with expiring lease]
+        Rubric[Score rubric: correctness 40%, evidence 20%, understanding 20%, testing 10%, communication 10%]
+        Decision{Reviewer decision}
+
+        Queue --> Blind --> Claim --> Rubric --> Decision
     end
 
-    Task -.-> Evidence
-    Submit -.-> Evidence
-    Complete -.-> Reconcile
+    Pending --> Queue
+
+    Decision -->|Request revision| Revision[Status: needs revision]
+    Revision --> Resubmit[Student edits and resubmits the same assessment]
+    Resubmit -->|Original earned day retained| Pending
+
+    Decision -->|Reject| Rejected[Status: rejected; no skill reward]
+    Rejected --> LowScore{Rubric below 40?}
+    LowScore -->|Yes| Penalty[Record assessment-below-standard event: -10]
+    LowScore -->|No| AuditOnly[Keep feedback and review history]
+
+    Decision -->|Approve; rubric at least 70| Transaction[MongoDB transaction]
+
+    subgraph ApprovalEffects[Transactional Approval Effects]
+        ModeEvent{Assessment mode}
+        Verified[Activate skill verification and set 365-day renewal]
+        Renewed[Renew active verification for 365 days]
+        Upgraded[Move skill to the next stage]
+        Practiced[Record approved practice day and recalculate streak]
+        Challenged[Record approved challenge completion]
+        SkillLog[(Student skillHubState.skillLog)]
+        Ledger[(Student trustScoreState.events)]
+        Quality{Rubric at least 90?}
+        QualityCredit[Record high-quality assessment event: +25]
+
+        Transaction --> ModeEvent
+        ModeEvent -->|Verify| Verified
+        ModeEvent -->|Reverify| Renewed
+        ModeEvent -->|Upgrade| Upgraded
+        ModeEvent -->|Retention| Practiced
+        ModeEvent -->|Challenge| Challenged
+        Verified -->|+60 base points| SkillLog
+        Renewed -->|+50 base points| SkillLog
+        Upgraded -->|+100 base points| SkillLog
+        Practiced -->|+20 per approved day| SkillLog
+        Challenged -->|+80 per approved day| SkillLog
+        SkillLog --> Ledger
+        Ledger --> Quality
+        Quality -->|Yes| QualityCredit --> Ledger
+        Quality -->|No| Recalculate
+    end
+
+    Penalty --> Ledger
+    AuditOnly --> ReviewHistory[(Assessment review history)]
+    Revision --> ReviewHistory
+    Rejected --> ReviewHistory
+    Transaction --> ReviewHistory
+
+    subgraph TrustPolicy[TrustScore Policy Engine]
+        Recalculate[Deduplicate ledger events and recalculate score]
+        Caps[Apply category caps and tier weighting]
+        Gates[Apply evidence ceilings from verified skills, skill levels, completed GIGs, practice days and quality reviews]
+        Expiry[Expired verified skill: record -80 penalty for 90 days]
+        Score[(Current TrustScore)]
+
+        Ledger --> Recalculate
+        Expiry --> Ledger
+        Recalculate --> Caps --> Gates --> Score
+    end
+
+    subgraph StudentResults[Student and Public Results]
+        Hub[Skill Hub refresh]
+        Skills[My Skills: verification, stage, renewal, archive state and assessment history]
+        Daily[Daily Task and Challenge completion]
+        Streak[Streak calendar and practice totals]
+        Heatmap[Profile approved-activity heatmap]
+        Profile[Profile: active verified skills and TrustScore]
+        TrustPage[TrustScore ledger, tier and evidence requirements]
+        Gap[Skill Gap Report compares active verified skills with active company GIG requirements]
+
+        Score --> Hub
+        SkillLog --> Hub
+        ReviewHistory --> Hub
+        Hub --> Skills
+        Hub --> Daily
+        Hub --> Streak
+        Hub --> Heatmap
+        Hub --> Profile
+        Hub --> TrustPage
+        Hub --> Gap
+    end
+
+    Transaction -->|Approval and reputation update both commit or both roll back| Score
 ```
+
+> ⚡ **Quick flow:** Student submits skill evidence → reviewer claims and scores it → approved result updates skill status, activity, and TrustScore → verified evidence appears across the profile and platform. Students can archive a skill to remove it from public matching while retaining its reviewed history.
 
 ## 📁 Folder Structure
 
 ```text
-skillbridge/                              # Project root
-├── .agents/                              # Agent config folder
-├── .claude/
-│   └── settings.local.json               # Local Claude settings
-├── .codex/                               # Codex workspace folder
+skillbridge/
 ├── .github/
-│   └── workflows/
-│       └── ci.yml                        # GitHub Actions CI pipeline
-├── .qodo/
-│   ├── agents/                           # Qodo agent config folder
-│   └── workflows/                        # Qodo workflow config folder
-├── .vscode/
-│   └── settings.json                     # VS Code workspace settings
-├── client/                               # React + Vite frontend
-│   ├── public/                           # Static public assets
-│   │   ├── favicon.svg                   # Browser favicon
-│   │   ├── icons.svg                     # Shared icon sprite/assets
-│   │   └── logo.png                      # SkillBridge logo
-│   ├── src/                              # Frontend source code
-│   │   ├── assets/                       # Intro videos and media files
-│   │   │   ├── companyintro.mp4          # Company intro video
-│   │   │   ├── otherintroduction.mp4     # Default intro video
-│   │   │   ├── screenshots/              # README screenshots
-│   │   │   │   ├── company-dashboard.png # Company dashboard screenshot
-│   │   │   │   ├── company-gig-management.png # Gig management screenshot
-│   │   │   │   ├── landing-page.png      # Landing page screenshot
-│   │   │   │   ├── payment-center.png    # Payment center screenshot
-│   │   │   │   ├── project-workspace.png # Project workspace screenshot
-│   │   │   │   ├── skill-hub.png         # Skill Hub screenshot
-│   │   │   │   ├── student-dashboard.png # Student dashboard screenshot
-│   │   │   │   ├── student-network.png   # Student network screenshot
-│   │   │   │   └── talent-search.png     # Talent search screenshot
-│   │   │   └── studentintro.mp4          # Student intro video
-│   │   ├── company/                      # Company dashboard, auth, gigs, payments
-│   │   │   ├── GigManagement.jsx         # Company gig creation and applicant flow
-│   │   │   ├── PaymentSection.jsx        # Company payment center
-│   │   │   ├── ProjectWorkspace.jsx      # Active project workspace UI
-│   │   │   ├── SetupBusinessProfile.jsx  # Business profile setup form
-│   │   │   ├── company.jsx               # Main company dashboard
-│   │   │   ├── companyApi.js             # Company API helper functions
-│   │   │   ├── companyAuth.jsx           # Company sign in/sign up page
-│   │   │   ├── companyDemoData.js        # Company dashboard default data
-│   │   │   ├── companyGigDemoData.js     # Company gig default data
-│   │   │   ├── companyPaymentDemoData.js # Company payment default data
-│   │   │   ├── companyTalentDemoData.js  # Talent search default data
-│   │   │   └── companyWorkspaceDemoData.js # Workspace default data
-│   │   ├── config/api.js                 # Frontend API base URL config
-│   │   ├── landingpage/                  # Landing page sections
-│   │   │   ├── Features.jsx              # Landing feature section
-│   │   │   ├── Footer.jsx                # Landing footer and social links
-│   │   │   ├── Hero.jsx                  # Landing hero section
-│   │   │   ├── HowItWorks.jsx            # Workflow explanation section
-│   │   │   ├── LandingNav.jsx            # Landing navigation bar
-│   │   │   ├── LandingPage.jsx           # Landing page composition
-│   │   │   └── landingApi.js             # Landing page API calls
-│   │   ├── lib/apiRequest.js             # Shared fetch/API helper
-│   │   ├── student/                      # Student dashboard, auth, gigs, skills
-│   │   │   ├── earning/
-│   │   │   │   ├── earning.jsx           # Student earnings dashboard
-│   │   │   │   └── earningDemoData.js    # Earnings default data
-│   │   │   ├── gig/
-│   │   │   │   ├── HiringAlert.jsx       # Company invite alert UI
-│   │   │   │   ├── HiringResult.jsx      # Hiring/task result UI
-│   │   │   │   ├── Opportunity.jsx       # Individual opportunity card
-│   │   │   │   ├── gig.jsx               # Student GIG Center
-│   │   │   │   └── gigDemoData.js        # Gig default data
-│   │   │   ├── network/
-│   │   │   │   ├── MyNetwork.jsx         # Saved network view
-│   │   │   │   ├── NetworkContext.jsx    # Network state context
-│   │   │   │   ├── network.jsx           # Network module wrapper
-│   │   │   │   ├── networkDemoData.js    # Network default data
-│   │   │   │   ├── networkhome.jsx       # Network discovery page
-│   │   │   │   ├── networknav.jsx        # Network sub-navigation
-│   │   │   │   └── networkteamup.jsx     # Team-up request page
-│   │   │   ├── profile/                  # Reserved profile module folder
-│   │   │   ├── skillhub/
-│   │   │   │   ├── Dailychallenge.jsx    # Daily challenge UI
-│   │   │   │   ├── skillHubDemoData.js   # Skill Hub default data
-│   │   │   │   ├── skillgapreport.jsx    # Skill gap report UI
-│   │   │   │   └── skillhub.jsx          # Main Skill Hub dashboard
-│   │   │   ├── task/
-│   │   │   │   ├── ComanyTaskpage.jsx    # Company task page component
-│   │   │   │   └── Taskpage.jsx          # Student task submission page
-│   │   │   ├── student.jsx               # Main student dashboard
-│   │   │   ├── studentApi.js             # Student API helper functions
-│   │   │   ├── studentAuth.jsx           # Student sign in/sign up page
-│   │   │   ├── studentNav.jsx            # Student top navigation
-│   │   │   ├── studentProfileDefaults.js # Student profile defaults
-│   │   │   ├── studentSidebar.jsx        # Student sidebar navigation
-│   │   │   └── trustscoreCriteria.jsx    # TrustScore criteria page
-│   │   ├── ui/                           # Shared UI helpers like toast
-│   │   │   ├── ToastViewport.jsx         # Toast render container
-│   │   │   └── toast.js                  # Toast state/actions
-│   │   ├── App.jsx                       # Main React routes
-│   │   ├── index.css                     # Global styles and responsive CSS
-│   │   └── main.jsx                      # React app entry point
-│   ├── eslint.config.js                  # Frontend ESLint config
-│   ├── index.html                        # Vite HTML entry
-│   ├── package-lock.json                 # Locked frontend dependencies
-│   ├── package.json                      # Frontend scripts and dependencies
-│   ├── vercel.json                       # Vercel frontend routing config
-│   └── vite.config.js                    # Vite build config
-├── scripts/                              # Project scripts, currently empty
-├── server/                               # Node.js + MongoDB backend
-│   ├── config/                           # Environment, DB, and default data
-│   │   ├── companyDefaults.js            # Company dashboard defaults
-│   │   ├── companyGigDefaults.js         # Company gig defaults
-│   │   ├── companyPaymentDefaults.js     # Company payment defaults
-│   │   ├── companyWorkspaceDefaults.js   # Company workspace defaults
-│   │   ├── db.js                         # MongoDB connection helper
-│   │   ├── earningDefaults.js            # Student earnings defaults
-│   │   ├── env.js                        # Environment variable loader
-│   │   ├── gigDefaults.js                # Student gig defaults
-│   │   ├── networkDefaults.js            # Student network defaults
-│   │   ├── skillHubDefaults.js           # Skill Hub defaults
-│   │   ├── studentDefaults.js            # Student profile defaults
-│   │   └── trustScoreDefaults.js         # TrustScore defaults
-│   ├── controllers/                      # API business logic
-│   │   ├── companyController.js          # Company auth/profile/state logic
-│   │   ├── earningController.js          # Student earnings logic
-│   │   ├── gigController.js              # Student gig action logic
-│   │   ├── networkController.js          # Student network logic
-│   │   ├── siteMetricController.js       # Site view counter logic
-│   │   ├── skillHubController.js         # Skill Hub logic
-│   │   ├── studentController.js          # Student auth/profile logic
-│   │   ├── taskBridgeController.js       # Task submit/review bridge logic
-│   │   └── trustScoreController.js       # TrustScore read logic
-│   ├── models/                           # Mongoose schemas
-│   │   ├── Company.js                    # Company schema
-│   │   ├── SiteMetric.js                 # Site metric schema
-│   │   ├── Student.js                    # Student schema
-│   │   └── TaskSubmission.js             # Task submission schema
-│   ├── tests/                            # Backend unit tests
-│   │   ├── auth.test.js                  # Auth utility tests
-│   │   ├── rateLimit.test.js             # Rate limiter tests
-│   │   ├── sectionUsage.test.js          # Daily section usage tests
-│   │   ├── session.test.js               # Session TTL tests
-│   │   ├── siteMetric.test.js            # Site metric tests
-│   │   └── templateState.test.js         # Template state tests
-│   ├── utils/                            # Auth, sessions, rate limit, logging
-│   │   ├── auth.js                       # Password hashing and token helpers
-│   │   ├── logger.js                     # Request/error logging helpers
-│   │   ├── rateLimit.js                  # Rate limit helper
-│   │   ├── request.js                    # JSON body and bearer token helpers
-│   │   ├── sectionUsage.js               # Daily write-limit helper
-│   │   ├── session.js                    # Session validation helper
-│   │   └── templateState.js              # Merge/reduce default state helper
-│   ├── .env.example                      # Example backend environment variables
-│   ├── package-lock.json                 # Locked backend dependencies
-│   ├── package.json                      # Backend scripts and dependencies
-│   └── server.js                         # Backend HTTP server and API routes
-├── .gitignore                            # Git ignore rules
-├── render.yaml                           # Render backend deployment config
-└── README.md                             # Project documentation
+│   └── workflows/ci.yml            # Lint, build and server test pipeline
+├── client/                         # React 19 + Vite frontend
+│   ├── public/                     # Static browser assets
+│   ├── src/
+│   │   ├── assets/                 # Runtime video assets
+│   │   ├── auth/                   # Shared login portal
+│   │   ├── company/                # Company dashboard and workflows
+│   │   ├── config/                 # Frontend runtime configuration
+│   │   ├── landing/                # Public landing experience
+│   │   ├── lib/                    # API, URL and formatting helpers
+│   │   ├── reviewer/               # Reviewer auth and assessment queue
+│   │   ├── student/                # Student dashboard and workflows
+│   │   │   ├── earning/            # Earnings read model
+│   │   │   ├── gig/                # GIG discovery and applications
+│   │   │   ├── network/            # Connections and Team-Up
+│   │   │   ├── skillhub/           # Skills, practice, streak and gap report
+│   │   │   └── task/               # Interview and assessment submissions
+│   │   ├── ui/                     # Shared profile, loading and toast UI
+│   │   ├── App.jsx                 # Routes and protected workspaces
+│   │   └── main.jsx                # Browser entry point
+│   ├── package.json                # Frontend dependencies and commands
+│   ├── vercel.json                 # SPA deployment rewrite
+│   └── vite.config.js              # Vite configuration
+├── server/                         # Node.js API and MongoDB persistence
+│   ├── config/                     # Environment, policies and default state
+│   ├── controllers/                # Domain and request handlers
+│   ├── models/                     # Eight Mongoose collection schemas
+│   ├── scripts/                    # Reviewer, seed and reconciliation tools
+│   ├── tests/                      # Backend unit and workflow tests
+│   ├── utils/                      # Auth, validation, policy and logging helpers
+│   ├── package.json                # Backend dependencies and commands
+│   └── server.js                   # Native HTTP router and server entry
+├── docs/                           # Documentation
+│   ├── assets/
+│   │   └── screenshots/            # README product screenshots
+│   ├── assessment-operations.md    # Reviewer workflow notes
+│   ├── gig-pipeline-verification.md
+│   ├── landing-page.md
+│   └── trustscore-v2.md
+├── render.yaml                     # Render backend deployment
+└── README.md
 ```
 
 ## 🗄️ Database Design
 
-### 1. Database Schema / Entity Relationship Diagram (ERD)
+### 1. 🧩 Persistence Model
 
-SkillBridge uses MongoDB with Mongoose. The backend currently has three main collections: `students`, `companies`, and `tasksubmissions`.
+SkillBridge uses MongoDB through Mongoose. Account-owned state is embedded in the relevant student or company document, while records that have an independent lifecycle, concurrent actors, or audit requirements use dedicated collections.
 
-#### Main Collections
+#### Current Collections
 
-| Module | Collections | Stored Data |
+| Collection | Owner / References | Purpose |
 | --- | --- | --- |
-| Student Profile | `students` | Student identity, contact details, location, preferred language, portfolio links, projects, intro video, skills, and TrustScore. |
-| Student GIGs | `students` | GIG opportunities, browsed gigs, saved gig IDs, applied gig IDs, active gigs, completed gigs, and invite status. |
-| Skill Hub | `students` | Verified skills, skill levels, categories, renewal status, trust gain/loss values, streaks, and missed days. |
-| Network | `students` | Peer discovery state, saved connections, team-up requests, accepted requests, and network activity. |
-| Earnings | `students` | Wallet stats, payment history, UPI accounts, selected withdrawal method, and withdrawal amount. |
-| Company Profile | `companies` | Business identity, contact details, GSTIN/business document data, location, hiring categories, work modes, and business profile setup. |
-| Company GIG Management | `companies` | Posted gigs, applicant pipeline, review stages, recent activity, and task-review state. |
-| Company Workspace | `companies` | Active projects, project status, workspace tasks, team members, deadlines, and delivery progress. |
-| Company Payments | `companies` | Company wallet, escrow tracking, payment methods, payout history, and payment dashboard state. |
-| Task Review | `tasksubmissions` | Student task submissions, project links, notes, matched skills, company review status, feedback, and submission timestamps. |
-| Sessions & Usage | `students`, `companies` | Session tokens, session creation time, daily section usage, and request-limit related account activity. |
+| `students` | Student account | Identity, profile, portfolio, Skill Hub state, verified skills, TrustScore event ledger, GIG state, sessions, and usage data. |
+| `companies` | Company account | Business profile, GIG management, task library, private review guides, project workspace, sessions, and usage data. |
+| `reviewers` | Reviewer account | Reviewer/admin identity, active status, authentication sessions, and last sign-in time. |
+| `skillassessments` | References `Student`; optionally `Reviewer` | Verification, re-verification, upgrade, retention, and challenge submissions with evidence, rubric scores, feedback, claim ownership, and review history. |
+| `tasksubmissions` | References `Student` and `Company` | Stable record shared by the interview, selection, workspace, delivery, approval, external-payment, completion, and TrustScore pipeline. |
+| `networkconnections` | References requester and recipient `Student` | One normalized relationship per student pair with pending, accepted, or declined status. |
+| `teamposts` | References owner and participating `Student` records | Collaboration posts, required skills, available slots, applications/invitations, and membership decisions. |
+| `sitemetrics` | Platform-owned | Atomic counters such as site views, keyed by metric name. |
+
+### 2. 🗺️ Entity Relationship Diagram (ERD)
 
 ```mermaid
 erDiagram
+    STUDENT ||--o{ SKILL_ASSESSMENT : submits
+    REVIEWER o|--o{ SKILL_ASSESSMENT : reviews
     STUDENT ||--o{ TASK_SUBMISSION : submits
+    COMPANY ||--o{ TASK_SUBMISSION : owns
+    STUDENT ||--o{ NETWORK_CONNECTION : requests
+    STUDENT ||--o{ NETWORK_CONNECTION : receives
+    STUDENT ||--o{ TEAM_POST : creates
+    STUDENT }o--o{ TEAM_POST : participates
 
     STUDENT {
         ObjectId _id
         string name
         string email
-        string phone
         string passwordHash
-        string preferredLanguage
         string location
-        string contactMethod
-        string verificationMethod
         number trustScore
         array skills
-        array githubLink
-        array contactInfo
         array projects
         string videoUrl
         array skillHubSkills
+        object skillHubState
+        object trustScoreState
         object gigState
-        object networkState
-        object earningState
-        object dailySectionUsage
         array sessions
         date createdAt
         date updatedAt
@@ -394,247 +593,308 @@ erDiagram
         ObjectId _id
         string businessName
         string email
-        string phone
         string passwordHash
-        string contactMethod
-        string verificationMethod
-        string gstin
-        string businessDoc
         string location
         object businessProfile
         object dashboardState
         object gigManagementState
+        object taskLibraryState
+        object taskReviewGuides
         object projectWorkspaceState
-        object paymentState
-        object dailySectionUsage
         array sessions
         date createdAt
         date updatedAt
     }
 
+    REVIEWER {
+        ObjectId _id
+        string name
+        string email
+        string passwordHash
+        string role
+        boolean active
+        array sessions
+        date lastSignedInAt
+    }
+
+    SKILL_ASSESSMENT {
+        ObjectId _id
+        ObjectId studentId
+        ObjectId assignedReviewerId
+        string skillName
+        string mode
+        string targetStage
+        string attemptKey
+        string evidenceLink
+        string response
+        string status
+        boolean open
+        object rubric
+        string feedback
+        array reviewHistory
+        date reviewedAt
+    }
+
     TASK_SUBMISSION {
         ObjectId _id
         ObjectId studentId
-        string studentName
-        string studentLocation
-        number studentTrustScore
-        array studentSkills
-        object studentSkillsByLevel
-        string studentGithub
+        ObjectId companyId
+        number companyGigId
+        string companyGigPublicId
         number opportunityId
         string gigTitle
-        string companyName
-        string companyLocation
+        string taskTitle
+        object taskDetails
+        object interviewSubmission
         array matchedSkills
         string submissionLink
-        string note
+        string submissionContent
         string status
+        number score
         string feedback
+        object externalPayment
+        date completedAt
         date submittedAt
         date reviewedAt
-        date createdAt
+    }
+
+    NETWORK_CONNECTION {
+        ObjectId _id
+        string pairKey
+        ObjectId requester
+        ObjectId recipient
+        string status
+        date respondedAt
+    }
+
+    TEAM_POST {
+        ObjectId _id
+        ObjectId owner
+        string title
+        string description
+        string type
+        array requiredSkills
+        number slots
+        string status
+        array requests
+    }
+
+    SITE_METRIC {
+        ObjectId _id
+        string key
+        number count
         date updatedAt
     }
 ```
 
-Key relationships:
+### 3. 🧠 Embedded State and Derived Views
 
-- `TaskSubmission.studentId` references a `Student`.
-- Student and company sessions are stored inside their respective documents.
-- Student dashboard sections such as gigs, skills, network, and earnings are persisted as nested state.
-- Company dashboard sections such as gig management, workspace, and payments are persisted as nested state.
+| Data | Source of truth | How it is used |
+| --- | --- | --- |
+| Student profile and portfolio | `students` | Public profile responses expose a sanitized projection rather than copying data into another collection. |
+| Verified skill level and renewal status | `students.skillHubSkills` | Updated only after reviewer-approved assessment outcomes and displayed in Skill Hub, Network, GIG matching, and the public profile. |
+| Skill activity, streak, and gap snapshot | `students.skillHubState` | Activity is built from approved events; the gap report compares verified skills with active company GIG requirements. |
+| TrustScore | `students.trustScoreState.events` | The event ledger is authoritative; `students.trustScore` is the materialized total used for fast sorting and display. |
+| GIG definition and applicant pipeline | `companies.gigManagementState` | Drives opportunity discovery, applications, company review, and selection. |
+| Interview and delivery lifecycle | `tasksubmissions` | Connects the student, company, GIG, task, workspace, revision, approval, payment, and completion stages. |
+| Earnings and payment history | `tasksubmissions.externalPayment` | Student earnings and company payment screens are derived from externally paid submissions; SkillBridge stores no wallet, escrow, or withdrawable balance. |
+| Network cards and team-up views | `students`, `networkconnections`, `teamposts` | API responses join current profile/skill data with relationship and collaboration records. |
 
-## 🖼️ Screenshots
+### 4. 🛡️ Integrity and Concurrency Controls
 
-Screenshots from the main SkillBridge user flows.
+- Unique account identifiers prevent duplicate logins within each student, company, and reviewer account collection.
+- Partial unique indexes allow only one open Skill Hub assessment per student attempt, while queue indexes support reviewer claims and history lookup.
+- A normalized unique `pairKey` prevents duplicate network relationships between the same two students.
+- A compound unique index prevents duplicate task submissions for the same student, company, GIG, and opportunity.
+- External transaction references are unique per company, making payment recording idempotent and auditable.
+- Optimistic concurrency protects student TrustScore/Skill Hub updates, assessment reviews, task submissions, and team-post decisions from silent overwrite.
+- MongoDB transactions couple approved assessment or payment changes with their related TrustScore event, so cross-document updates succeed or fail together.
 
-| Page / Flow | Preview |
+## 🖼️ Product Screens
+
+| 🎓 Student experience | 🏢 Company experience |
 | --- | --- |
-| Landing Page | <img src="client/src/assets/screenshots/landing-page.png" width="420" alt="SkillBridge landing page screenshot" /> |
-| Student Dashboard / GIG Center | <img src="client/src/assets/screenshots/student-dashboard.png" width="420" alt="SkillBridge student dashboard screenshot" /> |
-| Skill Hub | <img src="client/src/assets/screenshots/skill-hub.png" width="420" alt="SkillBridge Skill Hub screenshot" /> |
-| Student Network | <img src="client/src/assets/screenshots/student-network.png" width="420" alt="SkillBridge student network screenshot" /> |
-| Company Dashboard | <img src="client/src/assets/screenshots/company-dashboard.png" width="420" alt="SkillBridge company dashboard screenshot" /> |
-| GIG Management | <img src="client/src/assets/screenshots/company-gig-management.png" width="420" alt="SkillBridge company GIG management screenshot" /> |
-| Talent Search | <img src="client/src/assets/screenshots/talent-search.png" width="420" alt="SkillBridge talent search screenshot" /> |
-| Project Workspace | <img src="client/src/assets/screenshots/project-workspace.png" width="420" alt="SkillBridge project workspace screenshot" /> |
-| Payment Center | <img src="client/src/assets/screenshots/payment-center.png" width="420" alt="SkillBridge payment center screenshot" /> |
+| **GIG Center**<br><img src="docs/assets/screenshots/student-dashboard.png" width="460" alt="Student GIG Center" /> | **Company Dashboard**<br><img src="docs/assets/screenshots/company-dashboard.png" width="460" alt="Company dashboard" /> |
+| **Skill Hub**<br><img src="docs/assets/screenshots/skill-hub.png" width="460" alt="Skill Hub" /> | **GIG Management**<br><img src="docs/assets/screenshots/company-gig-management.png" width="460" alt="Company GIG management" /> |
+| **Peer Network**<br><img src="docs/assets/screenshots/student-network.png" width="460" alt="Student network" /> | **Talent Search**<br><img src="docs/assets/screenshots/talent-search.png" width="460" alt="Company talent search" /> |
+| **Landing Experience**<br><img src="docs/assets/screenshots/landing-page.png" width="460" alt="SkillBridge landing page" /> | **Project and Payment Operations**<br><img src="docs/assets/screenshots/project-workspace.png" width="225" alt="Project workspace" /> <img src="docs/assets/screenshots/payment-center.png" width="225" alt="External payment center" /> |
 
 ## 🧰 Tech Stack
 
-| Layer | Technologies |
+| Area | Technology |
 | --- | --- |
-| Frontend | React, React Router DOM, Vite, CSS |
-| Backend | Node.js, Native HTTP Server |
-| Database | MongoDB, Mongoose |
-| Authentication | Custom session tokens, password hashing with Node.js `crypto` |
-| API Format | REST-style JSON APIs |
-| Testing | Node.js Test Runner, ESLint |
-| Deployment | Render backend configuration |
-| CI/CD | GitHub Actions |
+| Client | React 19, React Router 7, Vite 8, CSS, Lucide icons |
+| API | Node.js 22, native HTTP server, REST-style JSON |
+| Data | MongoDB, Mongoose 9 |
+| Authentication | Role-scoped bearer sessions and password hashing with Node.js crypto |
+| Reliability | Schema validation, optimistic concurrency, transactions, unique indexes, rate limits |
+| Testing | Node.js test runner, integration scripts, ESLint, Vite production build |
+| Delivery | Vercel frontend, Render backend, GitHub Actions CI |
 
-## ⚙️ Installation
+## ⚙️ Local Setup
 
-Clone the repository:
+### 📋 Prerequisites
 
-```bash
-git clone https://github.com/debarghya131/Skill-Bridge.git
-cd Skill-Bridge
-```
+- Node.js 22 or newer
+- npm
+- A local or hosted MongoDB deployment
 
-Install and run the backend:
+### 1. 📦 Clone and install
 
 ```bash
-cd server
-npm install
-npm run dev
+git clone https://github.com/debarghya131/SkillBridge.git
+cd SkillBridge
+cd server && npm ci
+cd ../client && npm ci
 ```
 
-Install and run the frontend in a new terminal:
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-The frontend runs on:
-
-```text
-http://localhost:5173
-```
-
-The backend runs on:
-
-```text
-http://localhost:5000
-```
-
-## 🔐 Environment Variables
-
-Create a `.env` file inside the `server/` folder:
+### 2. 🔧 Configure the API
 
 ```bash
 cd server
 cp .env.example .env
 ```
 
-Server environment variables:
+Set a valid `MONGO_URL` in `server/.env`. The provided defaults are suitable for a local frontend on `http://localhost:5173`.
 
-| Variable | Description |
-| --- | --- |
-| `NODE_ENV` | Application environment, such as `development` or `production` |
-| `MONGO_URL` | MongoDB connection string |
-| `PORT` | Backend server port |
-| `CORS_ORIGIN` | Allowed frontend origin |
-| `SESSION_TTL_DAYS` | Number of days before a session expires |
-| `MAX_SESSIONS_PER_ACCOUNT` | Maximum active sessions allowed per account |
-| `RATE_LIMIT_WINDOW_MS` | Rate-limit time window in milliseconds |
-| `RATE_LIMIT_MAX_REQUESTS` | Maximum general requests allowed per window |
-| `AUTH_RATE_LIMIT_MAX_REQUESTS` | Maximum auth requests allowed per window |
-| `DAILY_USER_RATE_LIMIT_MAX_REQUESTS` | Maximum authenticated requests allowed per user per day |
-| `DAILY_SECTION_OPERATION_LIMIT` | Maximum write operations per section per day |
-| `LOG_LEVEL` | Server logging level |
+### 3. ▶️ Start both applications
 
-Example:
+Terminal 1:
 
-```env
-NODE_ENV=development
-MONGO_URL=your_mongodb_connection_string
-PORT=5000
-CORS_ORIGIN=http://localhost:5173
-SESSION_TTL_DAYS=30
-MAX_SESSIONS_PER_ACCOUNT=5
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX_REQUESTS=120
-AUTH_RATE_LIMIT_MAX_REQUESTS=12
-DAILY_USER_RATE_LIMIT_MAX_REQUESTS=2000
-DAILY_SECTION_OPERATION_LIMIT=2
-LOG_LEVEL=info
+```bash
+cd server
+npm run dev
 ```
 
-Frontend environment variable:
+Terminal 2:
 
-| Variable | Description |
+```bash
+cd client
+npm run dev
+```
+
+| Service | Local URL |
 | --- | --- |
-| `VITE_API_URL` | Backend API URL used by the React client |
+| Web app | `http://localhost:5173` |
+| API | `http://localhost:5000` |
+| API readiness | `http://localhost:5000/ready` |
 
-Example `client/.env`:
+## 🔐 Configuration
+
+### 🖥️ Server: `server/.env`
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Runtime mode |
+| `MONGO_URL` | required | MongoDB connection string |
+| `DB_MAX_POOL_SIZE` | `20` | Maximum MongoDB connections per API instance |
+| `DB_MIN_POOL_SIZE` | `0` | Warm MongoDB connections retained per API instance |
+| `DB_MAX_IDLE_TIME_MS` | `30000` | Idle MongoDB connection lifetime |
+| `DB_SERVER_SELECTION_TIMEOUT_MS` | `10000` | MongoDB server-selection timeout |
+| `VERIFICATION_HASH_SECRET` | required in production | 32+ character secret used to HMAC identity/business verification references |
+| `PORT` | `5000` | API port |
+| `CORS_ORIGIN` | `http://localhost:5173` | Allowed client origin |
+| `SESSION_TTL_DAYS` | `30` | Session lifetime |
+| `MAX_SESSIONS_PER_ACCOUNT` | `5` | Concurrent session limit |
+| `REVIEW_CLAIM_TTL_MINUTES` | `240` | Reviewer claim lease duration |
+| `MAX_REQUEST_BODY_BYTES` | `8000000` | Maximum JSON request size |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | General rate-limit window |
+| `RATE_LIMIT_MAX_REQUESTS` | `120` | General requests per window |
+| `AUTH_RATE_LIMIT_MAX_REQUESTS` | `12` | Authentication requests per window |
+| `DAILY_USER_RATE_LIMIT_MAX_REQUESTS` | `2000` | Authenticated requests per user per day |
+| `DAILY_SECTION_OPERATION_LIMIT` | `2` | Limited writes per section per day |
+| `RATE_LIMITING_ENABLED` | `true` | Set to `false` only for controlled local testing |
+| `LOG_LEVEL` | `info` | Server log threshold |
+
+### 🌐 Client: `client/.env`
 
 ```env
 VITE_API_URL=http://localhost:5000
 ```
 
-For the deployed Vercel frontend, set this project environment variable and
-redeploy the client:
+`VITE_API_URL` must point to the deployed Render API in production. The API's `CORS_ORIGIN` must contain the corresponding Vercel/custom frontend origin.
 
-```env
-VITE_API_URL=https://skill-bridge-backend-irq4.onrender.com
+### MongoDB Operations
+
+Production disables Mongoose automatic index creation. Run the database commands from `server/` against staging first, then production after a backup:
+
+```bash
+# Read-only: inspect document sizes, inline media, and index storage.
+npm run db:audit
+
+# Read-only: report existing indexes and explicitly managed redundant indexes.
+npm run db:indexes
+
+# Create declared indexes without removing custom indexes.
+npm run db:indexes -- --apply
+
+# After reviewing the dry run, remove only known redundant standalone indexes.
+npm run db:indexes -- --apply --drop-redundant
+
+# Find legacy raw verification references, then replace them with HMAC fingerprints.
+npm run db:migrate-verification
+npm run db:migrate-verification -- --apply
 ```
 
-The Render backend must be running and should allow the production frontend
-through `CORS_ORIGIN=https://skillbridge.debarghya.org`.
+The migration never prints raw identity or registration values. Keep existing inline images/videos until they are moved to object storage; the audit reports every affected document so that migration can be planned without deleting user content.
+
+## 🧪 Quality Checks
+
+```bash
+cd server
+npm run check
+npm test
+
+cd ../client
+npm run lint
+npm run build
+```
+
+GitHub Actions runs backend syntax checks and tests plus the production client build on every push and pull request.
 
 ## 🚧 Challenges Faced
 
-- Designing a two-sided platform that serves both students and companies without making the user flow confusing.
-- Managing many dashboard sections such as GIGs, Skill Hub, Network, Earnings, Talent Search, Workspace, and Payments.
-- Persisting complex dashboard state while still keeping default demo data available for new users.
-- Building a merit-based hiring flow where TrustScore, verified skills, tasks, and project submissions work together.
-- Handling authentication, session expiry, request limits, and protected routes without using a heavy backend framework.
-- Keeping the frontend responsive and organized across multiple student and company workflows.
-- Preparing the project for deployment with proper environment variables, health checks, and CI checks.
+- Keeping student, company, and reviewer actions consistent across one work lifecycle.
+- Turning evidence and practical work into a fair, non-duplicated TrustScore signal.
+- Managing responsive dashboards with dense operational workflows.
 
 ## ✅ Solutions Implemented
 
-- Split the product into clear student and company dashboards with separate navigation and focused workflows.
-- Created reusable API helpers and dashboard state handlers to keep frontend-backend communication consistent.
-- Used MongoDB with Mongoose models for students, companies, sessions, dashboard state, and task submissions.
-- Added template-state merge and reduce utilities so default data can be reused without storing unnecessary duplicate state.
-- Implemented custom session-token authentication with password hashing, session cleanup, and logout support.
-- Added rate limiting, daily user limits, daily section operation limits, CORS handling, and security headers.
-- Built task submission and review flows so companies can evaluate students through practical work instead of only profile data.
-- Added GitHub Actions for backend checks/tests and frontend builds, plus Render configuration for backend deployment.
+- Centralized the GIG, task, review, payment, and completion lifecycle in persistent backend records.
+- Used reviewer rubrics, transactions, unique indexes, and an event ledger to protect skill and TrustScore updates.
+- Built role-specific, responsive workspaces with shared API helpers and validation.
 
 ## 🔮 Future Improvements
 
-- Add real-time chat between students and companies for project discussions.
-- Add email or SMS notifications for invites, task reviews, payments, and hiring updates.
-- Improve TrustScore with more detailed scoring rules, company ratings, and verified project outcomes.
-- Add advanced search and recommendation logic for better student-gig matching.
-- Move authentication to secure HTTP-only cookies for stronger session protection.
-- Add file upload support for resumes, certificates, business documents, and task attachments.
-- Add admin moderation for users, companies, reported profiles, and suspicious task activity.
-- Add more automated tests for API routes, dashboard workflows, and frontend components.
-- Optimize frontend bundle size with route-based code splitting.
-- Add analytics dashboards for platform growth, hiring conversion, and student success metrics.
+- Add notifications for invitations, review outcomes, milestones, and recorded payments.
+- Add browser-level end-to-end tests and admin observability.
+- Add managed media uploads and payment-proof/dispute records.
 
 ## 📚 Learnings
 
-- Learned how to design a full-stack, two-sided marketplace with separate student and company journeys.
-- Learned how to structure a React app with multiple dashboards, nested feature modules, and reusable API helpers.
-- Learned how to persist complex user-specific dashboard state in MongoDB.
-- Learned how to implement custom session-based authentication with password hashing and token expiry.
-- Learned how to add backend safety features such as rate limiting, CORS, security headers, and health checks.
-- Learned how to connect practical task submissions with a company review pipeline.
-- Learned how to prepare a project for deployment using environment variables, CI checks, and Render configuration.
+- Designing a two-sided marketplace requires explicit ownership and status transitions.
+- A reputation system needs auditable events, not client-side counters.
+- Focused domain modules make a large React and Node.js application easier to evolve.
 
 ## 👤 Author Details
 
+<p align="left">
+  <img src="./docs/assets/author-profile.png" width="140" alt="Debarghya Bandyopadhyay" />
+</p>
+
 **Debarghya Bandyopadhyay**
 
-- Computer Science engineering student from kolkata
+- Computer Science engineering student from Kolkata
 
-### Be My Friend
+### 🤝 Be My Friend
 
 I always like to make new friends. Follow me on:
 
-[![Portfolio](https://img.shields.io/badge/PORTFOLIO-PORTFOLIO.DEBARGHYA.ORG-16A34A?style=for-the-badge&logo=vercel&logoColor=white)](https://portfolio.debarghya.org)
+[![Portfolio](https://img.shields.io/badge/Portfolio-portfolio.debarghya.org-16A34A?style=for-the-badge&logo=vercel&logoColor=white)](https://portfolio.debarghya.org)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Debarghya%20Bandyopadhyay-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/debarghya131)
+[![LeetCode](https://img.shields.io/badge/LeetCode-Debarghya131-FFA116?style=for-the-badge&logo=leetcode&logoColor=white)](https://leetcode.com/u/debarghya131/)
+[![X](https://img.shields.io/badge/X-Debarghya131-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/debarghya131)
+[![Email](https://img.shields.io/badge/Email-Debarghya-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:debarghyabandyopadhyay191@gmail.com)
+[![GitHub](https://img.shields.io/badge/GitHub-Debarghya131-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/debarghya131)
 
-[![LinkedIn](https://img.shields.io/badge/LINKEDIN-DEBARGHYA%20BANDYOPADHYAY-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/debarghya-bandyopadhyay-953b02400?utm_source=share_via&utm_content=profile&utm_medium=member_android)
-
-[![X](https://img.shields.io/badge/X-DEBARGHYA131-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/debarghya131)
-
-[![GitHub](https://img.shields.io/badge/GITHUB-DEBARGHYA131-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/debarghya131)
-
-[![Email](https://img.shields.io/badge/EMAIL-DEBARGHYABANDYOPADHYAY191%40GMAIL.COM-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:debarghyabandyopadhyay191@gmail.com)
+Email: [debarghyabandyopadhyay191@gmail.com](mailto:debarghyabandyopadhyay191@gmail.com)

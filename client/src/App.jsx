@@ -1,20 +1,21 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
-import LandingPage from './landingpage/LandingPage'
+import LandingPage from './landing/LandingPage'
 import ToastViewport from './ui/ToastViewport'
 import { getStudentSessionToken } from './student/studentApi'
 import { getCompanySessionToken } from './company/companyApi'
 import { getReviewerSessionToken } from './reviewer/reviewerApi'
 
-const StudentAuth = lazy(() => import('./student/studentAuth'))
-const StudentDashboard = lazy(() => import('./student/student'))
-const Taskpage = lazy(() => import('./student/task/Taskpage'))
-const TrustScoreCriteria = lazy(() => import('./student/trustscoreCriteria'))
-const CompanyAuth = lazy(() => import('./company/companyAuth'))
-const CompanyDashboard = lazy(() => import('./company/company'))
+const StudentAuth = lazy(() => import('./student/StudentAuth'))
+const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
+const TaskPage = lazy(() => import('./student/task/TaskPage'))
+const TrustScoreCriteria = lazy(() => import('./student/TrustScoreCriteria'))
+const CompanyAuth = lazy(() => import('./company/CompanyAuth'))
+const CompanyDashboard = lazy(() => import('./company/CompanyDashboard'))
 const ReviewerAuth = lazy(() => import('./reviewer/ReviewerAuth'))
 const ReviewerDashboard = lazy(() => import('./reviewer/ReviewerDashboard'))
 const LoginPortal = lazy(() => import('./auth/LoginPortal'))
+const NotFound = lazy(() => import('./ui/NotFound'))
 
 function RouteLoading() {
   return <div role="status" aria-live="polite" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', color: '#475569', fontWeight: 700 }}>Loading workspace...</div>
@@ -58,7 +59,7 @@ export default function App() {
           <Route path="/student" element={<StudentAuth />} />
           <Route element={<StudentProtectedRoute />}>
             <Route path="/student/dashboard" element={<StudentDashboard />} />
-            <Route path="/student/task" element={<Taskpage />} />
+            <Route path="/student/task" element={<TaskPage />} />
             <Route path="/student/trustscore-criteria" element={<TrustScoreCriteria />} />
           </Route>
           <Route path="/company" element={<CompanyAuth />} />
@@ -69,6 +70,7 @@ export default function App() {
           <Route element={<ReviewerProtectedRoute />}>
             <Route path="/reviewer/dashboard" element={<ReviewerDashboard />} />
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
       <ToastViewport />

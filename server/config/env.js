@@ -54,6 +54,11 @@ function getEnvConfig() {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInteger(process.env.PORT, 5000),
     mongoUrl: process.env.MONGO_URL || '',
+    dbMaxPoolSize: Math.max(parseInteger(process.env.DB_MAX_POOL_SIZE, 20), 1),
+    dbMinPoolSize: Math.max(parseInteger(process.env.DB_MIN_POOL_SIZE, 0), 0),
+    dbMaxIdleTimeMs: Math.max(parseInteger(process.env.DB_MAX_IDLE_TIME_MS, 30_000), 1_000),
+    dbServerSelectionTimeoutMs: Math.max(parseInteger(process.env.DB_SERVER_SELECTION_TIMEOUT_MS, 10_000), 1_000),
+    verificationHashSecret: process.env.VERIFICATION_HASH_SECRET || '',
     corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*')),
     sessionTtlDays: Math.max(parseInteger(process.env.SESSION_TTL_DAYS, 30), 1),
     maxSessionsPerAccount: Math.max(parseInteger(process.env.MAX_SESSIONS_PER_ACCOUNT, 5), 1),
@@ -74,6 +79,10 @@ function getEnvConfig() {
 
   if (config.nodeEnv === 'production' && (!config.corsOrigins.length || config.corsOrigins.includes('*'))) {
     missingKeys.push('CORS_ORIGIN')
+  }
+
+  if (config.nodeEnv === 'production' && config.verificationHashSecret.trim().length < 32) {
+    missingKeys.push('VERIFICATION_HASH_SECRET (at least 32 characters)')
   }
 
   if (missingKeys.length > 0) {

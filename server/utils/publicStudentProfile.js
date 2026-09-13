@@ -1,9 +1,10 @@
 const TeamPost = require('../models/TeamPost')
 const { buildGigState } = require('../controllers/gigController')
 const { buildStudentSkillHubSkills, buildStreakSummary, buildActivityDays } = require('../controllers/skillHubController')
+const { isArchivedSkill } = require('./skillPolicy')
 
 async function publicStudentProfile(student, includeContact = false) {
-  const records = buildStudentSkillHubSkills(student)
+  const records = buildStudentSkillHubSkills(student).filter(skill => !isArchivedSkill(skill))
   const log = student.skillHubState?.skillLog || []
   const summary = buildStreakSummary(records, log)
   const [gigs, teamUps] = await Promise.all([
@@ -12,7 +13,7 @@ async function publicStudentProfile(student, includeContact = false) {
   ])
   return {
     id: String(student._id), name: student.name, avatar: student.avatar || null,
-    trustScore: student.trustScore || 0, location: student.location || '',
+    trustScore: require('../controllers/trustScoreController').calculateTrustScore(student), location: student.location || '',
     contactMethod: student.contactMethod || null, verificationMethod: student.verificationMethod || null,
     skills: records.map(({ name, stage, verified, renewalStatus, streak }) => ({ name, stage, verified, renewalStatus, streak })),
     practiceDays: summary.totalPracticeDays, trustStreak: summary.overallCurrent,

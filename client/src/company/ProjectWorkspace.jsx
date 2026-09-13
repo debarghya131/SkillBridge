@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Check, CircleCheck, Clock3, FolderKanban, RotateCcw } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, Clock3, FolderKanban, RotateCcw } from 'lucide-react'
 import SectionTabs from './SectionTabs'
 import SubmissionReview from './SubmissionReview'
 
@@ -11,6 +11,24 @@ const STATUS_META = {
 }
 const EMPTY_PROJECTS = []
 
+function WorkspaceStatusPicker({ value, options, disabled, onChange }) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef(null)
+  const closeWhenFocusLeaves = () => {
+    window.requestAnimationFrame(() => {
+      if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
+    })
+  }
+  return <div ref={pickerRef} className="gig-form-menu workspace-status-picker" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="gig-form-menu-trigger" disabled={disabled} aria-haspopup="listbox" aria-expanded={open}
+      onClick={() => setOpen(current => !current)}>{value}</button>
+    {open && <div className="gig-form-menu-options" role="listbox" aria-label="Status">
+      {options.map(option => <button key={option} type="button" role="option" aria-selected={option === value}
+        onClick={() => { onChange(option); setOpen(false) }}>{option}</button>)}
+    </div>}
+  </div>
+}
+
 function formatDate(value) {
   if (!value) return 'No deadline'
   const date = new Date(`${value}T00:00:00`)
@@ -20,6 +38,36 @@ function formatDate(value) {
 function formatUpdateDate(value) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+}
+
+function WorkspaceDatePicker({ value, onChange }) {
+  const today = new Date()
+  const parsed = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : today
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
+  const pickerRef = useRef(null)
+  const year = month.getFullYear()
+  const monthIndex = month.getMonth()
+  const cells = [...Array(new Date(year, monthIndex, 1).getDay()).fill(null), ...Array.from({ length: new Date(year, monthIndex + 1, 0).getDate() }, (_, index) => index + 1)]
+  while (cells.length % 7) cells.push(null)
+  const closeWhenFocusLeaves = () => window.requestAnimationFrame(() => {
+    if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
+  })
+  const selectDay = day => {
+    if (!day) return
+    onChange(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    setOpen(false)
+  }
+  return <div ref={pickerRef} className="task-date-picker workspace-date-picker" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="task-date-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)}>
+      <span>{value || 'YYYY-MM-DD'}</span><CalendarDays size={15} aria-hidden="true" />
+    </button>
+    {open && <div className="task-date-calendar" role="dialog" aria-label="Choose due date">
+      <div className="task-date-calendar-header"><button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={15} /></button><strong>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong><button type="button" aria-label="Next month" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={15} /></button></div>
+      <div className="task-date-weekdays">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day}>{day}</span>)}</div>
+      <div className="task-date-days">{cells.map((day, index) => <button key={`${year}-${monthIndex}-${index}`} type="button" disabled={!day} aria-pressed={day && value === `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`} onClick={() => selectDay(day)}>{day || ''}</button>)}</div>
+    </div>}
+  </div>
 }
 
 export default function ProjectWorkspace({ projectWorkspaceState, taskSubmissions = [], onReviewTaskSubmission, onShareUpdate, onSetMilestone }) {
@@ -53,6 +101,10 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
       } else if (action === 'status') {
         await onSetMilestone(project.id, { id: milestone.id, status: milestone.status === 'Completed' ? 'Open' : 'Completed' })
       } else {
+        if (!title.trim() || !dueDate) {
+          setError('Add a milestone title and due date.')
+          return
+        }
         await onSetMilestone(project.id, { title, dueDate })
         setTitle('')
         setDueDate('')
@@ -72,11 +124,9 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
           <h2>Project Workspace</h2>
           <p className="work-muted">Track selected students, work delivery, reviews, and project milestones.</p>
         </div>
-        <label className="workspace-filter">Status
-          <select disabled={busy} value={filter} onChange={event => { setFilter(event.target.value); setSelectedId(''); setMessage(''); setTitle(''); setDueDate(''); setError('') }}>
-            {['All', 'Planning', 'In Progress', 'Review', 'Completed'].map(value => <option key={value}>{value}</option>)}
-          </select>
-        </label>
+        <div className="workspace-filter">Status
+          <WorkspaceStatusPicker disabled={busy} value={filter} options={['All', 'Planning', 'In Progress', 'Review', 'Completed']} onChange={value => { setFilter(value); setSelectedId(''); setMessage(''); setTitle(''); setDueDate(''); setError('') }} />
+        </div>
       </header>
 
       <div className="workspace-summary" aria-label="Project summary">
@@ -145,7 +195,7 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
                   </div>
                   <form className="workspace-milestone-form" onSubmit={event => save(event, 'milestone')}>
                     <label>Milestone<input required maxLength="120" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g. Deliver first milestone" /></label>
-                    <label>Due date<input type="date" required value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
+                    <label>Due date<WorkspaceDatePicker value={dueDate} onChange={setDueDate} /><small id="milestone-date-format">Use YYYY-MM-DD</small></label>
                     <button className="btn-secondary" disabled={busy}>{busy ? 'Saving...' : 'Add milestone'}</button>
                   </form>
                 </section>

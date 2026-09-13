@@ -16,7 +16,7 @@ const {
 } = require('../controllers/companyController')
 const Company = require('../models/Company')
 const { validateExternalPayment } = require('../controllers/companyPaymentController')
-const { calculateGigMatch, isBrowsableGigStatus } = require('../controllers/gigController')
+const { calculateGigMatch, compactGigStateMedia, isBrowsableGigStatus } = require('../controllers/gigController')
 
 test('company dashboard overview derives metrics from saved company state', () => {
   const overview = buildCompanyDashboardOverview({
@@ -202,6 +202,19 @@ test('talent profiles only publish saved profile content and active verified ski
   assert.equal(profile.digilockerToken, undefined)
 })
 
+test('archived skills are excluded from company talent matching', () => {
+  const profile = sanitizeTalentProfile({
+    _id: { toString: () => 'student-2' }, name: 'Focused student', skills: ['React', 'Legacy PHP'],
+    skillHubSkills: [
+      { name: 'React', stage: 'Pro', verified: true, renewalDue: '2099-12-31' },
+      { name: 'Legacy PHP', stage: 'Intermediate', verified: true, renewalDue: '2099-12-31', archived: true },
+    ],
+  })
+  assert.deepEqual(profile.skills, ['React'])
+  assert.deepEqual(profile.verifiedSkills, ['React'])
+  assert.deepEqual(profile.skillsByLevel.Intermediate, [])
+})
+
 test('project workspace actions persist updates and milestones on the selected project', () => {
   const initialState = {
     projects: [{
@@ -262,9 +275,17 @@ test('business profile validation normalizes saved identity and contact fields',
     logo: 'data:image/png;base64,iVBORw0KGgo=',
   }, {})
   assert.equal(logoProfile.logo, 'data:image/png;base64,iVBORw0KGgo=')
+  const videoProfile = validateCompanyProfile({
+    businessName: 'Acme', location: 'Kolkata',
+    introVideoUrl: 'data:video/mp4;base64,AAAAAGZ0eXA=',
+  }, {})
+  assert.equal(videoProfile.introVideoUrl, 'data:video/mp4;base64,AAAAAGZ0eXA=')
+  assert.throws(() => validateCompanyProfile({
+    businessName: 'Acme', location: 'Kolkata', introVideoUrl: 'data:video/mp4;base64,AAAA',
+  }, {}), /Business intro video/)
 })
 
-test('business logo updates persist without overwriting the rest of the profile', async t => {
+test('business media updates persist without overwriting the rest of the profile', async t => {
   const company = new Company({
     businessName: 'Acme',
     location: 'Kolkata',
@@ -292,6 +313,13 @@ test('business logo updates persist without overwriting the rest of the profile'
   assert.equal(saved.businessProfile.logo, 'data:image/png;base64,iVBORw0KGgo=')
   assert.equal(saved.businessProfile.industry, 'SaaS')
   assert.deepEqual(saved.businessProfile.workModes, ['Remote'])
+
+  await updateCurrentCompany('company-session', {
+    businessProfile: { introVideoUrl: 'data:video/webm;base64,GkXfow==' },
+  })
+  assert.equal(company.businessProfile.introVideoUrl, 'data:video/webm;base64,GkXfow==')
+  await updateCurrentCompany('company-session', { businessProfile: { introVideoUrl: null } })
+  assert.equal(company.businessProfile.introVideoUrl, null)
 })
 
 test('public company profile includes opted-in business contact details', async t => {
@@ -326,4 +354,17 @@ test('student GIG routes only expose open roles and calculate skill matches', ()
   assert.equal(isBrowsableGigStatus('Hiring'), true)
   assert.equal(isBrowsableGigStatus('Closed'), false)
   assert.equal(calculateGigMatch(['React', 'Node.js'], ['React', 'Python']), 50)
+})
+
+test('student GIG responses transfer repeated large company logos only once', () => {
+  const logo = `data:image/png;base64,${'A'.repeat(3000)}`
+  const compacted = compactGigStateMedia({
+    opportunities: [{ id: 1, companyLogo: logo }],
+    completedGigs: [{ id: 2, companyLogo: logo }],
+  })
+
+  assert.deepEqual(compacted.companyLogos, [logo])
+  assert.equal(compacted.opportunities[0].companyLogo, undefined)
+  assert.equal(compacted.opportunities[0].companyLogoRef, 0)
+  assert.equal(compacted.completedGigs[0].companyLogoRef, 0)
 })

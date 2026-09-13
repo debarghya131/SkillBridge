@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ImageUp, Trash2 } from 'lucide-react'
+import { ImageUp, Trash2, Video } from 'lucide-react'
 import SectionTabs from './SectionTabs'
 import CompanyLogo from '../ui/CompanyLogo'
+import { isBundledCompanyIntroVideoUrl } from './companyDemoData'
 
 const WORK_MODE_OPTIONS = ['Remote', 'Hybrid', 'On-site']
 const MAX_BUSINESS_LOGO_SIZE = 600 * 1024
 const BUSINESS_LOGO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_BUSINESS_VIDEO_SIZE = 5 * 1024 * 1024
+const BUSINESS_VIDEO_TYPES = new Set(['video/mp4', 'video/webm'])
 
 function calcCompletion(profile) {
   const checks = [
@@ -31,14 +34,17 @@ export default function SetupBusinessProfile({ profile, onSave }) {
   const [view, setView] = useState('Business details')
   const [isSaving, setIsSaving] = useState(false)
   const [isSavingLogo, setIsSavingLogo] = useState(false)
+  const [isSavingVideo, setIsSavingVideo] = useState(false)
   const [saveError, setSaveError] = useState('')
   const logoInputRef = useRef(null)
+  const videoInputRef = useRef(null)
 
   useEffect(() => {
     setDraft(profile)
   }, [profile])
 
   const completion = useMemo(() => calcCompletion(draft), [draft])
+  const hasStarterVideo = isBundledCompanyIntroVideoUrl(draft.introVideoUrl)
 
   const updateField = (field, value) => {
     setDraft(current => ({ ...current, [field]: value }))
@@ -82,6 +88,49 @@ export default function SetupBusinessProfile({ profile, onSave }) {
     }
     reader.onerror = () => setSaveError('The selected logo could not be read.')
     reader.readAsDataURL(file)
+  }
+
+  const handleVideoChange = file => {
+    if (!file) return
+    if (!BUSINESS_VIDEO_TYPES.has(file.type)) {
+      setSaveError('Choose an MP4 or WEBM introduction video.')
+      return
+    }
+    if (file.size > MAX_BUSINESS_VIDEO_SIZE) {
+      setSaveError('Business introduction videos must be 5 MB or smaller.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const introVideoUrl = typeof reader.result === 'string' ? reader.result : ''
+      if (!introVideoUrl) return setSaveError('The selected video could not be read.')
+      setSaveError('')
+      setIsSavingVideo(true)
+      try {
+        // Match logo behavior: publish only this media field, never unrelated draft edits.
+        const savedProfile = await onSave({ ...profile, introVideoUrl })
+        updateField('introVideoUrl', savedProfile?.introVideoUrl ?? introVideoUrl)
+      } catch (error) {
+        setSaveError(error.message || 'The business introduction video could not be saved.')
+      } finally {
+        setIsSavingVideo(false)
+      }
+    }
+    reader.onerror = () => setSaveError('The selected video could not be read.')
+    reader.readAsDataURL(file)
+  }
+
+  const removeVideo = async () => {
+    setSaveError('')
+    setIsSavingVideo(true)
+    try {
+      const savedProfile = await onSave({ ...profile, introVideoUrl: null })
+      updateField('introVideoUrl', savedProfile?.introVideoUrl ?? null)
+    } catch (error) {
+      setSaveError(error.message || 'The business introduction video could not be removed.')
+    } finally {
+      setIsSavingVideo(false)
+    }
   }
 
   const toggleWorkMode = (mode) => {
@@ -137,8 +186,8 @@ export default function SetupBusinessProfile({ profile, onSave }) {
   }
 
   return (
-    <div>
-      <div style={{
+    <div className="business-profile-editor">
+      <div className="business-profile-hero" style={{
         background: 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)',
         borderRadius: 16,
         borderLeft: '5px solid var(--accent)',
@@ -176,17 +225,25 @@ export default function SetupBusinessProfile({ profile, onSave }) {
       <SectionTabs label="Business profile views" options={['Business details', 'Hiring', 'Contact']} value={view} onChange={setView} />
       <div className="profile-tab-content" style={{ background: 'var(--white)', borderRadius: 8, border: '1px solid var(--border)', padding: '16px', marginBottom: 0 }}>
         <div hidden={view !== 'Business details'} className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
+          <div className="business-profile-media-row business-profile-logo-row" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 14, paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
             <CompanyLogo logo={draft.logo} name={draft.businessName} size={64} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 3 }}>Business Logo</div>
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>PNG, JPG, or WEBP up to 600 KB. Changes save immediately.</div>
               <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={event => { handleLogoChange(event.target.files?.[0]); event.target.value = '' }} />
-              <div style={{ display: 'flex', gap: 8, marginTop: 9, flexWrap: 'wrap' }}>
+              <div className="business-profile-media-actions" style={{ display: 'flex', gap: 8, marginTop: 9, flexWrap: 'wrap' }}>
                 <button type="button" className="btn-accent" disabled={isSavingLogo} onClick={() => logoInputRef.current?.click()} style={{ padding: '7px 10px', fontSize: 12 }}><ImageUp size={15} />{isSavingLogo ? 'Saving Logo...' : draft.logo ? 'Replace Logo' : 'Upload Logo'}</button>
                 {draft.logo && <button type="button" disabled={isSavingLogo} onClick={() => saveLogo('')} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontSize: 12, fontWeight: 700, cursor: isSavingLogo ? 'wait' : 'pointer', opacity: isSavingLogo ? 0.65 : 1 }}><Trash2 size={14} />Remove</button>}
               </div>
             </div>
+          </div>
+          <div className="business-profile-media-row business-profile-video-row" style={{ gridColumn: '1 / -1', paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
+            <div className="business-profile-video-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 3 }}>Business Introduction Video</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{hasStarterVideo ? 'Starter preview. Upload your MP4 or WEBM video, up to 5 MB, to publish it on your public company profile.' : 'Published. MP4 or WEBM, up to 5 MB.'}</div></div>
+              <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" style={{ display: 'none' }} onChange={event => { handleVideoChange(event.target.files?.[0]); event.target.value = '' }} />
+              <div className="business-profile-media-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="btn-accent" disabled={isSavingVideo} onClick={() => videoInputRef.current?.click()} style={{ padding: '7px 10px', fontSize: 12 }}><Video size={15}/>{isSavingVideo ? 'Saving Video...' : hasStarterVideo ? 'Upload Video' : 'Replace Video'}</button>{draft.introVideoUrl && !hasStarterVideo && <button type="button" disabled={isSavingVideo} onClick={removeVideo} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontSize: 12, fontWeight: 700, cursor: isSavingVideo ? 'wait' : 'pointer', opacity: isSavingVideo ? 0.65 : 1 }}><Trash2 size={14}/>Remove</button>}</div>
+            </div>
+            {draft.introVideoUrl && <video controls preload="metadata" src={draft.introVideoUrl} style={{ display: 'block', width: '100%', maxWidth: 520, marginTop: 12, borderRadius: 8, background: '#111827', aspectRatio: '16 / 9' }} />}
           </div>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Business Name</span>
@@ -263,7 +320,7 @@ export default function SetupBusinessProfile({ profile, onSave }) {
           <textarea value={draft.requiredSkills} onChange={e => updateField('requiredSkills', e.target.value)} rows={3} placeholder="React, Node.js, Canva, Power BI..." style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit', resize: 'none' }} />
         </label>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
+        <div className="business-profile-save-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               Current completion: <strong style={{ color: 'var(--dark)' }}>{completion}%</strong>

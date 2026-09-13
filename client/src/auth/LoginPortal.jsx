@@ -1,6 +1,7 @@
 import { ArrowLeft, Building2, GraduationCap, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import './loginPortal.css'
+import SkillBridgeBrand from '../ui/SkillBridgeBrand'
+import './LoginPortal.css'
 
 const OPTIONS = [
   { title: 'Student', description: 'Access your skills, opportunities, tasks, and TrustScore.', icon: GraduationCap, path: '/student?mode=signin', tone: 'student' },
@@ -13,7 +14,7 @@ export default function LoginPortal() {
   return <main className="login-portal">
     <section className="login-panel" aria-labelledby="login-title">
       <button className="login-back" onClick={() => navigate('/')}><ArrowLeft size={16}/>Back to home</button>
-      <header><img src="/logo.png" alt="SkillBridge"/><div><span>SKILLBRIDGE</span><h1 id="login-title">Choose your login</h1><p>Continue to the workspace linked to your account.</p></div></header>
+      <header><SkillBridgeBrand size="large"/><div><h1 id="login-title">Choose your login</h1><p>Continue to the workspace linked to your account.</p></div></header>
       <div className="login-options">{OPTIONS.map(option => {
         const Icon = option.icon
         return <button key={option.title} className={`login-option login-option-${option.tone}`} onClick={() => navigate(option.path)}>

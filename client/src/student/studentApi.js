@@ -29,7 +29,16 @@ export async function signInStudent(payload) {
 }
 
 export async function fetchCurrentStudent(token) {
-  return apiRequest('/api/student/me', {
+  return apiRequest('/api/student/me?view=workspace', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
+export async function fetchStudentProfileMedia(token) {
+  return apiRequest('/api/student/profile-media', {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -112,6 +121,16 @@ export async function saveStudentSkillHub(token, payload) {
   })
 }
 
+export async function setStudentSkillVisibility(token, payload) {
+  return apiRequest('/api/student/skillhub/skill-visibility', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function recordStudentSkillHubEvent(token, payload) {
   return apiRequest('/api/student/skillhub/events', {
     method: 'POST',
@@ -186,13 +205,30 @@ export async function requestStudentWithdrawal(token, payload) {
   })
 }
 
+function hydrateGigStateMedia(gigState) {
+  if (!Array.isArray(gigState?.companyLogos)) return gigState
+  const collections = ['opportunities', 'browseGigs', 'appliedGigs', 'activeGigBase', 'completedGigs']
+  const hydrated = { ...gigState }
+  delete hydrated.companyLogos
+  for (const collection of collections) {
+    if (!Array.isArray(gigState[collection])) continue
+    hydrated[collection] = gigState[collection].map(item => {
+      if (!Number.isInteger(item?.companyLogoRef)) return item
+      const { companyLogoRef, ...rest } = item
+      return { ...rest, companyLogo: gigState.companyLogos[companyLogoRef] || '' }
+    })
+  }
+  return hydrated
+}
+
 export async function fetchStudentGigs(token) {
-  return apiRequest('/api/student/gigs', {
+  const result = await apiRequest('/api/student/gigs', {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
     },
   })
+  return { ...result, gigState: hydrateGigStateMedia(result.gigState) }
 }
 
 export async function applyStudentGig(token, gigId) {
@@ -256,16 +292,6 @@ export async function fetchStudentCompanyInterviewTask(token, payload) {
 
 export async function submitStudentCompanyInterviewTask(token, payload) {
   return apiRequest('/api/student/tasks/company-interview/submit', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
-export async function startStudentCompanyInterviewTask(token, payload) {
-  return apiRequest('/api/student/tasks/company-interview/start', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

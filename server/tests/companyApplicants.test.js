@@ -38,7 +38,7 @@ test('GIG applicants load current profiles by ID without talent search or snapsh
   assert.equal(profiles.length, 2)
   assert.equal(profiles[0].avatar, current.avatar)
   assert.deepEqual(profiles[0].skills, ['React', 'SQL'])
-  assert.deepEqual(profiles[0].profileSkillsByLevel, { Beginner: ['SQL'], Intermediate: [], Pro: ['React'] })
+  assert.deepEqual(profiles[0].profileSkillsByLevel, { Beginner: ['SQL'], Intermediate: [], Pro: ['React'], 'Pro Mastery': [] })
   assert.equal(profiles[0].streak, 0)
   assert.equal(profiles[0].github, current.githubLink[0].url)
   assert.deepEqual(profiles[0].contactInfo, current.contactInfo)

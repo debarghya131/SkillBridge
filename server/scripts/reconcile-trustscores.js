@@ -18,7 +18,7 @@ async function main() {
   try {
     await connectToDatabase(getEnvConfig().mongoUrl)
     const query = studentId ? { _id: studentId } : {}
-    for await (const student of Student.find(query).select('_id trustScore trustScoreState').cursor()) {
+    for await (const student of Student.find(query).select('_id trustScore trustScoreState skillHubSkills').cursor()) {
       scanned += 1
       const ledgerScore = calculateTrustScore(student)
       if (Number(student.trustScore) === ledgerScore) {

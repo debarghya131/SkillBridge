@@ -133,7 +133,7 @@ async function main() {
         verified('SQL', 'Analytics', 'Beginner', 64, 285, 80, ids.sqlVerify, 1, 4, 0),
         verified('Power BI', 'Analytics', 'Intermediate', 79, 245, 120, ids.powerVerify, 2, 6, -1),
         verified('Content Marketing', 'Marketing', 'Beginner', 68, 25, 340, ids.contentVerify, 0, 4, null),
-        verified('Figma', 'Design', 'Pro', 91, 305, 60, ids.figmaVerify, 0, 15, null),
+        verified('Figma', 'Design', 'Pro Mastery', 91, 305, 60, ids.figmaVerify, 0, 15, null),
         expired('REST APIs', 'Backend', 'Intermediate', 70, -55, 420, ids.restVerify, 8),
         unverified('Python', 'Backend', 57),
         unverified('Canva', 'Design', 61),

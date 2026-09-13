@@ -3,11 +3,14 @@ const Student = require('../models/Student')
 const NetworkConnection = require('../models/NetworkConnection')
 const TeamPost = require('../models/TeamPost')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
+const { hasIdentityVerificationProof } = require('../utils/verification')
+const { isDiscoverableVerifiedSkill, publishedSkillNames } = require('../utils/skillPolicy')
 
 const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
 const clean = (value, max) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, max)
 const idOf = value => String(value?._id || value || '')
 const pairKey = (left, right) => [idOf(left), idOf(right)].sort().join(':')
+const NETWORK_CARD_FIELDS = '_id name avatar location skills skillHubSkills skillHubState.streaks trustScore trustScoreState.events.key trustScoreState.events.type trustScoreState.events.referenceId trustScoreState.events.occurredAt contactMethod verificationMethod createdAt +identityVerificationHash'
 
 function requireObjectId(value, label = 'record') {
   if (!mongoose.isValidObjectId(value)) throw buildAuthError(`Invalid ${label}`, 400)
@@ -16,25 +19,27 @@ function requireObjectId(value, label = 'record') {
 
 function skillSummary(student) {
   const records = Array.isArray(student.skillHubSkills) ? student.skillHubSkills : []
-  const valid = records.filter(item => item?.name && item.verified && ['valid', 'due'].includes(item.renewalStatus))
-  const names = valid.length ? valid.map(item => item.name) : (student.skills || [])
-  const levels = { Beginner: [], Intermediate: [], Pro: [] }
+  const valid = records.filter(isDiscoverableVerifiedSkill)
+  const names = publishedSkillNames(student.skills, records)
+  const levels = { Beginner: [], Intermediate: [], Pro: [], 'Pro Mastery': [] }
   for (const skill of valid) (levels[skill.stage] || levels.Beginner).push(skill.name)
   return { names: [...new Set(names)].slice(0, 12), levels }
 }
 
-function profileFor(student, { includeContact = false } = {}) {
+function profileFor(student, { includeContact = false, compact = false } = {}) {
   const skills = skillSummary(student)
   const streaks = student.skillHubState?.streaks || {}
   return {
     id: idOf(student), name: student.name, avatar: student.avatar || null,
     role: skills.names.length ? `${skills.names.slice(0, 2).join(' / ')} Talent` : 'Student Talent',
-    location: student.location || 'Location not provided', trustScore: Math.max(0, Number(student.trustScore) || 0),
+    location: student.location || 'Location not provided', trustScore: require('./trustScoreController').calculateTrustScore(student),
     skills: skills.names, skillsByLevel: skills.levels,
     streak: Math.max(0, Number(streaks.overallCurrent ?? streaks.current) || 0),
-    availability: 'Open to peer collaboration', verified: Boolean(student.aadhaarNumber || student.digilockerToken),
-    githubLink: (student.githubLink || []).filter(item => item.saved !== false && item.url).slice(0, 5),
-    projects: (student.projects || []).filter(item => item.saved).slice(0, 6), videoUrl: student.videoUrl || null,
+    availability: 'Open to peer collaboration', verified: hasIdentityVerificationProof(student),
+    // Full projects, links and videos load only after View profile is clicked.
+    githubLink: compact ? [] : (student.githubLink || []).filter(item => item.saved !== false && item.url).slice(0, 5),
+    projects: compact ? [] : (student.projects || []).filter(item => item.saved).slice(0, 6),
+    videoUrl: compact ? null : student.videoUrl || null,
     contactInfo: includeContact ? (student.contactInfo || []).filter(item => item.saved !== false).slice(0, 5) : [],
     contactVisible: includeContact,
   }
@@ -51,7 +56,7 @@ function normalizeTeamPayload(payload, partial = false) {
     if (result.description.length < 20) throw buildAuthError('Describe the work in at least 20 characters')
   }
   if (!partial || payload.type !== undefined) {
-    if (!['Project', 'Hackathon', 'Research', 'Open Source', 'Case Study'].includes(payload.type)) throw buildAuthError('Invalid team-up type')
+    if (!['Project', 'Hackathon', 'Research', 'Open Source', 'Case Study', 'Startup', 'Study Group', 'Design Challenge', 'Data Challenge', 'Competition', 'Community Initiative', 'Content Collaboration'].includes(payload.type)) throw buildAuthError('Invalid team-up type')
     result.type = payload.type
   }
   if (!partial || payload.slots !== undefined) {
@@ -77,14 +82,14 @@ function serializePost(post, viewerId) {
   return {
     id: idOf(raw), title: raw.title, description: raw.description, type: raw.type,
     requiredSkills: raw.requiredSkills || [], slots: raw.slots, filled: accepted.length,
-    status: raw.status, createdAt: raw.createdAt, owner: profileFor(raw.owner),
+    status: raw.status, createdAt: raw.createdAt, owner: profileFor(raw.owner, { compact: true }),
     joinStatus: ownRequest?.status || null, joinRequestId: idOf(ownRequest),
     requestSource: ownRequest?.source || null,
     requests: idOf(raw.owner) === idOf(viewerId) ? (raw.requests || []).map(item => ({
       id: idOf(item), message: item.message, status: item.status, source: item.source || 'application', createdAt: item.createdAt,
-      student: profileFor(item.student, { includeContact: item.status === 'accepted' }),
+      student: profileFor(item.student, { includeContact: item.status === 'accepted', compact: true }),
     })) : [],
-    members: accepted.map(item => profileFor(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId) })),
+    members: accepted.map(item => profileFor(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId), compact: true })),
   }
 }
 
@@ -93,12 +98,16 @@ async function getStudentNetworkState(token) {
   const viewerId = student._id
   const [connections, posts] = await Promise.all([
     NetworkConnection.find({ $or: [{ requester: viewerId }, { recipient: viewerId }], status: { $in: ['pending', 'accepted'] } }).lean(),
-    TeamPost.find({ $or: [{ status: 'open' }, { owner: viewerId }, { 'requests.student': viewerId }] }).sort({ createdAt: -1 }).limit(60).populate('owner').populate('requests.student'),
+    TeamPost.find({ $or: [{ status: 'open' }, { owner: viewerId }, { 'requests.student': viewerId }] })
+      .sort({ createdAt: -1 }).limit(60)
+      .populate({ path: 'owner', select: NETWORK_CARD_FIELDS })
+      .populate({ path: 'requests.student', select: NETWORK_CARD_FIELDS })
+      .lean(),
   ])
   const peerIds = connections.map(item => idOf(item.requester) === idOf(viewerId) ? item.recipient : item.requester)
   const [relationshipPeers, suggestions] = await Promise.all([
-    Student.find({ _id: { $in: peerIds } }).lean(),
-    Student.find({ _id: { $nin: [viewerId, ...peerIds] } }).sort({ trustScore: -1, createdAt: -1 }).limit(40).lean(),
+    Student.find({ _id: { $in: peerIds } }).select(NETWORK_CARD_FIELDS).lean(),
+    Student.find({ _id: { $nin: [viewerId, ...peerIds] } }).select(NETWORK_CARD_FIELDS).sort({ trustScore: -1, createdAt: -1 }).limit(40).lean(),
   ])
   const students = [...relationshipPeers, ...suggestions]
   const relationships = new Map()
@@ -107,7 +116,7 @@ async function getStudentNetworkState(token) {
     const otherId = requester === idOf(viewerId) ? idOf(item.recipient) : requester
     relationships.set(otherId, { connectionId: idOf(item), status: item.status === 'accepted' ? 'connected' : requester === idOf(viewerId) ? 'outgoing_pending' : 'incoming_pending' })
   }
-  const people = students.map(item => ({ ...profileFor(item, { includeContact: relationships.get(idOf(item))?.status === 'connected' }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
+  const people = students.map(item => ({ ...profileFor(item, { includeContact: relationships.get(idOf(item))?.status === 'connected', compact: true }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
   const findPerson = id => people.find(person => person.id === idOf(id))
   const serializedPosts = posts.map(post => serializePost(post, viewerId))
   return {

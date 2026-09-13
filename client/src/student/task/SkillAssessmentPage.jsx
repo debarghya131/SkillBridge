@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ClipboardList, RefreshCw, Send } from 'lucide-react'
+import { ClipboardList, Clock3, ExternalLink, RefreshCw, Send } from 'lucide-react'
 import { fetchSkillAssessments, fetchStudentSkillHub, getStudentSessionToken, submitSkillAssessment } from '../studentApi'
 import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import { safeExternalUrl } from '../../lib/safeExternalUrl'
@@ -7,6 +7,7 @@ import { readTaskDraft, taskDraftKey } from './taskDraft'
 
 const MODES = { verify: 'Verification', reverify: 'Re-verification', upgrade: 'Level upgrade', retain: 'Retention', challenge: 'Challenge' }
 const STATUS = { pending: 'Awaiting review', needs_revision: 'Revision requested', approved: 'Approved', rejected: 'Not approved' }
+const getIndiaDateKey = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
 
 export default function SkillAssessmentPage({ context }) {
   const [tab, setTab] = useState('Submission')
@@ -21,18 +22,22 @@ export default function SkillAssessmentPage({ context }) {
   const [retry, setRetry] = useState(0)
   const [draftKey, setDraftKey] = useState('')
   const [draftNotice, setDraftNotice] = useState('')
+  const [today, setToday] = useState('')
   const operation = useRef(false)
   const mode = context.mode || 'verify'
-  const targetStage = context.targetStage === 'Pro Mastery' ? 'Pro' : context.targetStage
+  const targetStage = context.targetStage
   const matchesContext = useCallback(item => item.skillName.toLowerCase() === context.skillName.toLowerCase()
     && item.mode === mode && (mode !== 'upgrade' || item.targetStage === targetStage)
     && (mode !== 'challenge' || item.challengeId === Number(context.challengeId)), [context.challengeId, context.skillName, mode, targetStage])
   const matching = history.filter(matchesContext)
-  const pending = matching.some(item => item.status === 'pending')
+  const daily = ['retain', 'challenge'].includes(mode)
+  const pending = matching.some(item => item.status === 'pending' && (!daily || !today || item.earnedDay === today))
 
   useEffect(() => {
     let cancelled = false
     async function load() {
+      const currentDay = getIndiaDateKey()
+      setToday(currentDay)
       setLoading(true)
       setError('')
       try {
@@ -40,11 +45,13 @@ export default function SkillAssessmentPage({ context }) {
         const [result, skillsResult] = await Promise.all([fetchSkillAssessments(token), fetchStudentSkillHub(token)])
         if (cancelled) return
         const serverHistory = result.assessments || []
-        const revision = serverHistory.find(item => matchesContext(item) && item.status === 'needs_revision')
+        const revision = serverHistory.find(item => matchesContext(item) && item.status === 'needs_revision'
+          && (!['retain', 'challenge'].includes(mode) || item.earnedDay === currentDay))
         setHub(skillsResult.skillHub)
         setHistory(serverHistory)
         try {
-          const key = await taskDraftKey(token, ['skill', context.skillName, mode, targetStage, context.challengeId])
+          const key = await taskDraftKey(token, ['skill', context.skillName, mode, targetStage, context.challengeId,
+            ...(['retain', 'challenge'].includes(mode) ? [currentDay] : [])])
           if (cancelled) return
           const draft = readTaskDraft(sessionStorage, key, 'skill-v1')
           if (draft) {
@@ -91,7 +98,7 @@ export default function SkillAssessmentPage({ context }) {
   }
 
   return <section className="skill-assessment">
-    <header className="assessment-heading"><div><h1>{context.skillName}</h1><p>{MODES[mode] || 'Assessment'}{mode === 'upgrade' ? `: ${targetStage}` : ''}</p></div>
+    <header className="assessment-heading"><div><span className="assessment-eyebrow">Skill assessment</span><h1>{context.skillName}</h1><p>{MODES[mode] || 'Assessment'}{mode === 'upgrade' ? `: ${targetStage}` : ''}</p></div>
       <button type="button" className="btn-secondary" title="Refresh assessments" aria-label="Refresh assessments" disabled={busy || loading} onClick={() => setRetry(value => value + 1)}><RefreshCw size={18} /></button>
     </header>
     <nav className="company-section-tabs" aria-label="Assessment views">{['Submission', 'History'].map(value => <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)}>{value}</button>)}</nav>
@@ -104,7 +111,7 @@ export default function SkillAssessmentPage({ context }) {
         <p className="work-muted">Human review required. Verification and TrustScore changes occur only after approval.</p>
       </section>
       <form className="assessment-form" onSubmit={submit}>
-        {pending ? <p role="status">An assessment is awaiting review.</p> : <fieldset disabled={busy}>
+        {pending ? <div className="assessment-awaiting" role="status"><Clock3 size={22} /><div><strong>Submission under review</strong><p>Your evidence has been received and is awaiting a reviewer decision.</p></div></div> : <fieldset disabled={busy}>
           {revisionId && <p>Revising a reviewed assessment</p>}
           <label>Evidence link (optional)<input type="url" maxLength={500} value={evidenceLink} onChange={event => setEvidenceLink(event.target.value)} placeholder="https://github.com/yourname/project" /></label>
           <label>Your response<textarea aria-label="Your response" required minLength={50} maxLength={10000} rows={10} value={response} onChange={event => setResponse(event.target.value)} /></label>
@@ -115,8 +122,8 @@ export default function SkillAssessmentPage({ context }) {
       </form>
     </div> : <section className="assessment-history">
       {!matching.length && <p>No assessment submissions yet.</p>}
-      {matching.map(item => <article key={item.id}><header><strong>{STATUS[item.status]}</strong><time>{new Date(item.createdAt).toLocaleString('en-IN')}</time></header>
-        {safeExternalUrl(item.evidenceLink) && <a href={safeExternalUrl(item.evidenceLink)} target="_blank" rel="noreferrer">Open submitted evidence</a>}
+      {matching.map(item => <article key={item.id} className={`assessment-history-item status-${item.status}`}><header><div><span className={`assessment-status status-${item.status}`}>{STATUS[item.status]}</span><small>Assessment submission</small></div><time>{new Date(item.createdAt).toLocaleString('en-IN')}</time></header>
+        {safeExternalUrl(item.evidenceLink) && <a className="assessment-evidence-link" href={safeExternalUrl(item.evidenceLink)} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open submitted evidence</a>}
         <details><summary>Submitted response</summary><p>{item.response}</p></details>
         {item.feedback && <p><strong>Review feedback:</strong> {item.feedback}</p>}
         {item.rubric?.total != null && <p><strong>Evidence score:</strong> {item.rubric.total}/100</p>}

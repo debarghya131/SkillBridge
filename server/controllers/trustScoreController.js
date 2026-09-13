@@ -1,37 +1,22 @@
 const Student = require('../models/Student')
+const { normalizeTrustEvents, validDailyReference } = require('../utils/trustLedger')
+const { evaluateTrust, UNREVIEWED } = require('../utils/trustPolicy')
 const { buildTrustScoreFactors, buildTrustScoreSummary } = require('../config/trustScoreDefaults')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 
-const TRUST_EVENT_DEFINITIONS = Object.freeze({
-  daily_challenge_solved: { label: 'Daily Challenge Solved', points: 80, category: 'Daily' },
-  retention_task_completed: { label: 'Retention Task Completed', points: 20, category: 'Daily' },
-  skill_verified: { label: 'Skill Verified', points: 60, category: 'Skills' },
-  new_skill_added: { label: 'New Skill Added', points: 0, category: 'Skills' },
-  skill_level_upgraded: { label: 'Skill Level Upgraded', points: 100, category: 'Skills' },
-  project_uploaded: { label: 'Project Uploaded', points: 80, category: 'Projects' },
-  gig_completed: { label: 'GIG Completed', points: 150, category: 'GIGs' },
-  skill_reverified: { label: 'Skill Re-Verified', points: 50, category: 'Skills' },
-  profile_link_added: { label: 'Profile Links Added', points: 50, category: 'Profile' },
-  intro_video_uploaded: { label: 'Intro Video Uploaded', points: 50, category: 'Profile' },
-  skill_expired: { label: 'Skill Expired', points: -80, category: 'Penalty' },
-  retention_task_missed: { label: 'Retention Task Missed', points: -30, category: 'Penalty' },
-  retention_answer_wrong: { label: 'Wrong Retention Answer', points: -10, category: 'Penalty' },
-})
+const { TRUST_EVENT_DEFINITIONS } = require('../config/trustEventDefinitions')
+
+const TRUST_SCORE_STUDENT_FIELDS = '_id sessions skills skillHubSkills trustScore trustScoreState'
 
 function findStudentByToken(token) {
-  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
-}
-
-function clampTrustScore(value) {
-  return Math.max(0, Math.min(1000, Number(value) || 0))
+  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), TRUST_SCORE_STUDENT_FIELDS)
 }
 
 function normalizeReferenceId(referenceId) {
-  if (referenceId === undefined || referenceId === null || referenceId === '') {
-    return 'account'
-  }
-
-  return String(referenceId).trim().slice(0, 160) || 'account'
+  if (!['string', 'number'].includes(typeof referenceId)) throw buildAuthError('A TrustScore evidence reference is required')
+  const value = String(referenceId).trim()
+  if (!value || value.length > 160) throw buildAuthError('Invalid TrustScore evidence reference')
+  return value
 }
 
 function readTrustScoreEvents(student) {
@@ -41,8 +26,7 @@ function readTrustScoreEvents(student) {
 }
 
 function calculateTrustScore(student) {
-  return readTrustScoreEvents(student)
-    .reduce((total, event) => clampTrustScore(total + (Number(event.points) || 0)), 0)
+  return evaluateTrust(student, readTrustScoreEvents(student)).trustScore
 }
 
 function reconcileTrustScore(student) {
@@ -58,7 +42,7 @@ function eventTimestamp(event) {
 }
 
 function buildTrustScoreActivity(student) {
-  return readTrustScoreEvents(student)
+  return normalizeTrustEvents(readTrustScoreEvents(student))
     .slice()
     .sort((left, right) => eventTimestamp(right) - eventTimestamp(left))
     .slice(0, 30)
@@ -66,7 +50,7 @@ function buildTrustScoreActivity(student) {
       id: event.key,
       type: event.type,
       label: event.label,
-      points: Number(event.points) || 0,
+      points: UNREVIEWED.has(event.type) ? 0 : Number(event.points) || 0,
       category: event.category,
       referenceId: event.referenceId,
       occurredAt: eventTimestamp(event) ? event.occurredAt : null,
@@ -74,13 +58,14 @@ function buildTrustScoreActivity(student) {
 }
 
 function recordTrustScoreEvent(student, eventType, referenceId) {
-  const definition = TRUST_EVENT_DEFINITIONS[eventType]
+  const definition = Object.hasOwn(TRUST_EVENT_DEFINITIONS, eventType) ? TRUST_EVENT_DEFINITIONS[eventType] : null
 
   if (!definition) {
     throw buildAuthError('Unsupported TrustScore event')
   }
 
   const normalizedReferenceId = normalizeReferenceId(referenceId)
+  if (!validDailyReference(eventType, normalizedReferenceId, new Date())) throw buildAuthError('Invalid or future practice day')
   const key = `${eventType}:${normalizedReferenceId}`
   const events = readTrustScoreEvents(student)
 
@@ -100,9 +85,11 @@ function recordTrustScoreEvent(student, eventType, referenceId) {
     category: definition.category,
     referenceId: normalizedReferenceId,
     occurredAt: new Date().toISOString(),
+    policyVersion: 2,
   }
 
   student.trustScoreState = {
+    ...student.trustScoreState,
     events: [...events, event],
     updatedAt: event.occurredAt,
   }
@@ -118,10 +105,10 @@ function recordTrustScoreEvents(student, events) {
 
 function buildTrustScoreSnapshot(student) {
   const factors = buildTrustScoreFactors(student)
-  const events = readTrustScoreEvents(student)
+  const events = normalizeTrustEvents(readTrustScoreEvents(student))
   const factorSummary = buildTrustScoreSummary(factors)
   const eventSummary = events.reduce((summary, event) => {
-    const points = Number(event.points) || 0
+    const points = UNREVIEWED.has(event.type) ? 0 : Number(event.points) || 0
     if (points > 0) {
       summary.earnedPoints += points
       summary.approvedActions += 1
@@ -138,6 +125,7 @@ function buildTrustScoreSnapshot(student) {
       ? { ...eventSummary, maxPoints: factorSummary.maxPoints }
       : factorSummary,
     activity: buildTrustScoreActivity(student),
+    policy: evaluateTrust(student, events),
   }
 }
 

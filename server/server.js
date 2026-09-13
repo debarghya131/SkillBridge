@@ -24,6 +24,7 @@ const {
 } = require('./controllers/companyController')
 const {
   getCurrentStudent,
+  getCurrentStudentProfileMedia,
   logoutCurrentStudent,
   signInStudent,
   signUpStudent,
@@ -32,6 +33,7 @@ const {
 const {
   acceptOpportunity,
   applyToGig,
+  compactGigStateMedia,
   declineOpportunity,
   getStudentGigState,
   saveGig,
@@ -43,7 +45,7 @@ const {
   getStudentNetworkState, inviteStudentToTeam, removeConnection, requestToJoinTeam, sendConnectionRequest,
   updateTeamPost, withdrawTeamRequest,
 } = require('./controllers/networkController')
-const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, updateStudentSkillHub } = require('./controllers/skillHubController')
+const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub } = require('./controllers/skillHubController')
 const { listStudentAssessments, submitSkillAssessment } = require('./controllers/skillAssessmentController')
 const { claimAssessment, decideAssessment, getCurrentReviewer, listReviewQueue, logoutReviewer, releaseAssessment, signInReviewer } = require('./controllers/reviewerController')
 const { getStudentTrustScore, recordStudentTrustScoreEvent } = require('./controllers/trustScoreController')
@@ -52,7 +54,6 @@ const {
   getStudentCompanyInterviewTask,
   reviewCompanyTaskSubmission,
   sendCompanyInterviewTask,
-  startStudentCompanyInterviewTask,
   submitStudentCompanyInterviewTask,
 } = require('./controllers/taskBridgeController')
 const { getSiteViewCount, incrementSiteViewCount } = require('./controllers/siteMetricController')
@@ -381,8 +382,15 @@ async function handleStudentApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/student/me') {
-      const student = await getCurrentStudent(getBearerToken(req))
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const student = await getCurrentStudent(getBearerToken(req), { workspace: searchParams.get('view') === 'workspace' })
       sendJson(res, 200, { student })
+      return true
+    }
+
+    if (req.method === 'GET' && pathname === '/api/student/profile-media') {
+      const media = await getCurrentStudentProfileMedia(getBearerToken(req))
+      sendJson(res, 200, media)
       return true
     }
 
@@ -401,7 +409,7 @@ async function handleStudentApi(req, res, pathname) {
 
     if (req.method === 'GET' && pathname === '/api/student/gigs') {
       const gigState = await getStudentGigState(getBearerToken(req))
-      sendJson(res, 200, { gigState })
+      sendJson(res, 200, { gigState: compactGigStateMedia(gigState) })
       return true
     }
 
@@ -517,6 +525,13 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'PATCH' && pathname === '/api/student/skillhub/skill-visibility') {
+      const payload = await readJsonBody(req)
+      const skillHub = await setStudentSkillArchived(getBearerToken(req), payload)
+      sendJson(res, 200, { skillHub })
+      return true
+    }
+
     if (req.method === 'POST' && pathname === '/api/student/skillhub/events') {
       const payload = await readJsonBody(req)
       const skillHub = await recordStudentSkillHubEvent(getBearerToken(req), payload)
@@ -557,13 +572,6 @@ async function handleStudentApi(req, res, pathname) {
     if (req.method === 'POST' && pathname === '/api/student/tasks/company-interview/submit') {
       const payload = await readJsonBody(req)
       const taskSubmission = await submitStudentCompanyInterviewTask(getBearerToken(req), payload)
-      sendJson(res, 200, { taskSubmission })
-      return true
-    }
-
-    if (req.method === 'POST' && pathname === '/api/student/tasks/company-interview/start') {
-      const payload = await readJsonBody(req)
-      const taskSubmission = await startStudentCompanyInterviewTask(getBearerToken(req), payload)
       sendJson(res, 200, { taskSubmission })
       return true
     }
@@ -757,7 +765,7 @@ server.on('error', (error) => {
 
 async function startServer() {
   try {
-    await connectToDatabase(mongoUrl)
+    await connectToDatabase(mongoUrl, env)
     writeLog('info', 'database.connected', {
       database: getDatabaseStatus(),
     })

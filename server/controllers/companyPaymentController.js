@@ -10,7 +10,7 @@ function validateExternalPayment(payload, now = new Date()) {
   const reference = typeof payload?.reference === 'string' ? payload.reference.trim() : ''
   const paidOn = typeof payload?.paidOn === 'string' ? payload.paidOn : ''
   const method = payload?.method
-  if (!Number.isFinite(amount) || amount < 1 || amount > 10000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
+  if (!['number', 'string'].includes(typeof payload?.amount) || !Number.isFinite(amount) || amount < 1 || amount > 10000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
     throw buildAuthError('Enter a payment amount from INR 1 to 10,000,000 with at most two decimal places')
   }
   if (reference.length < 4 || reference.length > 120) throw buildAuthError('A transaction reference of 4 to 120 characters is required')
@@ -23,13 +23,20 @@ function validateExternalPayment(payload, now = new Date()) {
   return { amount, reference, paidOn, method, currency: 'INR', recordedAt: now, source: 'company_reported' }
 }
 
+const PAYMENT_COMPANY_FIELDS = '_id sessions gigManagementState.gigs'
+
 async function findCompany(token) {
-  return findModelByActiveToken(Company, token, 'Company', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+  return findModelByActiveToken(Company, token, 'Company', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), PAYMENT_COMPANY_FIELDS)
 }
 
 async function getCompanyPayments(token) {
   const company = await findCompany(token)
-  const submissions = await TaskSubmission.find({ companyId: company._id, status: { $in: ['approved', 'completed'] } }).sort({ updatedAt: -1 }).lean()
+  const query = TaskSubmission.find({ companyId: company._id, status: { $in: ['approved', 'completed'] } })
+  const compactQuery = typeof query.select === 'function'
+    ? query.select('_id gigTitle companyGigId studentName status externalPayment updatedAt')
+    : query
+  const submissions = await compactQuery
+    .sort({ updatedAt: -1 }).lean()
   const gigs = company.gigManagementState?.gigs || []
   return {
     mode: 'external',

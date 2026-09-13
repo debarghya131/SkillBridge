@@ -30,12 +30,19 @@ async function appendSession(entity, token, maxSessionsPerAccount) {
   await entity.save()
 }
 
-async function findModelByActiveToken(Model, token, entityLabel, sessionTtlMs) {
+async function findModelByActiveToken(Model, token, entityLabel, sessionTtlMs, fields = '') {
   if (!token) {
     throw buildAuthError('Missing session token', 401)
   }
 
-  const entity = await Model.findOne({ 'sessions.token': token })
+  const query = Model.findOne({ 'sessions.token': token })
+  // Section endpoints should not hydrate media-heavy profile fields just to
+  // validate a session. Mocks and non-Mongoose callers can still return a
+  // plain promise, so projection remains optional.
+  const selection = [fields, '+sessions'].filter(Boolean).join(' ')
+  const entity = typeof query?.select === 'function'
+    ? await query.select(selection)
+    : await query
 
   if (!entity) {
     throw buildAuthError('Session expired. Please sign in again.', 401)
@@ -61,10 +68,11 @@ async function resolveSessionSubject({ token, studentModel, companyModel, review
     return null
   }
 
+  const selectSession = query => (typeof query?.select === 'function' ? query.select('_id +sessions') : query)
   const [student, company, reviewer] = await Promise.all([
-    studentModel.findOne({ 'sessions.token': token }).select('_id sessions'),
-    companyModel.findOne({ 'sessions.token': token }).select('_id sessions'),
-    reviewerModel ? reviewerModel.findOne({ 'sessions.token': token, active: true }).select('_id sessions') : null,
+    selectSession(studentModel.findOne({ 'sessions.token': token })),
+    selectSession(companyModel.findOne({ 'sessions.token': token })),
+    reviewerModel ? selectSession(reviewerModel.findOne({ 'sessions.token': token, active: true })) : null,
   ])
 
   const subjects = [

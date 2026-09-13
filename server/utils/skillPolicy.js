@@ -1,6 +1,6 @@
 const DAY_MS = 86400000
-const CATEGORIES = ['Frontend', 'Backend', 'Design', 'Analytics', 'Marketing', 'Other']
-const STAGES = ['Beginner', 'Intermediate', 'Pro']
+const CATEGORIES = ['Frontend', 'Backend', 'Full Stack', 'Mobile Development', 'Cloud Computing', 'DevOps', 'Cybersecurity', 'AI & Machine Learning', 'Data Engineering', 'Databases', 'Design', 'Analytics', 'Marketing', 'Content & Writing', 'Video & Animation', 'Game Development', 'Quality Assurance', 'Business & Finance', 'Product Management', 'Other']
+const STAGES = ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery']
 const REWARDS = Object.freeze({ verify: 60, reverify: 50, upgrade: 100, challenge: 80, retain: 20, expiry: -80 })
 const CHALLENGES = [
   { id: 1, skill: 'Data Structures', title: 'Reverse a linked list', instructions: 'Implement iterative and recursive reversal. Include empty-list and single-node tests and explain time and space complexity.' },
@@ -35,6 +35,26 @@ function isVerifiedSkill(skill, now = new Date()) {
   return skill.verified === true && ['valid', 'due'].includes(skillStatus(skill, now))
 }
 
+function isArchivedSkill(skill) {
+  return skill?.archived === true
+}
+
+function isDiscoverableVerifiedSkill(skill, now = new Date()) {
+  return !isArchivedSkill(skill) && isVerifiedSkill(skill, now)
+}
+
+function publishedSkillNames(profileSkills, skillHubSkills, now = new Date()) {
+  const archivedNames = new Set((Array.isArray(skillHubSkills) ? skillHubSkills : [])
+    .filter(isArchivedSkill)
+    .map(skill => String(skill.name || '').trim().toLowerCase())
+    .filter(Boolean))
+  const names = [
+    ...(Array.isArray(profileSkills) ? profileSkills : []).filter(name => typeof name === 'string' && name.trim() && !archivedNames.has(name.trim().toLowerCase())),
+    ...(Array.isArray(skillHubSkills) ? skillHubSkills : []).filter(skill => isDiscoverableVerifiedSkill(skill, now)).map(skill => skill.name),
+  ]
+  return [...new Set(names.map(name => name.trim()))]
+}
+
 function activeStreak(skill, now = new Date()) {
   const lastDay = expiryDay(skill?.lastRetentionDate)
   const storedStreak = Math.max(0, Number(skill?.streak) || 0)
@@ -49,4 +69,4 @@ function skillBrief({ mode, skillName, targetStage, challengeId }) {
   return `${purpose} Provide original work, explain your contribution and decisions, and include reproducible tests or other evidence, limitations and improvements.`
 }
 
-module.exports = { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, activeStreak, skillBrief }
+module.exports = { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, isArchivedSkill, isDiscoverableVerifiedSkill, publishedSkillNames, activeStreak, skillBrief }

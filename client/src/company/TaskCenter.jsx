@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import SectionTabs from './SectionTabs'
 import { COMPANY_TASK_TYPES, COMPANY_TASK_TYPE_CONFIG, getCompanyTaskTypeLabel, mergeCompanyTaskLibraryState } from './companyTaskDefaults'
 import SubmissionReview from './SubmissionReview'
 import { toast } from '../ui/toast'
-import { Pencil, Trash2 } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
 
 const EMPTY_FORM = {
   type: 'live_project',
@@ -21,6 +21,60 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+function TaskTypePicker({ value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef(null)
+  const closeWhenFocusLeaves = () => {
+    window.requestAnimationFrame(() => {
+      if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
+    })
+  }
+
+  return <div ref={pickerRef} className="task-type-picker" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="task-type-trigger" aria-haspopup="listbox" aria-expanded={open}
+      onClick={() => setOpen(current => !current)}>{options.find(option => option.value === value)?.label || value}</button>
+    {open && <div className="task-type-options" role="listbox" aria-label="Assignment Type">
+      {options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === value}
+        onClick={() => { onChange(option.value); setOpen(false) }}>{option.label}</button>)}
+    </div>}
+  </div>
+}
+
+function TaskDatePicker({ value, onChange }) {
+  const today = new Date()
+  const parsed = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : today
+  const [open, setOpen] = useState(false)
+  const [month, setMonth] = useState(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
+  const pickerRef = useRef(null)
+  const year = month.getFullYear()
+  const monthIndex = month.getMonth()
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+  const firstDay = new Date(year, monthIndex, 1).getDay()
+  const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)]
+  while (cells.length % 7) cells.push(null)
+  const closeWhenFocusLeaves = () => {
+    window.requestAnimationFrame(() => {
+      if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
+    })
+  }
+  const selectDay = day => {
+    if (!day) return
+    onChange(`${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    setOpen(false)
+  }
+
+  return <div ref={pickerRef} className="task-date-picker" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="task-date-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(current => !current)}>
+      <span>{value || 'YYYY-MM-DD'}</span><CalendarDays size={15} aria-hidden="true" />
+    </button>
+    {open && <div className="task-date-calendar" role="dialog" aria-label="Choose deadline">
+      <div className="task-date-calendar-header"><button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}><ChevronLeft size={15}/></button><strong>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</strong><button type="button" aria-label="Next month" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}><ChevronRight size={15}/></button></div>
+      <div className="task-date-weekdays">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day}>{day}</span>)}</div>
+      <div className="task-date-days">{cells.map((day, index) => <button key={`${year}-${monthIndex}-${index}`} type="button" disabled={!day} aria-pressed={day && value === `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`} onClick={() => selectDay(day)}>{day || ''}</button>)}</div>
+    </div>}
+  </div>
+}
+
 function TaskForm({ form, setForm, onCancel, onSave, isEditing, busy }) {
   const update = (key, value) => setForm(current => ({ ...current, [key]: value }))
   const updateDetail = (key, value) => setForm(current => ({ ...current, details: { ...current.details, [key]: value } }))
@@ -32,12 +86,10 @@ function TaskForm({ form, setForm, onCancel, onSave, isEditing, busy }) {
       <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)', marginBottom: 4 }}>{isEditing ? 'Edit Saved Assignment' : 'Create Real-World Assignment'}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Define the work a student will complete before you select them for the GIG.</div>
       <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Assignment Type *</span>
-          <select aria-label="Assignment Type" value={form.type} onChange={event => setForm(current => ({ ...current, type: event.target.value, details: {} }))} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', fontSize: 13 }}>
-            {COMPANY_TASK_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-          </select>
-        </label>
+          <TaskTypePicker value={form.type} options={COMPANY_TASK_TYPES} onChange={type => setForm(current => ({ ...current, type, details: {} }))} />
+        </div>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6, gridColumn: '1 / -1' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Assignment Title *</span>
           <input value={form.title} onChange={event => update('title', event.target.value)} maxLength={160} placeholder="e.g. Redesign the mobile checkout flow" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
@@ -56,7 +108,7 @@ function TaskForm({ form, setForm, onCancel, onSave, isEditing, busy }) {
         ))}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Deadline *</span>
-          <input type="date" value={form.deadline} onChange={event => update('deadline', event.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
+          <TaskDatePicker value={form.deadline} onChange={deadline => update('deadline', deadline)} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Maximum Score *</span>
@@ -221,7 +273,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
 
   return (
     <div className="company-work-section task-viewport">
-      <div className="work-heading"><h2>Task Center</h2><button className="btn-primary task-create-button" onClick={openCreateForm} disabled={Boolean(busyAction)}>Create Task</button></div>
+      <div className="work-heading task-center-heading"><h2>Task Center</h2><button className="btn-primary task-create-button" onClick={openCreateForm} disabled={Boolean(busyAction)}>Create Task</button></div>
 
       <div className="responsive-card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
         {[
@@ -240,8 +292,8 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
       <SectionTabs label="Task Center views" options={['Assignments', 'Submissions']} value={view} onChange={setView} />
       {showForm && <div className="company-task-editor"><button type="button" className="btn-secondary" disabled={Boolean(busyAction)} onClick={() => setShowForm(false)}>Back to tasks</button><TaskForm form={form} setForm={setForm} onCancel={() => setShowForm(false)} onSave={saveTask} isEditing={Boolean(editingTaskId)} busy={Boolean(busyAction)} /></div>}
 
-      <div hidden={showForm || view !== 'Assignments'} className="responsive-split-main task-assignment-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 0.9fr', gap: 16, marginBottom: 20 }}>
-        <section style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+      {!showForm && view === 'Assignments' && <div className="responsive-split-main task-assignment-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 0.9fr', gap: 16, marginBottom: 20 }}>
+        <section className="task-template-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Saved Assignment Templates</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{localState.tasks.length} saved</span></div>
           {localState.tasks.length === 0 && <div style={{ padding: '34px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Create a practical work sample to send to a GIG applicant.</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -258,7 +310,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
           </div>
         </section>
 
-        <section style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+        <section className="task-assignment-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
           <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 5 }}>Assign Saved Task</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Only students who applied to the selected GIG can receive a task.</div>
           {!selectedTask && <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14, color: 'var(--muted)', fontSize: 13 }}>Select a saved task first.</div>}
@@ -267,19 +319,32 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>GIG</span><select aria-label="GIG" value={selectedGigId} onChange={event => { setSelectedGigId(event.target.value); setSelectedStudentId('') }} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)' }}><option value="">Choose a GIG</option>{gigs.filter(gig => gig.status !== 'Closed').map(gig => <option key={gig.id} value={gig.id}>{gig.title}</option>)}</select></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Applicant</span><select aria-label="Applicant" value={selectedStudentId} onChange={event => setSelectedStudentId(event.target.value)} disabled={!selectedGigId} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)' }}><option value="">{selectedGig ? (applicantOptions.length ? 'Choose an applicant' : 'No applicants yet') : 'Choose a GIG first'}</option>{applicantOptions.map(applicant => <option key={applicant.id} value={applicant.id}>{applicant.name}</option>)}</select></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>Message (optional)</span><textarea value={assignmentMessage} onChange={event => setAssignmentMessage(event.target.value)} maxLength={1000} rows={3} placeholder="Add a short note for the student..." style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontFamily: 'inherit', resize: 'vertical' }} /></label>
-            <button type="button" onClick={assignTask} disabled={Boolean(busyAction) || !selectedStudentId} className="btn-accent" style={{ padding: '10px 14px', fontSize: 13 }}>{busyAction === 'assign' ? 'Sending...' : 'Send Task to Student'}</button>
+            <div className="task-assignment-actions">
+              <button type="button" onClick={() => { setSelectedTaskId(null); setSelectedGigId(''); setSelectedStudentId(''); setAssignmentMessage('') }} disabled={Boolean(busyAction)} className="btn-secondary" style={{ padding: '10px 14px', fontSize: 13 }}>Cancel</button>
+              <button type="button" onClick={assignTask} disabled={Boolean(busyAction) || !selectedStudentId} className="btn-accent" style={{ padding: '10px 14px', fontSize: 13 }}>{busyAction === 'assign' ? 'Sending...' : 'Send Task to Student'}</button>
+            </div>
           </div>}
         </section>
-      </div>
+      </div>}
 
-      <section hidden={showForm || view !== 'Submissions'} className="task-submission-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+      {!showForm && view === 'Submissions' && <section className="task-submission-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Submitted Tasks</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>Review evidence before selection</span></div>
-        <div className="work-form-grid" style={{ marginBottom: 12 }}><input type="search" aria-label="Search submissions" placeholder="Search student or assignment" value={search} onChange={event => setSearch(event.target.value)} /><select aria-label="Submission status" value={reviewFilter} onChange={event => setReviewFilter(event.target.value)}>{[['All', 'All'], ['submitted', 'Awaiting review'], ['reviewed', 'Reviewed'], ['needs_revision', 'Revision requested'], ['selected', 'Selected'], ['rejected', 'Rejected']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+        <div className="work-form-grid" style={{ marginBottom: 12 }}>
+          <input type="search" aria-label="Search submissions" placeholder="Search student or assignment" value={search} onChange={event => setSearch(event.target.value)} />
+          <TaskTypePicker
+            value={reviewFilter}
+            options={[
+              ['All', 'All'], ['submitted', 'Awaiting review'], ['reviewed', 'Reviewed'],
+              ['needs_revision', 'Revision requested'], ['selected', 'Selected'], ['rejected', 'Rejected'],
+            ].map(([value, label]) => ({ value, label }))}
+            onChange={setReviewFilter}
+          />
+        </div>
         {visibleSubmissions.length === 0 && <div style={{ padding: '28px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No matching interview submissions.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {visibleSubmissions.map(submission => <SubmissionReview key={submission.id + submission.status} readOnly={submission.archived || submission.status === 'selected'} submission={submission} onReview={onReviewTaskSubmission} />)}
+          {visibleSubmissions.map(submission => <SubmissionReview key={submission.id + submission.status} readOnly={submission.archived} submission={submission} onReview={onReviewTaskSubmission} />)}
         </div>
-      </section>
+      </section>}
     </div>
   )
 }

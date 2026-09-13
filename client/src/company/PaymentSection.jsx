@@ -1,33 +1,46 @@
-import { useState } from 'react'
-import { Clock3, CircleCheck, IndianRupee } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Clock3, CircleCheck, IndianRupee, RefreshCw, Download } from 'lucide-react'
 import SectionTabs from './SectionTabs'
 import { paymentCsv, paymentDateToday } from '../lib/paymentFormatting'
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(value) || 0)
 
-export default function PaymentSection({ paymentState, onRecordPayment }) {
+export default function PaymentSection({ paymentState, onRecordPayment, onRefresh }) {
   const [form, setForm] = useState({ submissionId: '', amount: '', method: 'bank_transfer', reference: '', paidOn: paymentDateToday(), confirmed: false })
   const [busy, setBusy] = useState(false)
   const [view, setView] = useState('Record payment')
   const [error, setError] = useState('')
+  const [page, setPage] = useState(0)
+  const recording = useRef(false)
   const pending = paymentState?.pending || []
   const transactions = paymentState?.transactions || []
-  const totalRecorded = transactions.reduce((total, row) => total + Number(row.amount || 0), 0)
+  const totalRecorded = transactions.reduce((total, row) => total + Math.round(Number(row.amount || 0) * 100), 0) / 100
+  const pages = Math.max(1, Math.ceil(transactions.length / 10))
+  const currentPage = Math.min(page, pages - 1)
 
   const change = (key, value) => setForm(current => ({ ...current, [key]: value }))
 
   const record = async event => {
     event.preventDefault()
+    if (recording.current) return
+    if (!pending.some(item => item.id === form.submissionId)) {
+      setError('Choose work that is still awaiting payment.')
+      return
+    }
+    recording.current = true
     setBusy(true)
     setError('')
 
     try {
       await onRecordPayment(form.submissionId, { ...form, amount: Number(form.amount) })
-      setForm(current => ({ ...current, submissionId: '', reference: '', amount: '', confirmed: false }))
+      setForm({ submissionId: '', reference: '', amount: '', method: 'bank_transfer', paidOn: paymentDateToday(), confirmed: false })
+      setPage(0)
+      setView('History')
     } catch (failure) {
       setError(failure.message || 'Could not record payment.')
     } finally {
       setBusy(false)
+      recording.current = false
     }
   }
 
@@ -50,9 +63,10 @@ export default function PaymentSection({ paymentState, onRecordPayment }) {
           <h2>Payment</h2>
           <p className="work-muted">Record payments your company has already sent to selected students.</p>
         </div>
-        <button className="btn-secondary payment-export" disabled={!transactions.length} onClick={exportRecords} title="Export payment records">
-          <span aria-hidden="true">↓</span> Export CSV
-        </button>
+        <div className="payment-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {onRefresh && <button className="btn-secondary" disabled={busy} onClick={onRefresh} title="Refresh payment records" aria-label="Refresh payment records"><RefreshCw size={16}/></button>}
+          <button className="btn-secondary payment-export" disabled={!transactions.length} onClick={exportRecords} title="Export payment records"><Download size={16}/> Export CSV</button>
+        </div>
       </header>
 
       <div className="payment-summary" aria-label="Payment summary">
@@ -82,6 +96,7 @@ export default function PaymentSection({ paymentState, onRecordPayment }) {
 
         {pending.length ? (
           <form className="work-form payment-form" onSubmit={record}>
+            <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <label>Approved GIG
               <select required value={form.submissionId} onChange={event => change('submissionId', event.target.value)}>
                 <option value="">Select approved work</option>
@@ -97,6 +112,7 @@ export default function PaymentSection({ paymentState, onRecordPayment }) {
             <label className="work-check"><input type="checkbox" required checked={form.confirmed} onChange={event => change('confirmed', event.target.checked)} />I confirm this payment has already been sent to the student.</label>
             {error && <p role="alert" className="work-error">{error}</p>}
             <div className="payment-form-actions"><button className="btn-primary" disabled={busy}>{busy ? 'Recording...' : 'Record payment'}</button></div>
+            </fieldset>
           </form>
         ) : (
           <div className="payment-empty-state">
@@ -120,11 +136,14 @@ export default function PaymentSection({ paymentState, onRecordPayment }) {
 
         {transactions.length ? (
           <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Amount</th><th>Reference</th><th>Paid on</th><th>Record</th></tr></thead><tbody>
-            {transactions.map(row => <tr key={row.id}><td><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td>{money(row.amount)}</td><td>{row.reference}</td><td>{row.paidOn}</td><td><span className="payment-recorded-badge">Recorded</span></td></tr>)}
+            {transactions.slice(currentPage * 10, currentPage * 10 + 10).map(row => <tr key={row.id}><td><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td>{money(row.amount)}</td><td>{row.reference}</td><td>{row.paidOn}</td><td><span className="payment-recorded-badge">Recorded</span></td></tr>)}
           </tbody></table></div>
         ) : (
           <div className="payment-history-empty"><span aria-hidden="true">▤</span><p>No payment records yet.</p></div>
         )}
+        {transactions.length > 10 && <nav className="payment-history-pagination" aria-label="Payment history pages" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'flex-end', padding: 12 }}>
+          <button className="btn-secondary" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button><span>{currentPage + 1} / {pages}</span><button className="btn-secondary" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Next</button>
+        </nav>}
       </section>
     </section>
   )

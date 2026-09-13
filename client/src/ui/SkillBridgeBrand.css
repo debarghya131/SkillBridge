@@ -1,0 +1,50 @@
+.skillbridge-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #173329;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.skillbridge-brand img {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.skillbridge-wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.skillbridge-wordmark > span:last-child {
+  color: #176548;
+}
+
+.skillbridge-brand-compact {
+  gap: 7px;
+}
+
+.skillbridge-brand-compact img {
+  width: 28px;
+  height: 28px;
+}
+
+.skillbridge-brand-compact .skillbridge-wordmark {
+  font-size: 15px;
+}
+
+.skillbridge-brand-large img {
+  width: 46px;
+  height: 46px;
+}
+
+.skillbridge-brand-large .skillbridge-wordmark {
+  font-size: 24px;
+}

@@ -4,11 +4,11 @@ const Student = require('../models/Student')
 const Company = require('../models/Company')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
 const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
-const { buildActivityDays, buildStudentSkillHubSkills, updateStudentSkillHub, getStudentSkillHub, applyReviewedSkillAssessment, normalizeHeatmapFilters, reconcileSkillExpiry, buildSkillGapReport, buildStreakSummary } = require('../controllers/skillHubController')
-const { getCurrentStudent, updateCurrentStudent } = require('../controllers/studentController')
+const { buildActivityDays, buildStudentSkillHubSkills, updateStudentSkillHub, getStudentSkillHub, applyReviewedSkillAssessment, normalizeHeatmapFilters, reconcileSkillExpiry, buildSkillGapReport, buildStreakSummary, setStudentSkillArchived } = require('../controllers/skillHubController')
+const { getCurrentStudent, getCurrentStudentProfileMedia, updateCurrentStudent } = require('../controllers/studentController')
 const { validateAssessment } = require('../controllers/skillAssessmentController')
 const { recordStudentTrustScoreEvent, recordTrustScoreEvent, buildTrustScoreSnapshot } = require('../controllers/trustScoreController')
-const { dayKey, skillStatus, isVerifiedSkill, activeStreak, DAY_MS } = require('../utils/skillPolicy')
+const { dayKey, skillStatus, isVerifiedSkill, activeStreak, publishedSkillNames, DAY_MS } = require('../utils/skillPolicy')
 
 const response = 'I built the original implementation and included reproducible tests, results, and limitations.'
 const dayOffset = offset => new Date(Date.parse(dayKey()) + offset * DAY_MS).toISOString().slice(0, 10)
@@ -84,6 +84,52 @@ test('student profile includes the server-derived practice summary for dashboard
     activityDays: [{ date: dayOffset(-1), count: 1 }, { date: dayOffset(0), count: 1 }] })
 })
 
+test('workspace bootstrap excludes heavy section state and loads profile media separately', async t => {
+  const student = studentWith()
+  student.videoUrl = 'data:video/mp4;base64,AAAA'
+  const selections = []
+  t.mock.method(Student, 'findOne', () => ({
+    select: async fields => {
+      selections.push(fields)
+      return student
+    },
+  }))
+
+  const profile = await getCurrentStudent('s', { workspace: true })
+  const media = await getCurrentStudentProfileMedia('s')
+
+  assert.equal(Object.prototype.hasOwnProperty.call(profile, 'videoUrl'), false)
+  assert.equal(media.videoUrl, student.videoUrl)
+  assert.match(selections[0], /-videoUrl/)
+  assert.match(selections[0], /-gigState/)
+  assert.match(selections[1], /\bvideoUrl\b/)
+})
+
+test('skill hub query includes activity state used by streak summaries', async t => {
+  const student = studentWith([{ name: 'React', verified: true, renewalDue: dayOffset(90), streak: 2, longestStreak: 2 }])
+  student.skillHubState = {
+    skillLog: [
+      { eventType: 'retention_completed', skillName: 'React', earnedDay: dayOffset(-1) },
+      { eventType: 'retention_completed', skillName: 'React', earnedDay: dayOffset(0) },
+    ],
+  }
+  let selectedFields = ''
+  t.mock.method(Student, 'findOne', () => ({
+    select: async fields => { selectedFields = fields; return student },
+  }))
+  t.mock.method(Company, 'aggregate', async () => [])
+
+  const hub = await getStudentSkillHub('s')
+
+  assert.match(selectedFields, /\bskillHubState\b/)
+  assert.equal(hub.skillHubState.streaks.totalPracticeDays, 2)
+  assert.equal(hub.skillHubState.streaks.overallCurrent, 2)
+  assert.deepEqual(hub.skillHubState.activityDays, [
+    { date: dayOffset(-1), count: 1 },
+    { date: dayOffset(0), count: 1 },
+  ])
+})
+
 test('profile persistence rejects unsafe media and strips unsafe external links', async t => {
   const student = studentWith()
   t.mock.method(Student, 'findOne', async () => student)
@@ -98,7 +144,7 @@ test('profile persistence rejects unsafe media and strips unsafe external links'
   await assert.rejects(updateCurrentStudent('s', { videoUrl: 'data:video/ogg;base64,AAAA' }), /intro video/)
 })
 
-test('profile drafts do not earn TrustScore until they are explicitly saved', async t => {
+test('profile drafts and saved uploads do not earn unreviewed TrustScore', async t => {
   const student = studentWith()
   t.mock.method(Student, 'findOne', async () => student)
 
@@ -113,7 +159,7 @@ test('profile drafts do not earn TrustScore until they are explicitly saved', as
     githubLink: [{ url: 'https://example.com/draft', saved: true }],
     projects: [{ name: 'Draft', link: 'https://example.com/draft-project', saved: true }],
   })
-  assert.equal(saved.trustScore, 130)
+  assert.equal(saved.trustScore, 0)
   assert.deepEqual(student.trustScoreState.events.map(event => event.type), ['profile_link_added', 'project_uploaded'])
 })
 
@@ -147,7 +193,7 @@ test('approval updates profile, renewal date and reputation; expiration is appli
   await applyReviewedSkillAssessment(student, { eventType: 'reverify_completed', skillName: 'Python', assessmentId: 'review-2' }, 'transaction')
   assert.equal(student.skillHubSkills[0].renewalDue, dayOffset(365))
   assert.equal(student.skillHubSkills[0].verified, true)
-  assert.equal(student.trustScore, 50)
+  assert.equal(student.trustScore, 30, 'renewal credit does not erase the outstanding expiry penalty')
 })
 
 test('legacy verification can expire without charging an unearned penalty', async () => {
@@ -205,9 +251,35 @@ test('assessment eligibility blocks level jumps, expired upgrades, early renewal
   assert.throws(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Pro' }), /next skill/)
   assert.throws(() => validateAssessment(student, { ...base, mode: 'challenge', challengeId: 4 }), /different skill/)
   assert.doesNotThrow(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Intermediate' }))
+  student.skillHubSkills[0].stage = 'Pro'
+  assert.doesNotThrow(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Pro Mastery' }))
+  student.skillHubSkills[0].stage = 'Pro Mastery'
+  assert.throws(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Pro Mastery' }), /next skill/)
   student.skillHubSkills[0].renewalDue = dayOffset(-1)
   assert.throws(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Intermediate' }), /active verified/)
   assert.doesNotThrow(() => validateAssessment(student, { ...base, mode: 'reverify' }))
+})
+
+test('archived skills retain evidence but are hidden from matching until restored', async t => {
+  const student = studentWith([{ name: 'React', verified: true, renewalDue: dayOffset(90), stage: 'Pro' }])
+  student.skills = ['React']
+  t.mock.method(Student, 'findOne', async () => student)
+
+  const archived = await setStudentSkillArchived('s', { skillName: 'React', archived: true })
+  assert.equal(archived.skills[0].archived, true)
+  assert.equal(student.skillHubSkills[0].archived, true)
+  assert.equal(student.skillHubState.skillLog[0].eventType, 'archived')
+  assert.deepEqual(publishedSkillNames(student.skills, student.skillHubSkills), [])
+  assert.throws(() => validateAssessment(student, { skillName: 'React', mode: 'retain', response }), /Restore this skill/)
+  const gap = buildSkillGapReport(buildStudentSkillHubSkills(student), [{ gigManagementState: { gigs: [{ title: 'Frontend', status: 'Hiring', skills: ['React'] }] } }])
+  assert.equal(gap.overallMatch, 0)
+  assert.equal(gap.gapData[0].status, 'Archived')
+
+  const restored = await setStudentSkillArchived('s', { skillName: 'React', archived: false })
+  assert.equal(restored.skills[0].archived, false)
+  assert.equal(student.skillHubState.skillLog[0].eventType, 'restored')
+  assert.deepEqual(publishedSkillNames(student.skills, student.skillHubSkills), ['React'])
+  assert.doesNotThrow(() => validateAssessment(student, { skillName: 'React', mode: 'retain', response }))
 })
 
 test('gap report counts real active GIG requirements without invented market percentages', () => {

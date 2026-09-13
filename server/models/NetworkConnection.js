@@ -1,10 +1,10 @@
 const mongoose = require('mongoose')
 
 const networkConnectionSchema = new mongoose.Schema({
-  pairKey: { type: String, required: true, unique: true, index: true },
-  requester: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
-  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
-  status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending', index: true },
+  pairKey: { type: String, required: true, unique: true },
+  requester: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+  recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+  status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending' },
   respondedAt: { type: Date, default: null },
 }, { timestamps: true })
 

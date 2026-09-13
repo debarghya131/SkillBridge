@@ -4,7 +4,7 @@ const SkillAssessment = require('../models/SkillAssessment')
 const { findModelByActiveToken, getSessionTtlMs, buildAuthError } = require('../utils/session')
 const { buildStudentSkillHubSkills, applyReviewedSkillAssessment } = require('./skillHubController')
 const { normalizeSubmissionLink } = require('./taskBridgeController')
-const { CHALLENGES, dayKey, isVerifiedSkill, skillBrief } = require('../utils/skillPolicy')
+const { CHALLENGES, STAGES, dayKey, isVerifiedSkill, skillBrief } = require('../utils/skillPolicy')
 
 const EVENTS = { verify: 'verify_completed', reverify: 'reverify_completed', upgrade: 'upgrade_completed', retain: 'retention_completed', challenge: 'challenge_completed' }
 const RUBRIC_WEIGHTS = { correctness: 40, evidence: 20, understanding: 20, testing: 10, communication: 10 }
@@ -46,15 +46,15 @@ function validateAssessment(student, payload) {
   if (!Object.hasOwn(EVENTS, mode)) throw buildAuthError('Invalid assessment mode')
   const skill = buildStudentSkillHubSkills(student).find(item => item.name.toLowerCase() === String(payload.skillName || '').trim().toLowerCase())
   if (!skill) throw buildAuthError('Add this skill to your profile before submitting evidence')
+  if (skill.archived) throw buildAuthError('Restore this skill before submitting new evidence for it', 409)
   const response = typeof payload.response === 'string' ? payload.response.trim() : ''
   if (response.length < 50 || response.length > 10000) throw buildAuthError('Describe your work in 50 to 10000 characters')
   const evidenceLink = payload.evidenceLink ? normalizeSubmissionLink(payload.evidenceLink) : ''
   const targetStage = mode === 'upgrade' ? payload.targetStage : ''
-  const stages = ['Beginner', 'Intermediate', 'Pro']
   if (mode === 'verify' && skill.renewalStatus !== 'unverified') throw buildAuthError('This skill is already verified. Use renewal when due.', 409)
   if (mode === 'reverify' && !['due', 'expired'].includes(skill.renewalStatus)) throw buildAuthError('Renewal is available within 30 days of expiry or after expiry.', 409)
   if (['upgrade', 'retain'].includes(mode) && !isVerifiedSkill(skill)) throw buildAuthError('An active verified skill is required')
-  if (mode === 'upgrade' && (stages.indexOf(targetStage) !== stages.indexOf(skill.stage) + 1 || !stages.includes(targetStage))) {
+  if (mode === 'upgrade' && (STAGES.indexOf(targetStage) !== STAGES.indexOf(skill.stage) + 1 || !STAGES.includes(targetStage))) {
     throw buildAuthError('Choose the next skill level for an upgrade')
   }
   const challengeId = mode === 'challenge' ? Number(payload.challengeId) : null
@@ -67,8 +67,8 @@ function validateAssessment(student, payload) {
 async function listStudentAssessments(token) {
   const student = await findStudent(token)
   const [open, recent] = await Promise.all([
-    SkillAssessment.find({ studentId: student._id, status: { $in: ['pending', 'needs_revision'] } }).sort({ createdAt: -1 }).limit(1000),
-    SkillAssessment.find({ studentId: student._id, status: { $in: ['approved', 'rejected'] } }).sort({ createdAt: -1 }).limit(100),
+    SkillAssessment.find({ studentId: student._id, status: { $in: ['pending', 'needs_revision'] } }).sort({ createdAt: -1 }).limit(100),
+    SkillAssessment.find({ studentId: student._id, status: { $in: ['approved', 'rejected'] } }).sort({ createdAt: -1 }).limit(50),
   ])
   return [...new Map([...open, ...recent].map(item => [String(item._id), item])).values()].map(serialize)
 }
@@ -77,20 +77,27 @@ async function submitSkillAssessment(token, payload) {
   const student = await findStudent(token)
   const values = validateAssessment(student, payload)
   const earnedDay = dayKey()
-  if (['retain', 'challenge'].includes(values.mode) && (student.skillHubState?.skillLog || []).some(item =>
+  const daily = ['retain', 'challenge'].includes(values.mode)
+  const baseAttemptKey = values.attemptKey
+  if (daily) values.attemptKey = `${baseAttemptKey}:${earnedDay}`
+  if (!payload.id && daily && (student.skillHubState?.skillLog || []).some(item =>
     item.earnedDay === earnedDay && item.eventType === EVENTS[values.mode] && item.skillName.toLowerCase() === values.skillName.toLowerCase()
     && (values.mode !== 'challenge' || item.challengeId === values.challengeId))) throw buildAuthError('This task was already approved for today.', 409)
   try {
     if (payload.id) {
       if (!mongoose.isObjectIdOrHexString(payload.id)) throw buildAuthError('Invalid assessment ID')
-      const assessment = await SkillAssessment.findOneAndUpdate({ _id: payload.id, studentId: student._id, attemptKey: values.attemptKey, status: 'needs_revision' },
-        { $set: { ...values, status: 'pending', open: true, reviewedAt: null }, $inc: { __v: 1 } }, { returnDocument: 'after', runValidators: true })
+      // Keep the original earned day and attempt key when revising older work.
+      const revisionValues = { ...values }
+      delete revisionValues.attemptKey
+      const assessment = await SkillAssessment.findOneAndUpdate({ _id: payload.id, studentId: student._id,
+        skillName: values.skillName, mode: values.mode, targetStage: values.targetStage, challengeId: values.challengeId, status: 'needs_revision' },
+        { $set: { ...revisionValues, status: 'pending', open: true, reviewedAt: null }, $inc: { __v: 1 } }, { returnDocument: 'after', runValidators: true })
       if (!assessment) throw buildAuthError('This assessment cannot be revised', 409)
       return serialize(assessment)
     }
     const existingOpen = await SkillAssessment.exists({
       studentId: student._id,
-      attemptKey: values.attemptKey,
+      ...(daily ? { $or: [{ attemptKey: values.attemptKey }, { attemptKey: baseAttemptKey, earnedDay }] } : { attemptKey: values.attemptKey }),
       status: { $in: ['pending', 'needs_revision'] },
     })
     if (existingOpen) throw buildAuthError('An assessment is already open. Revise the existing submission or wait for review.', 409)
@@ -123,6 +130,12 @@ async function reviewSkillAssessment(id, { status, feedback, reviewer, reviewerI
       assessment.rewardPoints = await applyReviewedSkillAssessment(student, { eventType: EVENTS[assessment.mode], skillName: assessment.skillName,
         targetStage: assessment.targetStage, challengeId: assessment.challengeId, assessmentId: String(assessment._id),
         earnedDay: assessment.earnedDay || dayKey(assessment.createdAt) }, session)
+    }
+    if (reviewerId && rubric && ((status === 'approved' && rubric.total >= 90) || (status === 'rejected' && rubric.total < 40))) {
+      const { recordTrustScoreEvent } = require('./trustScoreController')
+      recordTrustScoreEvent(student, status === 'approved' ? 'assessment_quality' : 'assessment_below_standard',
+        status === 'approved' ? String(assessment._id) : assessment.earnedDay || dayKey(assessment.createdAt))
+      await student.save({ session })
     }
     Object.assign(assessment, { status, open: status === 'needs_revision', feedback: feedback.trim(), reviewer: reviewer.trim(), rubric: rubric || assessment.rubric, reviewedAt: new Date() })
     assessment.reviewHistory.push({ status, feedback: assessment.feedback, reviewer: assessment.reviewer, reviewedAt: assessment.reviewedAt,

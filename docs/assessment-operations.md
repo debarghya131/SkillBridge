@@ -37,9 +37,11 @@ There is no automatic proof of skill, AI review, or instant verification. Previo
 | Verified skill expires | -80 once per expiry cycle | Expired, no active verified badge |
 | Challenge approved | Up to +80 per submission day across all challenges | Evidence and activity recorded |
 | Practice approved | Up to +20 per submission day across all skills | Consecutive approved practice days recorded |
+| Archive skill | 0 | Hide from public profile, talent search, GIG matching and new evidence actions; reviewed history remains private to the student |
+| Restore archived skill | 0 | Return the existing verification to public matching when it is still valid |
 | Pending, rejected, revision requested | 0 | No new verification or level |
 
-Dates and daily reward periods use Asia/Kolkata. The expiry day is inclusive; renewal opens 30 days before expiry. Daily rewards use the server-assigned original submission day, even when review happens later. Revisions retain that day and the assigned brief. Approval revalidates current eligibility. Streaks are derived from approved practice days, including reviews arriving out of order. Missing practice does not automatically deduct points or downgrade a skill.
+Dates and daily reward periods use Asia/Kolkata. The expiry day is inclusive; renewal opens 30 days before expiry. Daily rewards use the server-assigned original submission day, even when review happens later. Revisions retain that day and the assigned brief. Approval revalidates current eligibility. Streaks are derived from approved practice days, including reviews arriving out of order. Missing practice does not automatically deduct points or downgrade a skill. Archiving is reversible and does not remove evidence, TrustScore history, or existing GIG records; it prevents the archived skill from appearing in public/talent/GIG matching until restored.
 
 The existing TrustScore is clamped to 0..1000. New accounts start at 0, with no seeded skills or projects. Existing scores are not reset: audit and reconcile historical demo scores separately with a backup and explicit approval. Account activity retains nominal event points even if the score hits its floor or ceiling.
 

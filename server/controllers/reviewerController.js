@@ -14,7 +14,10 @@ function sanitizeReviewer(reviewer) {
 
 async function signInReviewer(payload) {
   const email = typeof payload?.email === 'string' ? payload.email.trim().toLowerCase() : ''
-  const reviewer = email ? await Reviewer.findOne({ email, active: true }) : null
+  const query = email ? Reviewer.findOne({ email, active: true }) : null
+  const reviewer = query
+    ? (typeof query?.select === 'function' ? await query.select('+passwordHash +sessions') : await query)
+    : null
   if (!reviewer || !verifyPassword(payload?.password, reviewer.passwordHash)) throw buildAuthError('Invalid reviewer email or password', 401)
   const token = createSessionToken()
   reviewer.lastSignedInAt = new Date()

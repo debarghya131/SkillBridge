@@ -13,6 +13,10 @@
 .trustscore-score strong small { color: var(--muted); font-size: 12px; }
 .trustscore-score em { display: inline-block; margin-left: 7px; padding: 3px 7px; border-radius: 99px; color: #fff; font-size: 10px; font-style: normal; font-weight: 800; vertical-align: 3px; }
 .trustscore-progress { height: 6px; overflow: hidden; border-radius: 99px; background: #e2e8f0; }
+.student-profile-editor .student-profile-hero { overflow: visible !important; }
+.student-profile-editor .student-verified-badge { z-index: 30; }
+.student-profile-editor .student-verification-popover { top: calc(100% + 10px) !important; bottom: auto !important; left: 50% !important; transform: translateX(-50%) !important; width: min(230px, calc(100vw - 52px)); max-width: none; box-sizing: border-box; white-space: normal !important; line-height: 1.45; }
+.student-profile-editor .student-verification-popover-arrow { top: auto !important; bottom: 100% !important; left: 50% !important; transform: translateX(-50%) !important; border-color: transparent transparent var(--dark) transparent !important; }
 .trustscore-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6366f1, #38bdf8); }
 .trustscore-compact dl { display: flex; gap: 16px; margin: 0; }
 .trustscore-compact dl > div { min-width: 68px; }
@@ -46,16 +50,19 @@
 .dashboard-activity-metrics > span:first-child svg { color: #2563eb; }
 .dashboard-activity-metrics strong { color: #172033; font-size: 12px; }
 .dashboard-activity-metrics small { color: #64748b; font-size: 10px; font-weight: 700; }
+.dashboard-metric-tooltip::after { top: calc(100% + 8px); }
 .profile-skills { min-width: 0; }
 .profile-skills-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .profile-skills-heading h3 { margin: 0; font-size: 15px; font-weight: 700; }
 .profile-skill-filters { display: flex; flex-wrap: wrap; gap: 5px; }
 .profile-skill-filters button { padding: 5px 9px; border: 1px solid transparent; border-radius: 16px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; line-height: 1.3; }
 .profile-skill-filters button[data-level="pro"] { background: #f3e8ff; color: #7e22ce; }
+.profile-skill-filters button[data-level="pro mastery"] { background: #fef3c7; color: #a16207; }
 .profile-skill-filters button[data-level="intermediate"] { background: #eff6ff; color: #1d4ed8; }
 .profile-skill-filters button[data-level="beginner"] { background: #ecfdf5; color: #047857; }
 .profile-skill-filters button[aria-pressed="true"] { background: #475569; color: white; border-color: #475569; }
 .profile-skill-filters button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.student-profile-modal-avatar { width: 68px !important; height: 68px !important; }
 .profile-skill-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .profile-skill-streak { display: inline-flex; align-items: center; gap: 2px; padding-left: 5px; border-left: 1px solid #c7d2fe; color: #c2410c; font-size: 11px; font-weight: 800; }
 .profile-activity { min-width: 0; padding: 14px; border: 1px solid #dbe3ee; border-radius: 8px; background: #f8fafc; }
@@ -163,6 +170,59 @@
   .profile-activity { padding: 12px; }
   .profile-activity > footer { align-items: flex-start; flex-direction: column; }
   .profile-heatmap-legend { margin-left: 0; }
+  .student-viewport.student-section-profile { padding: 12px !important; }
+  .student-profile-editor { min-width: 0; }
+  .student-profile-editor > div { padding: 14px !important; border-radius: 8px !important; }
+  .student-profile-editor .student-profile-hero { align-items: stretch !important; gap: 12px !important; }
+  .student-profile-editor .student-profile-hero { overflow: visible !important; }
+  .student-profile-editor .student-verified-badge { z-index: 30; }
+  .student-profile-editor .student-verification-popover { top: calc(100% + 10px) !important; bottom: auto !important; left: 50% !important; transform: translateX(-50%) !important; width: min(230px, calc(100vw - 52px)); max-width: none; box-sizing: border-box; white-space: normal !important; line-height: 1.45; }
+  .student-profile-editor .student-verification-popover-arrow { top: auto !important; bottom: 100% !important; left: 50% !important; transform: translateX(-50%) !important; border-color: transparent transparent var(--dark) transparent !important; }
+  .student-profile-editor .student-profile-hero > div:first-child { min-width: 0; align-items: flex-start !important; gap: 12px !important; }
+  .student-profile-editor .student-profile-hero > div:first-child > div:last-child { min-width: 0; }
+  .student-profile-editor .student-profile-hero > div:last-child { width: 100%; text-align: left !important; }
+  .student-profile-editor .student-profile-hero > div:last-child > div:last-child { font-size: 36px !important; }
+  .student-profile-editor .student-profile-card-heading { align-items: flex-start !important; gap: 10px; }
+  .student-profile-editor .student-profile-video-preview { width: 100%; max-width: none !important; aspect-ratio: 16 / 9 !important; }
+  .student-profile-editor .student-profile-media-actions > button { width: 100%; min-height: 42px; justify-content: center; }
+  .student-profile-editor .student-profile-input-row { width: 100%; }
+  .student-profile-editor .student-profile-input-row select,
+  .student-profile-editor .student-profile-input-row input,
+  .student-profile-editor .student-profile-input-row button { width: 100%; min-height: 42px; }
+  .student-profile-editor .student-profile-links-card a { min-width: 0; }
+  .student-profile-modal-shell { padding: 0 !important; align-items: stretch !important; }
+  .student-profile-modal { width: 100% !important; max-width: none !important; max-height: 100dvh !important; height: 100dvh; border: 0 !important; border-radius: 0 !important; display: flex; flex-direction: column; overflow: hidden !important; }
+  .student-profile-modal-header { flex-shrink: 0; padding: 18px 16px !important; border-radius: 0 !important; align-items: flex-start !important; gap: 10px !important; }
+  .student-profile-modal-header > div:first-child { min-width: 0; gap: 10px !important; }
+  .student-profile-modal-header > div:first-child > div:last-child { min-width: 0; }
+  .student-profile-modal-avatar { width: 64px !important; height: 64px !important; }
+  .student-profile-modal-header [id="profile-dialog-title"] { font-size: 17px !important; overflow-wrap: anywhere; }
+  .student-profile-modal-body { flex: 1; min-height: 0; padding: 18px 16px !important; gap: 18px !important; overflow-y: auto !important; overscroll-behavior: contain; }
+  .student-profile-modal-body > div > div[style*="width: 68px"] { width: 58px !important; height: 58px !important; }
+  .student-profile-modal-body video { max-width: 100%; }
+  .student-viewport.student-section-gig .gig-subnav { margin-bottom: 12px !important; }
+  .student-viewport.student-section-gig .student-tab-content { padding: 0 0 12px; }
+  .student-viewport.student-section-gig .gig-subnav .responsive-pill-nav-header { min-height: 42px; }
+  .student-viewport.student-section-gig .gig-subnav .responsive-pill-nav-list { max-height: min(52dvh, 340px); overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+  .student-viewport.student-section-gig .gig-subnav-item { min-height: 44px !important; }
+  .student-viewport.student-section-gig .gig-subnav-item > span:last-child { margin-left: auto; }
+  .student-viewport.student-section-gig .gig-tab-content { min-width: 0; overflow-x: hidden; }
+  .student-viewport.student-section-gig .gig-tab-content > div { min-width: 0; }
+  .student-viewport.student-section-gig .gig-tab-content .responsive-stack { min-width: 0; }
+  .student-viewport.student-section-gig .student-gig-card { padding: 14px !important; border-radius: 8px !important; }
+  .student-viewport.student-section-gig .student-gig-card-header { flex-direction: column; gap: 10px; margin-bottom: 12px !important; }
+  .student-viewport.student-section-gig .student-gig-card-company { width: 100%; align-items: flex-start; }
+  .student-viewport.student-section-gig .student-gig-card-company > div:last-child { min-width: 0; }
+  .student-viewport.student-section-gig .student-gig-card-company > div:last-child > div:nth-child(2) { line-height: 1.5; overflow-wrap: anywhere; }
+  .student-viewport.student-section-gig .student-gig-card-meta { width: 100%; margin-left: 0 !important; text-align: left !important; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .student-viewport.student-section-gig .student-gig-card-meta > div { margin: 0 !important; }
+  .student-viewport.student-section-gig .student-gig-card-tags { margin-bottom: 12px !important; }
+  .student-viewport.student-section-gig .student-gig-card-tags > span:last-child { width: 100%; margin-left: 0 !important; }
+  .student-viewport.student-section-gig .student-gig-card-actions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+  .student-viewport.student-section-gig .student-gig-card-actions > button { width: 100%; min-height: 42px; padding: 8px !important; justify-content: center; }
+}
+@media (max-width: 360px) {
+  .student-viewport.student-section-gig .student-gig-card-actions { grid-template-columns: 1fr; }
 }
 @media (max-height: 500px) {
   .student-viewport .gig-subnav,
@@ -187,6 +247,11 @@
 .student-viewport .gig-subnav,
 .student-viewport .skillhub-subnav,
 .student-viewport .network-subnav { position: relative; flex-shrink: 0; }
+
+@media (max-width: 800px) {
+  .student-viewport.student-section-skillhub { height: 100% !important; min-height: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .student-viewport.student-section-skillhub > div:not(.dashboard-skeleton) { height: auto !important; min-height: 100%; overflow: visible !important; }
+}
 .student-tab-content {
   flex: 1;
   min-height: 0;
@@ -225,4 +290,8 @@
 @media (max-width: 1023px) {
   .student-viewport.student-section-earning .responsive-earning-grid { display: block; overflow-y: auto; }
   .student-viewport.student-section-earning .responsive-earning-grid > .responsive-scroll-panel { height: auto !important; margin-bottom: 16px; }
+}
+@media (max-width: 800px) {
+  .student-viewport.student-section-skillhub { height: 100% !important; min-height: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .student-viewport.student-section-skillhub > div:not(.dashboard-skeleton) { height: auto !important; min-height: 100%; overflow: visible !important; }
 }

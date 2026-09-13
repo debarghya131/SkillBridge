@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BriefcaseBusiness, Send, X } from 'lucide-react'
 import CompanyLogo from '../ui/CompanyLogo'
 import { getCompanyTaskTypeLabel } from './companyTaskDefaults'
@@ -7,6 +7,24 @@ const OPEN_GIG_STATUSES = new Set(['hiring', 'reviewing', 'in progress'])
 
 function indiaDay() {
   return new Date(Date.now() + (330 * 60 * 1000)).toISOString().slice(0, 10)
+}
+
+function OpportunityPicker({ value, options, onChange, label }) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef(null)
+  const closeWhenFocusLeaves = () => {
+    window.requestAnimationFrame(() => {
+      if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
+    })
+  }
+  return <div ref={pickerRef} className="gig-form-menu" onBlur={closeWhenFocusLeaves}>
+    <button type="button" className="gig-form-menu-trigger" aria-haspopup="listbox" aria-expanded={open}
+      onClick={() => setOpen(current => !current)}>{options.find(option => option.value === value)?.label || value}</button>
+    {open && <div className="gig-form-menu-options" role="listbox" aria-label={label}>
+      {options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === value}
+        onClick={() => { onChange(option.value); setOpen(false) }}>{option.label}</button>)}
+    </div>}
+  </div>
 }
 
 export default function DirectOpportunityModal({ profile, gigs, tasks, companyProfile, onClose, onSend, onOpenTaskCenter, onOpenGigManagement }) {
@@ -77,21 +95,17 @@ export default function DirectOpportunityModal({ profile, gigs, tasks, companyPr
           </div>
 
           {openGigs.length > 0 ? (
-            <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'grid', gap: 6 }}>
               <span style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 700 }}>Open GIG *</span>
-              <select value={gigId} onChange={event => setGigId(event.target.value)} required style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', font: 'inherit', fontSize: 13 }}>
-                {openGigs.map(gig => <option key={gig.id} value={gig.id}>{gig.title} · {gig.budget || 'Compensation not specified'}</option>)}
-              </select>
-            </label>
+              <OpportunityPicker value={gigId} label="Open GIG" options={openGigs.map(gig => ({ value: String(gig.id), label: `${gig.title} · ${gig.budget || 'Compensation not specified'}` }))} onChange={setGigId} />
+            </div>
           ) : <div role="alert" style={{ padding: 12, borderRadius: 8, border: '1px solid #FECACA', background: '#FEF2F2', color: '#991B1B', fontSize: 13 }}>Create or reopen a GIG before sending an opportunity. <button type="button" onClick={onOpenGigManagement} style={{ border: 0, padding: 0, background: 'transparent', color: '#4338CA', fontWeight: 800, cursor: 'pointer' }}>Open GIG Management</button></div>}
 
           {activeTasks.length > 0 ? (
-            <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'grid', gap: 6 }}>
               <span style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 700 }}>Saved assignment *</span>
-              <select value={taskId} onChange={event => setTaskId(event.target.value)} required style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', font: 'inherit', fontSize: 13 }}>
-                {activeTasks.map(task => <option key={task.id} value={task.id}>{task.title} · {getCompanyTaskTypeLabel(task.type)}</option>)}
-              </select>
-            </label>
+              <OpportunityPicker value={taskId} label="Saved assignment" options={activeTasks.map(task => ({ value: String(task.id), label: `${task.title} · ${getCompanyTaskTypeLabel(task.type)}` }))} onChange={setTaskId} />
+            </div>
           ) : (
             <div style={{ padding: 12, borderRadius: 8, border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: 13 }}>
               No active saved assignments. <button type="button" onClick={onOpenTaskCenter} style={{ border: 0, padding: 0, background: 'transparent', color: '#4338CA', fontWeight: 800, cursor: 'pointer' }}>Create a task</button>

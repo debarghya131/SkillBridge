@@ -2,6 +2,7 @@ const Student = require('../models/Student')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
 const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
+const { hashVerificationReference } = require('../utils/verification')
 const {
   appendSession,
   buildAuthError,
@@ -46,7 +47,7 @@ function safeMediaValue(value, kind, maxLength) {
   return new RegExp(`^data:${type};base64,`, 'i').test(value) ? value : undefined
 }
 
-function sanitizeStudent(student) {
+function sanitizeStudent(student, { includeVideo = true } = {}) {
   const skillHubSkills = buildStudentSkillHubSkills(student)
   const practiceSummary = buildStreakSummary(
     skillHubSkills,
@@ -54,7 +55,7 @@ function sanitizeStudent(student) {
   )
   const activityDays = buildActivityDays(Array.isArray(student.skillHubState?.skillLog) ? student.skillHubState.skillLog : [])
 
-  return {
+  const profile = {
     id: student._id.toString(),
     name: student.name,
     email: student.email || '',
@@ -75,12 +76,14 @@ function sanitizeStudent(student) {
     githubLink: Array.isArray(student.githubLink) ? student.githubLink : [],
     contactInfo: Array.isArray(student.contactInfo) ? student.contactInfo : [],
     projects: Array.isArray(student.projects) ? student.projects : buildDefaultStudentProfile().projects,
-    videoUrl: student.videoUrl || null,
   }
+
+  if (includeVideo) profile.videoUrl = student.videoUrl || null
+  return profile
 }
 
-async function findStudentByToken(token) {
-  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+async function findStudentByToken(token, fields = '') {
+  return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), fields)
 }
 
 async function signUpStudent(payload) {
@@ -118,8 +121,10 @@ async function signUpStudent(payload) {
     location: payload.location.trim(),
     contactMethod,
     verificationMethod,
-    aadhaarNumber: verificationMethod === 'aadhaar' ? payload.aadhaarNumber.trim() : '',
-    digilockerToken: verificationMethod === 'digilocker' ? payload.digilockerToken.trim() : '',
+    identityVerificationHash: hashVerificationReference(
+      verificationMethod === 'aadhaar' ? payload.aadhaarNumber : payload.digilockerToken,
+      'student-identity',
+    ),
     trustScore: createTrustScore(),
     ...buildDefaultStudentProfile(),
     skillHubSkills: [],
@@ -150,12 +155,15 @@ async function signInStudent(payload) {
     throw buildAuthError('Enter your registered email or 10-digit phone number')
   }
 
-  const student = await Student.findOne({
+  const query = Student.findOne({
     $or: [
       ...(isEmail ? [{ email }] : []),
       ...(isPhone ? [{ phone }] : []),
     ],
   })
+  const student = typeof query?.select === 'function'
+    ? await query.select('+passwordHash +sessions')
+    : await query
 
   if (!student || !verifyPassword(payload.password, student.passwordHash)) {
     throw buildAuthError('Invalid credentials', 401)
@@ -171,11 +179,17 @@ async function signInStudent(payload) {
   }
 }
 
-async function getCurrentStudent(token) {
-  const student = await findStudentByToken(token)
+async function getCurrentStudent(token, { workspace = false } = {}) {
+  const fields = workspace ? '-videoUrl -gigState -networkState -earningState' : ''
+  const student = await findStudentByToken(token, fields)
   await reconcileSkillExpiry(student)
   if (reconcileTrustScore(student)) await student.save()
-  return sanitizeStudent(student)
+  return sanitizeStudent(student, { includeVideo: !workspace })
+}
+
+async function getCurrentStudentProfileMedia(token) {
+  const student = await findStudentByToken(token, '_id videoUrl')
+  return { videoUrl: student.videoUrl || null }
 }
 
 async function updateCurrentStudent(token, payload) {
@@ -324,6 +338,7 @@ async function logoutCurrentStudent(token) {
 
 module.exports = {
   getCurrentStudent,
+  getCurrentStudentProfileMedia,
   logoutCurrentStudent,
   signInStudent,
   signUpStudent,
