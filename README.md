@@ -712,6 +712,8 @@ erDiagram
 
 ## 🖼️ Product Screens
 
+<!-- markdownlint-disable MD033 -->
+
 ### 🌿 Landing page
 
 <img src="docs/assets/screenshots/landing-page.png" width="920" alt="SkillBridge landing page full-length screenshot" />
@@ -741,6 +743,8 @@ The primary authenticated workspaces are shown below at a consistent desktop vie
 | Review queue |
 | --- |
 | <img src="docs/assets/screenshots/reviewer-dashboard.png" width="460" alt="SkillBridge reviewer dashboard" /> |
+
+<!-- markdownlint-enable MD033 -->
 
 ## 🧰 Tech Stack
 
@@ -901,13 +905,11 @@ GitHub Actions runs backend syntax checks and tests plus the production client b
 
 ## 👤 Author Details
 
-<p align="left">
-  <img src="./docs/author-profile.png" width="140" alt="Debarghya Bandyopadhyay" />
-</p>
+<!-- markdownlint-disable MD033 -->
+<img src="docs/author-profile.png" width="100" alt="Debarghya Bandyopadhyay" />
+<!-- markdownlint-enable MD033 -->
 
-**Debarghya Bandyopadhyay**
-
-- Computer Science engineering student from Kolkata
+### Debarghya Bandyopadhyay
 
 ### 🤝 Be My Friend
 
