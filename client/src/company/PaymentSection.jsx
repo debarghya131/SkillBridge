@@ -136,7 +136,7 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
 
         {transactions.length ? (
           <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Amount</th><th>Reference</th><th>Paid on</th><th>Record</th></tr></thead><tbody>
-            {transactions.slice(currentPage * 10, currentPage * 10 + 10).map(row => <tr key={row.id}><td><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td>{money(row.amount)}</td><td>{row.reference}</td><td>{row.paidOn}</td><td><span className="payment-recorded-badge">Recorded</span></td></tr>)}
+            {transactions.slice(currentPage * 10, currentPage * 10 + 10).map(row => <tr key={row.id}><td data-label="GIG / student" className="payment-history-title"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Amount">{money(row.amount)}</td><td data-label="Reference">{row.reference}</td><td data-label="Paid on">{row.paidOn}</td><td data-label="Record"><span className="payment-recorded-badge">Recorded</span></td></tr>)}
           </tbody></table></div>
         ) : (
           <div className="payment-history-empty"><span aria-hidden="true">▤</span><p>No payment records yet.</p></div>

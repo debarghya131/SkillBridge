@@ -99,6 +99,23 @@
 .profile-heatmap-legend small { font-size: 8px; }
 .profile-heatmap-legend i { display: block; }
 .profile-heatmap-retry { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #fecaca; border-radius: 5px; background: #fff; color: #b91c1c; }
+.project-editor-overlay { position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .62); backdrop-filter: blur(4px); }
+.project-editor-dialog { width: min(620px, 100%); max-height: min(760px, calc(100dvh - 40px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid #dbe3ee; border-radius: 8px; background: #fff; box-shadow: 0 24px 80px rgba(15, 23, 42, .28); }
+.project-editor-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 20px; border-bottom: 1px solid #dbe3ee; }
+.project-editor-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.project-editor-title > span { width: 38px; height: 38px; display: grid; place-items: center; flex-shrink: 0; border-radius: 7px; background: #eef2ff; color: #4f46e5; }
+.project-editor-title small { display: block; margin-bottom: 3px; color: #4f46e5; font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.project-editor-title h2 { margin: 0; color: var(--dark); font-size: 18px; letter-spacing: 0; }
+.project-editor-close { width: 36px; height: 36px; min-height: 36px; display: grid; place-items: center; flex-shrink: 0; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--muted); }
+.project-editor-body { display: flex; min-width: 0; min-height: 0; flex-direction: column; gap: 15px; padding: 20px; overflow-y: auto; overscroll-behavior: contain; }
+.project-editor-body label { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+.project-editor-body label > span { color: var(--muted); font-size: 11px; font-weight: 700; }
+.project-editor-body input, .project-editor-body textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--dark); font: inherit; font-size: 13px; }
+.project-editor-body textarea { min-height: 112px; resize: vertical; }
+.project-editor-body input:focus, .project-editor-body textarea:focus { border-color: var(--primary); outline: 3px solid rgba(79, 70, 229, .12); }
+.project-editor-link-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.project-editor-footer { position: relative; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); background: #f8fafc; }
+.project-editor-footer button { min-height: 40px; }
 .student-dashboard .dashboard-body { height: 100%; min-height: 0; overflow: hidden; }
 .student-dashboard .dashboard-sidebar { height: 100% !important; flex-shrink: 0; }
 .student-dashboard .student-viewport {
@@ -111,7 +128,7 @@
   scrollbar-gutter: stable;
   padding: 16px 24px !important;
 }
-.student-viewport > div { min-width: 0; }
+.student-viewport > div { width: 100%; max-width: 1680px; min-width: 0; margin-inline: auto; }
 .student-viewport .gig-subnav,
 .student-viewport .skillhub-subnav,
 .student-viewport .network-subnav {
@@ -168,6 +185,19 @@
   .dashboard-user-meta { padding-inline: 5px !important; }
   .dashboard-user-subtitle { display: none; }
   .profile-activity { padding: 12px; }
+  .student-profile-editor .profile-skills-heading { align-items: flex-start; }
+  .student-profile-editor .profile-skill-filters { width: 100%; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .student-profile-editor .profile-skill-filters::-webkit-scrollbar { display: none; }
+  .student-profile-editor .profile-skill-filters button { min-height: 38px; flex: 0 0 auto; }
+  .student-profile-project-heading { align-items: stretch !important; flex-direction: column; gap: 8px; }
+  .student-profile-project-heading > button { width: 100%; min-height: 42px; justify-content: center; }
+  .project-editor-overlay.responsive-modal-shell { place-items: stretch; padding: 0 !important; }
+  .project-editor-dialog.responsive-modal-card { width: 100% !important; height: 100dvh !important; max-width: none !important; max-height: 100dvh !important; min-height: 0; border: 0; border-radius: 0 !important; }
+  .project-editor-header.responsive-modal-header { padding: calc(16px + env(safe-area-inset-top)) 16px 16px !important; }
+  .project-editor-body.responsive-modal-body { min-height: 0; padding: 18px 16px !important; overflow-y: auto; }
+  .project-editor-link-grid { grid-template-columns: 1fr; }
+  .project-editor-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .project-editor-footer button { flex: 1; min-height: 44px; justify-content: center; }
   .profile-activity > footer { align-items: flex-start; flex-direction: column; }
   .profile-heatmap-legend { margin-left: 0; }
   .student-viewport.student-section-profile { padding: 12px !important; }
@@ -203,9 +233,9 @@
   .student-viewport.student-section-gig .gig-subnav { margin-bottom: 12px !important; }
   .student-viewport.student-section-gig .student-tab-content { padding: 0 0 12px; }
   .student-viewport.student-section-gig .gig-subnav .responsive-pill-nav-header { min-height: 42px; }
-  .student-viewport.student-section-gig .gig-subnav .responsive-pill-nav-list { max-height: min(52dvh, 340px); overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+  .student-viewport.student-section-gig .gig-subnav .responsive-pill-nav-list { max-height: none; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding: 2px; }
   .student-viewport.student-section-gig .gig-subnav-item { min-height: 44px !important; }
-  .student-viewport.student-section-gig .gig-subnav-item > span:last-child { margin-left: auto; }
+  .student-viewport.student-section-gig .gig-subnav-item > span:last-child { margin-left: 4px; }
   .student-viewport.student-section-gig .gig-tab-content { min-width: 0; overflow-x: hidden; }
   .student-viewport.student-section-gig .gig-tab-content > div { min-width: 0; }
   .student-viewport.student-section-gig .gig-tab-content .responsive-stack { min-width: 0; }

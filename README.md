@@ -712,12 +712,35 @@ erDiagram
 
 ## 🖼️ Product Screens
 
-| 🎓 Student experience | 🏢 Company experience |
+### 🌿 Landing page
+
+<img src="docs/assets/screenshots/landing-page.png" width="920" alt="SkillBridge landing page full-length screenshot" />
+
+The primary authenticated workspaces are shown below at a consistent desktop viewport.
+
+### 🎓 Student workspace
+
+| GIG Center | TrustScore |
 | --- | --- |
-| **GIG Center**<br><img src="docs/assets/screenshots/student-dashboard.png" width="460" alt="Student GIG Center" /> | **Company Dashboard**<br><img src="docs/assets/screenshots/company-dashboard.png" width="460" alt="Company dashboard" /> |
-| **Skill Hub**<br><img src="docs/assets/screenshots/skill-hub.png" width="460" alt="Skill Hub" /> | **GIG Management**<br><img src="docs/assets/screenshots/company-gig-management.png" width="460" alt="Company GIG management" /> |
-| **Peer Network**<br><img src="docs/assets/screenshots/student-network.png" width="460" alt="Student network" /> | **Talent Search**<br><img src="docs/assets/screenshots/talent-search.png" width="460" alt="Company talent search" /> |
-| **Landing Experience**<br><img src="docs/assets/screenshots/landing-page.png" width="460" alt="SkillBridge landing page" /> | **Project and Payment Operations**<br><img src="docs/assets/screenshots/project-workspace.png" width="225" alt="Project workspace" /> <img src="docs/assets/screenshots/payment-center.png" width="225" alt="External payment center" /> |
+| <img src="docs/assets/screenshots/student-gig-center.png" width="460" alt="SkillBridge student GIG Center" /> | <img src="docs/assets/screenshots/student-trustscore.png" width="460" alt="SkillBridge student TrustScore" /> |
+| **Skill Hub**<br><img src="docs/assets/screenshots/student-skill-hub.png" width="460" alt="SkillBridge student Skill Hub" /> | **Network**<br><img src="docs/assets/screenshots/student-network.png" width="460" alt="SkillBridge student network" /> |
+| **Earning**<br><img src="docs/assets/screenshots/student-earning.png" width="460" alt="SkillBridge student earning" /> | **My Profile**<br><img src="docs/assets/screenshots/student-profile.png" width="460" alt="SkillBridge student profile" /> |
+| **Task page**<br><img src="docs/assets/screenshots/student-task.png" width="460" alt="SkillBridge student task page" /> | |
+
+### 🏢 Company workspace
+
+| My Business | GIG Management |
+| --- | --- |
+| <img src="docs/assets/screenshots/company-dashboard.png" width="460" alt="SkillBridge company dashboard" /> | <img src="docs/assets/screenshots/company-gig-management.png" width="460" alt="SkillBridge company GIG management" /> |
+| **Task Center**<br><img src="docs/assets/screenshots/company-task-center.png" width="460" alt="SkillBridge company Task Center" /> | **Talent Search**<br><img src="docs/assets/screenshots/company-talent-search.png" width="460" alt="SkillBridge company Talent Search" /> |
+| **Project Workspace**<br><img src="docs/assets/screenshots/company-project-workspace.png" width="460" alt="SkillBridge company Project Workspace" /> | **Payment**<br><img src="docs/assets/screenshots/company-payment.png" width="460" alt="SkillBridge company payment" /> |
+| **Business Profile**<br><img src="docs/assets/screenshots/company-business-profile.png" width="460" alt="SkillBridge company business profile" /> | |
+
+### 🧾 Reviewer workspace
+
+| Review queue |
+| --- |
+| <img src="docs/assets/screenshots/reviewer-dashboard.png" width="460" alt="SkillBridge reviewer dashboard" /> |
 
 ## 🧰 Tech Stack
 
@@ -879,7 +902,7 @@ GitHub Actions runs backend syntax checks and tests plus the production client b
 ## 👤 Author Details
 
 <p align="left">
-  <img src="./docs/assets/author-profile.png" width="140" alt="Debarghya Bandyopadhyay" />
+  <img src="./docs/author-profile.png" width="140" alt="Debarghya Bandyopadhyay" />
 </p>
 
 **Debarghya Bandyopadhyay**

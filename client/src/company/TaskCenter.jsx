@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import SectionTabs from './SectionTabs'
 import { COMPANY_TASK_TYPES, COMPANY_TASK_TYPE_CONFIG, getCompanyTaskTypeLabel, mergeCompanyTaskLibraryState } from './companyTaskDefaults'
 import SubmissionReview from './SubmissionReview'
 import { toast } from '../ui/toast'
-import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Pencil, Trash2, X } from 'lucide-react'
 
 const EMPTY_FORM = {
   type: 'live_project',
@@ -81,8 +82,9 @@ function TaskForm({ form, setForm, onCancel, onSave, isEditing, busy }) {
   const typeConfig = COMPANY_TASK_TYPE_CONFIG[form.type] || COMPANY_TASK_TYPE_CONFIG.mixed
 
   return (
-    <form onSubmit={event => { event.preventDefault(); onSave() }} style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, marginBottom: 16 }}>
+    <form className="task-editor-form" onSubmit={event => { event.preventDefault(); onSave() }}>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <div className="task-editor-content">
       <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)', marginBottom: 4 }}>{isEditing ? 'Edit Saved Assignment' : 'Create Real-World Assignment'}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Define the work a student will complete before you select them for the GIG.</div>
       <div className="responsive-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -119,13 +121,58 @@ function TaskForm({ form, setForm, onCancel, onSave, isEditing, busy }) {
           <input value={form.skills} onChange={event => update('skills', event.target.value)} placeholder="UX research, Figma, responsive design" style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
         </label>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+      </div>
+      <div className="task-editor-actions">
         <button type="button" onClick={onCancel} disabled={busy} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--muted)', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
         <button type="submit" disabled={busy} className="btn-accent" style={{ padding: '8px 16px', fontSize: 12 }}>{busy ? 'Saving...' : isEditing ? 'Save Assignment' : 'Save Assignment Template'}</button>
       </div>
       </fieldset>
     </form>
   )
+}
+
+function TaskEditorModal({ children, busy, onClose }) {
+  const dialogRef = useRef(null)
+  const busyRef = useRef(busy)
+
+  useEffect(() => {
+    busyRef.current = busy
+  }, [busy])
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previousOverflow = document.body.style.overflow
+    const previouslyFocused = document.activeElement
+    const onKeyDown = event => {
+      if (event.key === 'Escape' && !busyRef.current) onClose()
+      if (event.key !== 'Tab') return
+      const items = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)')]
+      if (!items.length) return
+      if (event.shiftKey && document.activeElement === items[0]) {
+        event.preventDefault()
+        items[items.length - 1].focus()
+      } else if (!event.shiftKey && document.activeElement === items[items.length - 1]) {
+        event.preventDefault()
+        items[0].focus()
+      }
+    }
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onKeyDown)
+    const focusFrame = window.requestAnimationFrame(() => dialog?.querySelector('button:not(:disabled), input:not(:disabled)')?.focus())
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocused?.focus?.()
+    }
+  }, [onClose])
+
+  return createPortal(<div className="responsive-modal-shell task-editor-overlay" onMouseDown={event => event.target === event.currentTarget && !busy && onClose()}>
+    <div ref={dialogRef} className="responsive-modal-card task-editor-dialog" role="dialog" aria-modal="true" aria-label="Task editor">
+      <button type="button" className="task-editor-close" onClick={onClose} disabled={busy} aria-label="Close task editor"><X size={19}/></button>
+      {children}
+    </div>
+  </div>, document.body)
 }
 
 export default function TaskCenter({ taskLibraryState, onSaveState, gigManagementState, taskSubmissions = [], onSendInterviewTask, onReviewTaskSubmission }) {
@@ -195,6 +242,11 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
     })
     setShowForm(true)
   }
+
+  const closeTaskForm = useCallback(() => {
+    setShowForm(false)
+    setEditingTaskId(null)
+  }, [])
 
   const saveTask = async () => {
     if (busyAction) return
@@ -290,9 +342,9 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
       </div>
 
       <SectionTabs label="Task Center views" options={['Assignments', 'Submissions']} value={view} onChange={setView} />
-      {showForm && <div className="company-task-editor"><button type="button" className="btn-secondary" disabled={Boolean(busyAction)} onClick={() => setShowForm(false)}>Back to tasks</button><TaskForm form={form} setForm={setForm} onCancel={() => setShowForm(false)} onSave={saveTask} isEditing={Boolean(editingTaskId)} busy={Boolean(busyAction)} /></div>}
+      {showForm && <TaskEditorModal busy={Boolean(busyAction)} onClose={closeTaskForm}><TaskForm form={form} setForm={setForm} onCancel={closeTaskForm} onSave={saveTask} isEditing={Boolean(editingTaskId)} busy={Boolean(busyAction)} /></TaskEditorModal>}
 
-      {!showForm && view === 'Assignments' && <div className="responsive-split-main task-assignment-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 0.9fr', gap: 16, marginBottom: 20 }}>
+      {view === 'Assignments' && <div className="responsive-split-main task-assignment-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 0.9fr', gap: 16, marginBottom: 20 }}>
         <section className="task-template-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Saved Assignment Templates</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{localState.tasks.length} saved</span></div>
           {localState.tasks.length === 0 && <div style={{ padding: '34px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Create a practical work sample to send to a GIG applicant.</div>}
@@ -327,7 +379,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
         </section>
       </div>}
 
-      {!showForm && view === 'Submissions' && <section className="task-submission-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
+      {view === 'Submissions' && <section className="task-submission-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Submitted Tasks</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>Review evidence before selection</span></div>
         <div className="work-form-grid" style={{ marginBottom: 12 }}>
           <input type="search" aria-label="Search submissions" placeholder="Search student or assignment" value={search} onChange={event => setSearch(event.target.value)} />

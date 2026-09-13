@@ -57,6 +57,14 @@ function availableReviewOptions(status) {
   return REVIEW_STATUS_OPTIONS.filter(option => (next[status] || []).includes(option.value))
 }
 
+function getApplicantWorkflowLabel(applicant) {
+  if (applicant?.taskSubmission && availableReviewOptions(applicant.taskSubmission.status).length > 0) {
+    return 'Review submission'
+  }
+  if (applicant?.interviewTaskSent) return 'View task status'
+  return 'Manage application'
+}
+
 function buildApplicantProfile(applicant) {
   const name = applicant.name || applicant.studentName || 'Student'
   const skills = Array.isArray(applicant.profileSkills)
@@ -431,7 +439,11 @@ function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, on
 }
 
 function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSubmission, onReviewSaved, onSendInterviewTask, onOpenTaskCenter }) {
+  const applicantId = applicant?.studentId || applicant?.id
   const videoRef = useRef(null)
+  const modalRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const onCloseRef = useRef(onClose)
   const [isPlaying, setIsPlaying] = useState(false)
   const [levelFilter, setLevelFilter] = useState('All')
   const [reviewStatus, setReviewStatus] = useState(() => availableReviewOptions(applicant?.taskSubmission?.status)[0]?.value || '')
@@ -459,6 +471,52 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
     applicant?.taskInstructions,
     applicant?.taskDeadline,
   ])
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    if (!applicantId || !modalRef.current) return undefined
+
+    const previousFocus = document.activeElement
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus()
+
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focusable = [...(modalRef.current?.querySelectorAll(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), video[controls], [tabindex="0"]',
+      ) || [])].filter(node => node.getAttribute('aria-hidden') !== 'true')
+
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus?.()
+    }
+  }, [applicantId])
 
   if (!applicant) return null
 
@@ -536,7 +594,13 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
       }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="responsive-modal-card" style={{
+      <div
+        ref={modalRef}
+        className="responsive-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="applicant-review-title"
+        style={{
         width: '100%',
         maxWidth: 760,
         maxHeight: '90vh',
@@ -545,7 +609,8 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
         borderRadius: 20,
         border: '1px solid var(--border)',
         boxShadow: 'var(--shadow-lg)',
-      }}>
+        }}
+      >
         <div className="responsive-modal-header" style={{
           padding: '24px 28px',
           background: 'linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%)',
@@ -576,7 +641,7 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{applicant.name}</div>
+                <div id="applicant-review-title" style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{applicant.name}</div>
                 <span style={{ fontSize: 10, fontWeight: 800, background: '#10B981', color: 'white', padding: '2px 10px', borderRadius: 100 }}>
                   ✓ Verified
                 </span>
@@ -601,7 +666,7 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
               </div>
             </div>
           </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 18, cursor: 'pointer' }}>×</button>
+          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close application review" title="Close application review" style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: 18, cursor: 'pointer' }}>×</button>
         </div>
 
         <div className="responsive-modal-body" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -797,15 +862,15 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
             </div>
           )}
 
-          <div className="responsive-stack" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div className="responsive-stack" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
             {inviteSent ? (
               <div style={{ flex: '1 1 100%', order: -1, background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '10px 12px', color: '#065F46', fontSize: 13 }}>
                 <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Interview Task Sent</div>
-                <div style={{ fontWeight: 800, marginBottom: 4 }}>{applicant.taskTitle || 'Task details saved'}</div>
-                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4 }}>Type: {getCompanyTaskTypeLabel(applicant.taskType)}</div>
-                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{applicant.taskInstructions || 'The student can now see this task in Opportunity.'}</div>
+                <div style={{ fontWeight: 800, marginBottom: 4 }}>{applicant.taskTitle || selectedSavedTask?.title || 'Task details saved'}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4 }}>Type: {getCompanyTaskTypeLabel(applicant.taskType || selectedSavedTask?.type)}</div>
+                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{applicant.taskInstructions || selectedSavedTask?.instructions || 'The student can now see this task in Opportunity.'}</div>
                 <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700 }}>
-                  Deadline: {applicant.taskDeadline || 'Not set'} · Points: {applicant.taskPoints || 0}
+                  Deadline: {applicant.taskDeadline || selectedSavedTask?.deadline || 'Not set'} · Points: {applicant.taskPoints || selectedSavedTask?.points || 0}
                 </div>
                 {inviteMessage && <div style={{ marginTop: 6 }}>Message: {inviteMessage}</div>}
               </div>
@@ -841,7 +906,19 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
                 />
               </label>
             </div>}
-            <button
+            <button type="button" onClick={onClose} className="btn-secondary" style={{ padding: '9px 16px', fontSize: 12 }}>
+              Close
+            </button>
+            {!inviteSent && <button
+              type="button"
+              onClick={onOpenTaskCenter}
+              className="btn-secondary"
+              style={{ padding: '9px 16px', fontSize: 12 }}
+            >
+              Create New Task
+            </button>}
+            {!inviteSent && <button
+              type="button"
               onClick={async () => {
                 setInviteError('')
                 if (!selectedSavedTask) {
@@ -870,18 +947,11 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
               disabled={isSendingInvite || inviteSent || !selectedSavedTask}
               style={{ padding: '9px 16px', fontSize: 12, opacity: isSendingInvite ? 0.65 : 1 }}
             >
-              {inviteSent ? '✓ Task Sent' : isSendingInvite ? 'Sending...' : 'Send Saved Task'}
-            </button>
-            {!inviteSent && <button
-              type="button"
-              onClick={onOpenTaskCenter}
-              className="btn-secondary"
-              style={{ padding: '9px 16px', fontSize: 12 }}
-            >
-              Create New Task
+              {isSendingInvite ? 'Sending...' : 'Send Saved Task'}
             </button>}
             {applicant.taskSubmission && availableReviewOptions(applicant.taskSubmission.status).length > 0 && (
               <button
+                type="button"
                 onClick={handleReview}
                 disabled={isSavingReview}
                 className="btn-accent"
@@ -968,6 +1038,34 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
     setEditingGig(null)
   }
 
+  const sendInterviewTaskForApplicant = async (applicant, taskPayload) => {
+    const opportunity = await onSendInterviewTask(applicant, selectedGig?.title, {
+      ...taskPayload,
+      companyGigId: selectedGig?.id,
+    })
+    const studentId = String(applicant.studentId || applicant.id || '')
+    const sentTask = {
+      interviewTaskSent: true,
+      interviewMessage: opportunity?.message || taskPayload.message,
+      taskTitle: opportunity?.taskTitle || taskPayload.taskTitle,
+      taskType: opportunity?.taskType || taskPayload.taskType,
+      taskInstructions: opportunity?.taskInstructions || taskPayload.taskInstructions,
+      taskDeadline: opportunity?.taskDeadline || taskPayload.taskDeadline,
+      taskPoints: opportunity?.taskPoints || taskPayload.taskPoints,
+    }
+
+    setApplicantResponse(current => ({
+      ...current,
+      applicants: current.applicants.map(candidate => (
+        String(candidate.studentId || candidate.id || '') === studentId
+          ? { ...candidate, ...sentTask }
+          : candidate
+      )),
+    }))
+    setSelectedApplicant(current => current ? { ...current, ...sentTask } : current)
+    return opportunity
+  }
+
   return (
     <div>
       <div className="responsive-hero" style={{
@@ -1041,9 +1139,10 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                 Number(gig.shortlisted) || 0,
                 gigSubmissions.filter(submission => ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(submission.status)).length,
               )
-              const pendingReview = gigSubmissions.length > 0
-                ? gigSubmissions.filter(submission => ['submitted', 'reviewed', 'delivered', 'needs_revision'].includes(submission.status)).length
-                : Math.max((Number(gig.applicants) || 0) - shortlisted, 0)
+              const pendingReview = gigSubmissions.filter(submission => (
+                ['submitted', 'reviewed', 'delivered'].includes(submission.status)
+                || (submission.status === 'needs_revision' && submission.revisionReturnStatus !== 'delivered')
+              )).length
               return (
                 <div key={gig.id} style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, var(--bg) 100%)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', boxShadow: '0 2px 7px rgba(15,23,42,0.025)', transition: 'border-color 0.15s, box-shadow 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#FDBA74'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(249,115,22,0.08)' }}
@@ -1165,18 +1264,28 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
           } catch (error) { toast.error(error.message || 'Could not load this profile.') }
         }}
       />
-      {publicApplicant && <PublicStudentProfile key={publicApplicant.profile.id} profile={publicApplicant.profile}
-        onClose={() => setPublicApplicant(null)} action={<button onClick={() => {
-          setSelectedApplicant(publicApplicant.applicant)
-          setPublicApplicant(null)
-        }}>Review application</button>}/>}
+      {publicApplicant && (
+        <PublicStudentProfile
+          key={publicApplicant.profile.id}
+          profile={publicApplicant.profile}
+          onClose={() => setPublicApplicant(null)}
+          action={(
+            <button type="button" onClick={() => {
+              setSelectedApplicant(publicApplicant.applicant)
+              setPublicApplicant(null)
+            }}>
+              {getApplicantWorkflowLabel(publicApplicant.applicant)}
+            </button>
+          )}
+        />
+      )}
   {selectedApplicant && <ApplicantProfileModal
         key={`${selectedApplicant.studentId}-${selectedApplicant.taskSubmission?.status || 'applicant'}`}
     applicant={selectedApplicant}
     savedTasks={savedTasks}
     onClose={() => setSelectedApplicant(null)}
     onReviewSubmission={onReviewTaskSubmission}
-    onSendInterviewTask={(applicant, taskPayload) => onSendInterviewTask(applicant, selectedGig?.title, { ...taskPayload, companyGigId: selectedGig?.id })}
+    onSendInterviewTask={sendInterviewTaskForApplicant}
     onOpenTaskCenter={() => {
       setSelectedApplicant(null)
       setSelectedGigId(null)

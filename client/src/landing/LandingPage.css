@@ -414,10 +414,6 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sb-gap-reveal:not(.is-visible) .sb-section-heading > *,
-  .sb-gap-reveal:not(.is-visible) .sb-gap-columns > * {
-    opacity: 0;
-  }
   .sb-gap-reveal.is-visible .sb-section-heading > *,
   .sb-gap-reveal.is-visible .sb-gap-columns article {
     animation: sb-section-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -533,12 +529,6 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sb-merit--animated:not(.is-visible) .sb-merit-eyebrow,
-  .sb-merit--animated:not(.is-visible) .sb-merit-word,
-  .sb-merit--animated:not(.is-visible) .sb-merit-copy,
-  .sb-merit--animated:not(.is-visible) .sb-merit-signals span {
-    opacity: 0;
-  }
   .sb-merit--animated.is-visible .sb-merit-eyebrow,
   .sb-merit--animated.is-visible .sb-merit-word,
   .sb-merit--animated.is-visible .sb-merit-copy,
@@ -1046,11 +1036,6 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sb-proof--animated:not(.is-heading-visible) .sb-heading-row > *,
-  .sb-proof--animated:not(.is-figure-visible) .sb-product-figure,
-  .sb-proof--animated:not(.is-points-visible) .sb-proof-points article {
-    opacity: 0;
-  }
   .sb-proof--animated.is-heading-visible .sb-heading-row > * {
     animation: sb-section-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -1135,12 +1120,6 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sb-features--animated:not(.is-heading-visible) .sb-heading-row > *,
-  .sb-features--animated:not(.is-grid-visible) .sb-feature-grid article,
-  .sb-features--animated:not(.is-grid-visible) .sb-payment-note,
-  .sb-features--animated:not(.is-faq-visible) .sb-faq > * {
-    opacity: 0;
-  }
   .sb-features--animated.is-heading-visible .sb-heading-row > * {
     animation: sb-section-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -1287,12 +1266,6 @@
   margin: 22px 0;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .sb-final-cta--animated:not(.is-visible) .sb-eyebrow,
-  .sb-final-cta--animated:not(.is-visible) h2,
-  .sb-final-cta--animated:not(.is-visible) p,
-  .sb-final-cta--animated:not(.is-visible) .sb-actions {
-    opacity: 0;
-  }
   .sb-final-cta--animated.is-visible .sb-eyebrow,
   .sb-final-cta--animated.is-visible h2,
   .sb-final-cta--animated.is-visible p,

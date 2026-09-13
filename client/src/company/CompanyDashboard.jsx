@@ -532,6 +532,18 @@ export default function CompanyDashboard() {
     navigate(`/company/dashboard?section=${encodeURIComponent(section)}`)
   }
 
+  useEffect(() => {
+    if (!sidebarOpen) return undefined
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = event => event.key === 'Escape' && setSidebarOpen(false)
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [sidebarOpen])
+
   const availableLocations = talentFilterOptions('location', talentSearchMeta.availableLocations)
   const availableSkills = talentFilterOptions('skill', talentSearchMeta.availableSkills)
   const talentTotalPages = Math.max(1, Math.ceil((talentSearchMeta.total || 0) / (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)))
@@ -1023,7 +1035,7 @@ export default function CompanyDashboard() {
         }}>
           <div className="company-sidebar-heading" style={{ padding: '2px 14px 12px', color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
             <span>Company workspace</span>
-            <button type="button" className="mobile-only company-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close company workspace navigation">×</button>
+            <button type="button" className="mobile-only company-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close company workspace navigation"><X size={20} /></button>
           </div>
           {primaryNavItems.map(renderSidebarItem)}
           <div style={{ flex: 1 }} />

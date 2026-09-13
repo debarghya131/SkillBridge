@@ -36,15 +36,28 @@
 .business-pagination button { width: 32px; height: 32px; border: 1px solid var(--border); background: white; border-radius: 4px; }
 .business-empty { color: var(--muted); font-size: 13px; padding-top: 20px; }
 @media (max-width: 1100px) { .business-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .business-metric { padding: 10px 12px; } }
+@media (max-width: 1023px) {
+  .dashboard-main.business-main { overflow-y: auto !important; }
+  .business-overview { height: auto; min-height: 100%; grid-template-rows: auto auto auto auto; }
+  .business-details { min-height: 280px; }
+}
 @media (max-width: 600px) {
   .dashboard-main.business-main { padding: 12px !important; }
   .business-overview { gap: 12px; }
   .business-heading h1 { font-size: 18px; }
+  .business-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .business-metric strong { font-size: 20px; }
   .business-metric span { font-size: 11px; }
   .business-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .business-row { gap: 8px; padding: 14px 0; }
   .business-row button { padding: 8px; font-size: 11px; }
+}
+@media (max-width: 420px) {
+  .business-metrics, .business-actions { grid-template-columns: 1fr; }
+  .business-heading { align-items: flex-start; flex-direction: column; }
+  .business-profile-link { width: 100%; min-height: 42px; }
+  .business-row { align-items: stretch; flex-direction: column; }
+  .business-row button { width: 100%; min-height: 42px; }
 }
 @media (max-height: 650px) {
   .dashboard-main.business-main { padding: 8px 16px !important; }

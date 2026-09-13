@@ -5,6 +5,7 @@
 .company-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .company-sidebar-close { display: none; }
 .company-dashboard .company-viewport { height: 100%; min-height: 0; min-width: 0; padding: 16px 24px !important; overflow: hidden !important; }
+.company-viewport > div, .company-viewport > section { width: 100%; max-width: 1680px; margin-inline: auto; }
 .company-viewport > div, .company-viewport > section { height: 100%; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .company-viewport [hidden] { display: none !important; }
 .company-section-tabs { display: flex; flex-shrink: 0; gap: 16px; border-bottom: 1px solid var(--border); }
@@ -81,12 +82,28 @@
 .task-date-days button { width: auto !important; min-width: 0; min-height: 28px; padding: 3px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--dark); font-size: 11px; cursor: pointer; }
 .task-date-days button:hover, .task-date-days button[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 800; }
 .task-date-days button:disabled { cursor: default; }
+.task-editor-overlay { position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .62); backdrop-filter: blur(4px); }
+.task-editor-dialog { position: relative; width: min(760px, 100%); max-height: min(820px, calc(100dvh - 40px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--white); box-shadow: 0 24px 80px rgba(15, 23, 42, .3); }
+.task-editor-form { min-height: 0; max-height: min(820px, calc(100dvh - 40px)); display: flex; flex: 1 1 auto; flex-direction: column; overflow: hidden; background: var(--white); }
+.task-editor-form > fieldset { min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; }
+.task-editor-content { min-height: 0; padding: 22px; overflow-y: auto; overscroll-behavior: contain; }
+.task-editor-content > div:first-child { padding-right: 48px; }
+.task-editor-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 8px; padding: 14px 22px; border-top: 1px solid var(--border); background: #f8fafc; }
+.task-editor-close { position: absolute; z-index: 5; top: 16px; right: 16px; width: 36px; height: 36px; min-height: 36px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--white); color: var(--muted); }
+.task-editor-close:disabled { opacity: .45; }
 @media (min-width: 601px) {
   .company-viewport > .workspace-section { overflow: visible; }
   .company-viewport.section-workspace .workspace-board { overflow: visible; }
   .company-viewport.section-workspace .workspace-detail { overflow: visible; }
 }
 @media (max-width: 600px) {
+  .task-editor-overlay.responsive-modal-shell { place-items: stretch; padding: 0 !important; }
+  .task-editor-dialog.responsive-modal-card { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; min-height: 0; border: 0; border-radius: 0 !important; }
+  .task-editor-form { width: 100%; height: 100%; max-height: none; }
+  .task-editor-content { padding: calc(20px + env(safe-area-inset-top)) 16px 18px; }
+  .task-editor-actions { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .task-editor-close { top: calc(16px + env(safe-area-inset-top)); }
+  .task-editor-actions button { flex: 1; min-height: 44px; justify-content: center; }
   .responsive-modal-shell:has(.talent-profile-modal) { padding: 0 !important; }
   .talent-profile-modal { height: 100dvh; max-height: 100dvh !important; border: 0 !important; border-radius: 0 !important; }
   .talent-profile-modal .responsive-modal-header { border-radius: 0 !important; padding: 16px !important; }
@@ -155,7 +172,7 @@
   .company-viewport.section-tasks > .task-viewport > .task-submission-panel { overflow: visible !important; min-height: auto !important; }
   .company-viewport.section-tasks > .task-viewport > .company-task-editor { flex: none !important; min-height: auto !important; height: auto !important; overflow: visible !important; }
   .company-viewport .workspace-header, .company-viewport .payment-header, .company-viewport .work-heading { gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-  .company-viewport .workspace-summary, .company-viewport .payment-summary, .company-viewport .task-viewport > .responsive-card-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; }
+  .company-viewport .workspace-summary, .company-viewport .payment-summary, .company-viewport .task-viewport > .responsive-card-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
   .company-viewport .workspace-summary > div, .company-viewport .payment-stat, .company-viewport .task-viewport > .responsive-card-grid-3 > div { padding: 9px 8px !important; }
   .company-viewport .workspace-summary strong, .company-viewport .payment-stat strong { font-size: 16px !important; }
   .company-viewport .workspace-summary small, .company-viewport .payment-stat span { font-size: 10px !important; overflow-wrap: anywhere; }
@@ -208,6 +225,9 @@
   .company-viewport.section-talent .talent-search-filters { padding: 14px 12px !important; border-radius: 8px !important; }
   .company-viewport.section-talent .responsive-filter-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
   .company-viewport.section-talent .responsive-filter-grid > button { width: 100%; min-height: 40px; }
+  .company-viewport.section-talent .talent-search-filters > div:last-child { flex-wrap: nowrap !important; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .company-viewport.section-talent .talent-search-filters > div:last-child::-webkit-scrollbar { display: none; }
+  .company-viewport.section-talent .talent-search-filters > div:last-child button { min-height: 40px; flex: 0 0 auto; padding-inline: 13px !important; }
   .company-viewport.section-talent .talent-search-card { padding: 14px !important; align-items: stretch !important; }
   .company-viewport.section-talent .talent-search-card-main { width: 100%; min-width: 0; align-items: flex-start !important; gap: 10px !important; }
   .company-viewport.section-talent .talent-search-card-main > div:last-child { min-width: 0; }
@@ -245,8 +265,14 @@
   .company-viewport.section-payment .payment-panel-heading { gap: 8px; }
   .company-viewport.section-payment .payment-count { align-self: flex-start; }
   .company-viewport.section-payment .payment-empty-state { align-items: flex-start; padding: 16px 14px; }
-  .company-viewport.section-payment .work-table-scroll { margin: 0 -14px; padding: 0 14px; -webkit-overflow-scrolling: touch; }
-  .company-viewport.section-payment .work-table { min-width: 620px; }
+  .company-viewport.section-payment .work-table-scroll { margin: 0; padding: 0; overflow: visible; }
+  .company-viewport.section-payment .work-table { display: block; min-width: 0; }
+  .company-viewport.section-payment .work-table thead { display: none; }
+  .company-viewport.section-payment .work-table tbody { display: grid; gap: 10px; padding: 12px 14px; }
+  .company-viewport.section-payment .work-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--white); }
+  .company-viewport.section-payment .work-table td { display: flex; min-width: 0; flex-direction: column; gap: 3px; padding: 0; border: 0; overflow-wrap: anywhere; }
+  .company-viewport.section-payment .work-table td::before { content: attr(data-label); color: var(--muted); font-size: 10px; font-weight: 700; }
+  .company-viewport.section-payment .work-table .payment-history-title { grid-column: 1 / -1; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
   .company-viewport.section-payment .payment-history-pagination { justify-content: space-between !important; gap: 8px !important; padding: 12px 14px !important; }
   .company-viewport.section-payment .payment-history-pagination button { min-height: 40px; }
   .company-viewport.section-profile .business-profile-editor { min-width: 0; }
@@ -274,8 +300,16 @@
   .company-viewport .workspace-summary, .company-viewport .payment-summary, .company-viewport .task-viewport > .responsive-card-grid-3 { grid-template-columns: 1fr !important; }
   .company-viewport.section-gig .responsive-card-grid-4, .company-viewport.section-gig .responsive-card-grid-3, .company-viewport.section-gig .responsive-company-gig-actions { grid-template-columns: 1fr !important; }
 }
-@media (max-height: 600px) {
-  .company-viewport .workspace-summary, .company-viewport .payment-summary, .company-viewport .task-viewport > .responsive-card-grid-3, .company-viewport.section-gig .responsive-card-grid-4 { display: none !important; }
+@media (max-width: 420px) {
+  .company-viewport .workspace-summary,
+  .company-viewport .payment-summary,
+  .company-viewport .task-viewport > .responsive-card-grid-3,
+  .company-viewport.section-gig .responsive-card-grid-4,
+  .company-viewport.section-gig .responsive-card-grid-3,
+  .company-viewport.section-gig .responsive-company-gig-actions { grid-template-columns: 1fr !important; }
+  .company-viewport.section-payment .work-table tr { grid-template-columns: 1fr; }
+  .company-viewport.section-talent .talent-search-card-actions { grid-template-columns: 1fr 1fr !important; }
+  .company-viewport.section-talent .talent-search-card-actions > div { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; text-align: left !important; }
 }
 .company-viewport.section-gig > div > .responsive-split-main > .gig-insight-panels {
   display: flex;
