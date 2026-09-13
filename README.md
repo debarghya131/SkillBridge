@@ -48,7 +48,7 @@ For local MSMEs, the platform creates a simple way to discover skilled student t
 │  - Landing Page                                             │
 │  - Student Dashboard                                        │
 │  - Company Dashboard                                        │
-│  - GIG, Skill Hub, Network, Workspace, Payment UI            │
+│  - GIG, Skill Hub, Network, Workspace, Payment UI           │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                │ HTTP / JSON API
