@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const ACTION_WARNING = 'AI can detect cheating. Copy-paste, no typing, fast typing, tab switching, idle submit, same answers, multiple logins, rapid submissions, DevTools, and camera signals may reduce TrustScore.'
@@ -90,24 +89,33 @@ const stageMeta = (stage) => {
   return { color: '#92400E', bg: '#FEF3C7' }
 }
 
-export default function DailyChallenge() {
+export default function DailyChallenge({ skills = [], skillHubState }) {
   const navigate = useNavigate()
   const seed = todaySeed()
-  const [retainDone] = useState({})
-  const [challenges] = useState(INITIAL_CHALLENGES)
+  const dailyState = skillHubState?.daily
+  const retainDone = Object.fromEntries((dailyState?.completedRetention || []).map(skillName => [skillName, true]))
+  const challenges = INITIAL_CHALLENGES.map(challenge => ({
+    ...challenge,
+    done: dailyState ? dailyState.completedChallenges.includes(challenge.id) : challenge.done,
+  }))
+  const verifiedSkills = (skills.length > 0 ? skills.filter(skill => skill.verified) : VERIFIED_SKILLS).map(skill => ({
+    ...skill,
+    wrongAnswers: Number(skill.wrongAnswers) || Number(dailyState?.wrongAnswers?.[skill.name.toLowerCase()]) || 0,
+  }))
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
   const retainCompleted = Object.values(retainDone).filter(Boolean).length
   const challengeCompleted = challenges.filter(c => c.done).length
   const totalTrustGain = challenges.filter(c => c.done).reduce((a, c) => a + c.trustGain, 0)
 
-  const criticalSkills = VERIFIED_SKILLS.filter(s => getWarning(s)?.level === 'critical').length
-  const warningSkills = VERIFIED_SKILLS.filter(s => getWarning(s)?.level === 'warning').length
+  const criticalSkills = verifiedSkills.filter(s => getWarning(s)?.level === 'critical').length
+  const warningSkills = verifiedSkills.filter(s => getWarning(s)?.level === 'warning').length
 
   const goToTask = (state) => navigate('/student/task', {
     state: {
       ...state,
       showIntegrityWarning: true,
+      returnSection: 'skillhub',
     },
   })
 
@@ -139,7 +147,7 @@ export default function DailyChallenge() {
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
-            🔒 {retainCompleted}/{VERIFIED_SKILLS.length} Retention Done
+            🔒 {retainCompleted}/{verifiedSkills.length} Retention Done
           </span>
           <span style={{ fontSize: 12, fontWeight: 700, background: 'rgba(255,255,255,0.14)', padding: '4px 12px', borderRadius: 100 }}>
             ⚡ {challengeCompleted}/{challenges.length} Challenges Done
@@ -170,7 +178,7 @@ export default function DailyChallenge() {
               🔒 Retention Tasks
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, background: '#E0E7FF', color: '#3730A3', padding: '3px 8px', borderRadius: 100 }}>
-              {retainCompleted}/{VERIFIED_SKILLS.length} done
+              {retainCompleted}/{verifiedSkills.length} done
             </span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 }}>
@@ -178,10 +186,10 @@ export default function DailyChallenge() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {VERIFIED_SKILLS.map(skill => {
+            {verifiedSkills.map(skill => {
               const taskType = getRetainTaskType(skill.name, seed)
               const warning = getWarning(skill)
-              const done = !!retainDone[skill.name]
+              const done = !!retainDone[skill.name.toLowerCase()]
               const sm = stageMeta(skill.stage)
 
               return (
@@ -324,6 +332,7 @@ export default function DailyChallenge() {
                         <button
                           onClick={() => goToTask({
                             skillName: ch.skill,
+                            challengeId: ch.id,
                             category: ch.skill,
                             level: 65,
                             mode: 'challenge',

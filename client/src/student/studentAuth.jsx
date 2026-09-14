@@ -113,7 +113,12 @@ export default function StudentAuth() {
 
   const handleSignin = async () => {
     const e = {}
-    if (!form.signInContact.trim()) e.signInContact = 'Email or phone is required'
+    const signInContact = form.signInContact.trim()
+    const isEmail = /\S+@\S+\.\S+/.test(signInContact)
+    const isPhone = /^\d{10}$/.test(signInContact)
+
+    if (!signInContact) e.signInContact = 'Email or phone is required'
+    else if (!isEmail && !isPhone) e.signInContact = 'Enter your registered email or 10-digit phone number'
     if (!form.signInPassword) e.signInPassword = 'Password is required'
     setErrors(e)
 
@@ -324,7 +329,11 @@ export default function StudentAuth() {
               <Field label="Email or Phone" error={errors.signInContact} required>
                 <input
                   type="text" placeholder="Enter your registered email or phone"
-                  value={form.signInContact} onChange={e => update('signInContact', e.target.value)}
+                  value={form.signInContact} onChange={e => {
+                    update('signInContact', e.target.value)
+                    setErrors(current => ({ ...current, signInContact: '' }))
+                    setServerError('')
+                  }}
                   style={inputStyle} onFocus={focusStyle} onBlur={blurStyle}
                 />
               </Field>

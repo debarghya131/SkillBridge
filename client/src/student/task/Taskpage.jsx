@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import CompanyTaskpage from './ComanyTaskpage'
+import { getStudentSessionToken, recordStudentSkillHubEvent } from '../studentApi'
+import { toast } from '../../ui/toast'
 
 const INTEGRITY_GUIDELINES = [
   'Do not copy-paste answers, code, or project content from external sources.',
@@ -24,6 +26,8 @@ export default function Taskpage() {
   }, [])
   const opportunity = state?.opportunity || storedOpportunity
   const isCompanyInterviewTask = Boolean(opportunity) && (state?.taskType === 'company-interview' || Boolean(storedOpportunity))
+  const returnSection = state?.returnSection || (isCompanyInterviewTask ? 'gig' : 'skillhub')
+  const returnToDashboard = () => navigate('/student/dashboard', { state: { activeSection: returnSection } })
   const [showIntegrityWarning, setShowIntegrityWarning] = useState(Boolean(state?.showIntegrityWarning))
 
   const skillName = state?.skillName || 'Skill'
@@ -38,7 +42,9 @@ export default function Taskpage() {
   const criteria = state?.criteria || []
   const taskType = state?.taskType || 'general'
   const challengeTitle = state?.challengeTitle || ''
+  const challengeId = state?.challengeId
   const difficulty = state?.difficulty || 'Medium'
+  const [isCompleting, setIsCompleting] = useState(false)
 
   const pageTitle = mode === 'upgrade'
     ? `Upgrade ${skillName} to ${targetStage}`
@@ -57,6 +63,41 @@ export default function Taskpage() {
         ? `Finishing this task helps recover the ${trustLoss} Trust impact from the expired status.`
         : `Finishing this task can add +${trustGain} Trust to your profile.`
       : `Finishing this task can add +${trustGain} Trust to your profile.`
+
+  const completeSkillTask = async () => {
+    const sessionToken = getStudentSessionToken()
+    if (!sessionToken) {
+      returnToDashboard()
+      return
+    }
+
+    const eventType = mode === 'challenge'
+      ? 'challenge_completed'
+      : mode === 'retain'
+        ? 'retention_completed'
+        : mode === 'reverify'
+          ? 'reverify_completed'
+          : mode === 'upgrade'
+            ? 'upgrade_completed'
+            : 'verify_completed'
+    const targetStageValue = targetStage === 'Pro Mastery' ? 'Pro' : targetStage
+
+    setIsCompleting(true)
+    try {
+      await recordStudentSkillHubEvent(sessionToken, {
+        eventType,
+        skillName,
+        challengeId,
+        targetStage: targetStageValue,
+      })
+      toast.success('Your Skill Hub progress has been saved.', { title: 'Task Completed' })
+      returnToDashboard()
+    } catch (error) {
+      toast.error(error.message || 'The task could not be saved.', { title: 'Save Failed' })
+    } finally {
+      setIsCompleting(false)
+    }
+  }
 
   const tasks = mode === 'upgrade'
     ? criteria.map((item, index) => ({
@@ -168,7 +209,7 @@ export default function Taskpage() {
           position: 'relative',
         }}>
           <button
-            onClick={() => navigate('/student/dashboard')}
+            onClick={returnToDashboard}
             style={{
               position: 'absolute',
               top: 16,
@@ -238,7 +279,7 @@ export default function Taskpage() {
         <div className="responsive-modal-body" style={{ paddingTop: 0, borderTop: '1px solid var(--border)', background: 'var(--white)' }}>
           <div className="responsive-stack" style={{ display: 'flex', gap: 10 }}>
             <button
-              onClick={() => navigate('/student/dashboard')}
+              onClick={returnToDashboard}
               style={{
                 flex: 1,
                 padding: '12px 16px',
@@ -272,7 +313,7 @@ export default function Taskpage() {
         <div className="taskpage-container" style={{ maxWidth: 980, margin: '0 auto' }}>
           <button
             className="taskpage-back-button"
-            onClick={() => navigate('/student/dashboard')}
+            onClick={returnToDashboard}
             style={{
               marginBottom: 18,
               background: 'transparent',
@@ -299,7 +340,7 @@ export default function Taskpage() {
       <div className="taskpage-container" style={{ maxWidth: 980, margin: '0 auto' }}>
         <button
           className="taskpage-back-button"
-          onClick={() => navigate('/student/dashboard')}
+          onClick={returnToDashboard}
           style={{
             marginBottom: 18,
             background: 'transparent',
@@ -434,13 +475,15 @@ export default function Taskpage() {
             <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px' }}>
               <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>Ready?</div>
               <button
+                onClick={completeSkillTask}
+                disabled={isCompleting}
                 className="btn-primary"
-                style={{ width: '100%', justifyContent: 'center', padding: '11px 16px', marginBottom: 10 }}
+                style={{ width: '100%', justifyContent: 'center', padding: '11px 16px', marginBottom: 10, opacity: isCompleting ? 0.65 : 1 }}
               >
-                Start {mode === 'upgrade' ? 'Upgrade Track' : mode === 'reverify' ? 'Re-Verification' : 'Verification'}
+                {isCompleting ? 'Saving...' : `Complete ${mode === 'upgrade' ? 'Upgrade Track' : mode === 'reverify' ? 'Re-Verification' : 'Verification'}`}
               </button>
               <button
-                onClick={() => navigate('/student/dashboard')}
+                onClick={returnToDashboard}
                 style={{
                   width: '100%',
                   padding: '11px 16px',

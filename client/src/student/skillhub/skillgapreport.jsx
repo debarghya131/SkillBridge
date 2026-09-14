@@ -33,21 +33,25 @@ const gapColor = {
 
 const trendIcon = { rising: '📈', stable: '➡️', falling: '📉' }
 
-export default function SkillGapReport() {
+export default function SkillGapReport({ skillHubState }) {
   const [gapFilter, setGapFilter] = useState('all')
   const [expandedSkill, setExpandedSkill] = useState(null)
+  const report = skillHubState?.skillGapReport || {}
+  const gapData = Array.isArray(report.gapData) ? report.gapData : GAP_DATA
+  const strengths = Array.isArray(report.strengths) ? report.strengths : STRENGTHS
+  const categoryStats = Array.isArray(report.categoryStats) ? report.categoryStats : CATEGORY_STATS
 
   const overallMatch = Math.round(
-    GAP_DATA.reduce((sum, item) => sum + Math.min(item.yours / item.demand, 1) * 100, 0) / GAP_DATA.length
+    gapData.reduce((sum, item) => sum + Math.min(item.yours / item.demand, 1) * 100, 0) / gapData.length
   )
 
-  const highCount = GAP_DATA.filter(i => i.gap === 'High').length
-  const medCount = GAP_DATA.filter(i => i.gap === 'Medium').length
-  const lowCount = GAP_DATA.filter(i => i.gap === 'Low').length
+  const highCount = gapData.filter(i => i.gap === 'High').length
+  const medCount = gapData.filter(i => i.gap === 'Medium').length
+  const lowCount = gapData.filter(i => i.gap === 'Low').length
 
-  const filtered = GAP_DATA.filter(i => gapFilter === 'all' || i.gap === gapFilter)
+  const filtered = gapData.filter(i => gapFilter === 'all' || i.gap === gapFilter)
 
-  const totalGigsUnlockable = GAP_DATA.reduce((s, i) => s + i.gigs, 0)
+  const totalGigsUnlockable = gapData.reduce((s, i) => s + i.gigs, 0)
 
   return (
     <div>
@@ -89,7 +93,7 @@ export default function SkillGapReport() {
         {[
           { label: 'Profile Match Score', value: `${overallMatch}%`, sub: 'vs. top GIG requirements', color: overallMatch >= 70 ? '#065F46' : overallMatch >= 50 ? '#92400E' : '#991B1B', bg: overallMatch >= 70 ? '#D1FAE5' : overallMatch >= 50 ? '#FEF3C7' : '#FEE2E2' },
           { label: 'GIGs You Can Unlock', value: totalGigsUnlockable, sub: 'by closing all skill gaps', color: '#1D4ED8', bg: '#DBEAFE' },
-          { label: 'Strengths in Demand', value: STRENGTHS.length, sub: 'skills already above market need', color: '#065F46', bg: '#D1FAE5' },
+          { label: 'Strengths in Demand', value: strengths.length, sub: 'skills already above market need', color: '#065F46', bg: '#D1FAE5' },
         ].map(stat => (
           <div key={stat.label} style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '12px 16px' }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted)', marginBottom: 6 }}>{stat.label}</div>
@@ -117,7 +121,7 @@ export default function SkillGapReport() {
           {/* Gap filters */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
             {[
-              { key: 'all', label: 'All Gaps', count: GAP_DATA.length, bg: 'var(--bg)', color: 'var(--dark)' },
+              { key: 'all', label: 'All Gaps', count: gapData.length, bg: 'var(--bg)', color: 'var(--dark)' },
               { key: 'High', label: 'High', count: highCount, bg: '#FEE2E2', color: '#991B1B' },
               { key: 'Medium', label: 'Medium', count: medCount, bg: '#FEF3C7', color: '#92400E' },
               { key: 'Low', label: 'Low', count: lowCount, bg: '#D1FAE5', color: '#065F46' },
@@ -216,7 +220,7 @@ export default function SkillGapReport() {
               Match by Category
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {CATEGORY_STATS.map(cat => (
+              {categoryStats.map(cat => (
                 <div key={cat.name}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -244,7 +248,7 @@ export default function SkillGapReport() {
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>Skills where you already meet or exceed market need</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {STRENGTHS.map(s => (
+              {strengths.map(s => (
                 <div key={s.skill} style={{ background: '#F0FDF4', borderRadius: 8, padding: '9px 12px', border: '1px solid #BBF7D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: '#065F46', marginBottom: 2 }}>✓ {s.skill}</div>

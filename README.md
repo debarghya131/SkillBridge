@@ -48,7 +48,7 @@ For local MSMEs, the platform creates a simple way to discover skilled student t
 │  - Landing Page                                             │
 │  - Student Dashboard                                        │
 │  - Company Dashboard                                        │
-│  - GIG, Skill Hub, Network, Workspace, Payment UI            │
+│  - GIG, Skill Hub, Network, Workspace, Payment UI           │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                │ HTTP / JSON API
@@ -113,6 +113,72 @@ flowchart TD
     G --> K[Dashboard State]
 ```
 
+### 3. Full GIG Management Pipeline
+
+```mermaid
+flowchart TD
+    C1[Company setup] --> C2[Create GIG]
+    C2 --> C3[Publish role]
+    C3 --> C4[Define skills, budget, mode, and status]
+    C4 --> S1[Student browses or receives invite]
+    S1 --> S2[Skill and TrustScore match]
+    S2 --> S3[Student applies or accepts invite]
+    S3 --> C5[Company reviews applicants]
+    C5 --> C6[Shortlist candidate]
+    C6 --> T1[Send interview task]
+    T1 --> T2[Student accepts task]
+    T2 --> T3[Student submits evidence]
+    T3 --> C7[Company reviews submission]
+    C7 -->|Needs revision| T3
+    C7 -->|Approved| P1[Create active project]
+    P1 --> P2[Track tasks and milestones]
+    P2 --> P3[Student delivers work]
+    P3 --> P4[Company approves delivery]
+    P4 --> P5[Record external payment]
+    P5 --> E1[Completed GIG and student earnings]
+    P5 --> E2[TrustScore and activity update]
+```
+
+The pipeline keeps the GIG identity attached to applications, interview tasks, submissions, workspace delivery, approval, and payment records. Company actions are persisted in company dashboard state, while student progress and earnings are persisted in student state and related task or payment records.
+
+### 4. Full Skill Hub Pipeline
+
+```mermaid
+flowchart TD
+    A[Student opens Skill Hub] --> B[Review skill inventory]
+    B --> C{Skill state}
+
+    C -->|New or unverified| D[Start verification task]
+    D --> E[Submit assessment evidence]
+    E --> F[Reviewer claims and scores assessment]
+    F -->|Rejected| G[Return feedback and keep skill unverified]
+    F -->|Approved| H[Mark skill verified]
+
+    C -->|Verified| I[Track level, renewal, streak, and TrustScore]
+    H --> I
+    I --> J{Next action}
+
+    J -->|Level upgrade available| K[Complete upgrade assignment]
+    K --> L[Advance Beginner, Intermediate, or Pro level]
+    L --> M[Record TrustScore event]
+    M --> I
+
+    J -->|Daily work| N[Complete retention task or daily challenge]
+    N --> O[Update streak and TrustScore]
+    O --> I
+
+    J -->|Missed or expired| P[Apply penalty or renewal action]
+    P --> I
+
+    I --> Q[Generate skill-gap report]
+    Q --> R[Compare profile skills with active GIG demand]
+    R --> S[Recommend learning resources and target skills]
+    S --> D
+    I --> T[Expose verified skills for matching and public profile]
+```
+
+The Skill Hub combines reviewer-approved evidence, level progression, renewal and retention rules, daily activity, and TrustScore events. Its skill-gap report closes the loop by turning market demand into recommended skills and learning actions.
+
 ## 📁 Folder Structure
 
 ```text
@@ -144,7 +210,12 @@ skillbridge/                              # Project root
 │   │   │   │   ├── landing-page.png      # Landing page screenshot
 │   │   │   │   ├── payment-center.png    # Payment center screenshot
 │   │   │   │   ├── project-workspace.png # Project workspace screenshot
-│   │   │   │   ├── skill-hub.png         # Skill Hub screenshot
+│   │   │   │   ├── skill-hub-my-skills.png # My Skills screenshot
+│   │   │   │   ├── skill-hub-upgrade-skill.png # Upgrade skill screenshot
+│   │   │   │   ├── skill-hub-verify-skill.png # Verify skill screenshot
+│   │   │   │   ├── skill-hub-skill-gap-report.png # Skill Gap Report screenshot
+│   │   │   │   ├── skill-hub-daily-task.png # Daily Task screenshot
+│   │   │   │   ├── network-team-up.png     # Team Up screenshot
 │   │   │   │   ├── student-dashboard.png # Student dashboard screenshot
 │   │   │   │   ├── student-network.png   # Student network screenshot
 │   │   │   │   └── talent-search.png     # Talent search screenshot
@@ -378,21 +449,35 @@ Key relationships:
 - Student dashboard sections such as gigs, skills, network, and earnings are persisted as nested state.
 - Company dashboard sections such as gig management, workspace, and payments are persisted as nested state.
 
-## 🖼️ Screenshots
+## 🖼️ Product Screens
 
-Screenshots from the main SkillBridge user flows.
+Screenshots from the main SkillBridge student, company, and platform flows.
 
-| Page / Flow | Preview |
+<!-- markdownlint-disable MD033 -->
+
+| Product Screen | Preview |
 | --- | --- |
 | Landing Page | <img src="client/src/assets/screenshots/landing-page.png" width="420" alt="SkillBridge landing page screenshot" /> |
-| Student Dashboard / GIG Center | <img src="client/src/assets/screenshots/student-dashboard.png" width="420" alt="SkillBridge student dashboard screenshot" /> |
-| Skill Hub | <img src="client/src/assets/screenshots/skill-hub.png" width="420" alt="SkillBridge Skill Hub screenshot" /> |
-| Student Network | <img src="client/src/assets/screenshots/student-network.png" width="420" alt="SkillBridge student network screenshot" /> |
-| Company Dashboard | <img src="client/src/assets/screenshots/company-dashboard.png" width="420" alt="SkillBridge company dashboard screenshot" /> |
-| GIG Management | <img src="client/src/assets/screenshots/company-gig-management.png" width="420" alt="SkillBridge company GIG management screenshot" /> |
-| Talent Search | <img src="client/src/assets/screenshots/talent-search.png" width="420" alt="SkillBridge talent search screenshot" /> |
-| Project Workspace | <img src="client/src/assets/screenshots/project-workspace.png" width="420" alt="SkillBridge project workspace screenshot" /> |
-| Payment Center | <img src="client/src/assets/screenshots/payment-center.png" width="420" alt="SkillBridge payment center screenshot" /> |
+| Student — GIG Center | <img src="client/src/assets/screenshots/student-dashboard.png" width="420" alt="SkillBridge student GIG Center screenshot" /> |
+| Student — Browse GIGs | <img src="client/src/assets/screenshots/student-gig-center-browse-gigs.png" width="420" alt="SkillBridge student Browse GIGs screenshot" /> |
+| Student — TrustScore | <img src="client/src/assets/screenshots/student-trustscore.png" width="420" alt="SkillBridge student TrustScore screenshot" /> |
+| Skill Hub — Anti-Cheating Warning | <img src="client/src/assets/screenshots/skill-hub-upgrade-task.png" width="420" alt="SkillBridge Skill Hub anti-cheating warning screenshot" /> |
+| Skill Hub — My Skills | <img src="client/src/assets/screenshots/skill-hub-my-skills.png" width="420" alt="SkillBridge Skill Hub My Skills screenshot" /> |
+| Skill Hub — Upgrade Your Skill | <img src="client/src/assets/screenshots/skill-hub-upgrade-skill.png" width="420" alt="SkillBridge Skill Hub Upgrade Your Skill screenshot" /> |
+| Student — Profile Preview | <img src="client/src/assets/screenshots/skill-hub-anti-cheating-warning.png" width="420" alt="SkillBridge student profile preview screenshot" /> |
+| Skill Hub — Upgrade Task | <img src="client/src/assets/screenshots/student-profile-preview.png" width="420" alt="SkillBridge Skill Hub upgrade task screenshot" /> |
+| Skill Hub — Verify Your Skill | <img src="client/src/assets/screenshots/skill-hub-verify-skill.png" width="420" alt="SkillBridge Skill Hub Verify Your Skill screenshot" /> |
+| Skill Hub — Skill Gap Report | <img src="client/src/assets/screenshots/skill-hub-skill-gap-report.png" width="420" alt="SkillBridge Skill Hub Skill Gap Report screenshot" /> |
+| Skill Hub — Daily Task | <img src="client/src/assets/screenshots/skill-hub-daily-task.png" width="420" alt="SkillBridge Skill Hub Daily Task screenshot" /> |
+| Network — Team Up | <img src="client/src/assets/screenshots/network-team-up.png" width="420" alt="SkillBridge Network Team Up screenshot" /> |
+| Network — Discover | <img src="client/src/assets/screenshots/student-network.png" width="420" alt="SkillBridge Network Discover screenshot" /> |
+| Company — My Business | <img src="client/src/assets/screenshots/company-dashboard.png" width="420" alt="SkillBridge company My Business screenshot" /> |
+| Company — GIG Management | <img src="client/src/assets/screenshots/company-gig-management.png" width="420" alt="SkillBridge company GIG Management screenshot" /> |
+| Company — Talent Search | <img src="client/src/assets/screenshots/talent-search.png" width="420" alt="SkillBridge company Talent Search screenshot" /> |
+| Company — Project Workspace | <img src="client/src/assets/screenshots/project-workspace.png" width="420" alt="SkillBridge company Project Workspace screenshot" /> |
+| Company — Payment | <img src="client/src/assets/screenshots/payment-center.png" width="420" alt="SkillBridge company Payment screenshot" /> |
+
+<!-- markdownlint-enable MD033 -->
 
 ## 🧰 Tech Stack
 
@@ -555,7 +640,7 @@ through `CORS_ORIGIN=https://skillbridge.debarghya.org`.
 
 ## 👤 Author Details
 
-**Debarghya Bandyopadhyay**
+### Debarghya Bandyopadhyay
 
 - Computer Science engineering student from kolkata
 

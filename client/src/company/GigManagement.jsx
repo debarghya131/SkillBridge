@@ -16,9 +16,23 @@ const PROFILE_LEVEL_META = {
 }
 const REVIEW_STATUS_OPTIONS = [
   { value: 'reviewed', label: 'Mark Reviewed' },
-  { value: 'ready_to_hire', label: 'Ready to Hire' },
+  { value: 'selected', label: 'Select Student' },
+  { value: 'work_started', label: 'Work Started' },
+  { value: 'delivered', label: 'Mark Delivered' },
+  { value: 'approved', label: 'Approve Work' },
+  { value: 'completed', label: 'Complete GIG' },
   { value: 'needs_revision', label: 'Needs Revision' },
 ]
+const TASK_SUBMISSION_STATUS_META = {
+  submitted: { label: 'Submitted', bg: '#EDE9FE', color: '#6D28D9' },
+  reviewed: { label: 'Reviewed', bg: '#DBEAFE', color: '#1D4ED8' },
+  selected: { label: 'Selected', bg: '#D1FAE5', color: '#065F46' },
+  work_started: { label: 'Work Started', bg: '#EDE9FE', color: '#6D28D9' },
+  delivered: { label: 'Delivered', bg: '#FEF3C7', color: '#92400E' },
+  approved: { label: 'Approved', bg: '#DBEAFE', color: '#1D4ED8' },
+  completed: { label: 'Completed', bg: '#D1FAE5', color: '#065F46' },
+  needs_revision: { label: 'Needs Revision', bg: '#FEF3C7', color: '#92400E' },
+}
 
 function slugifyName(name = '') {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '') || 'student'
@@ -39,6 +53,7 @@ function buildApplicantProfile(applicant) {
 
   return {
     ...applicant,
+    studentId: applicant.studentId || applicant.taskSubmission?.studentId || '',
     name,
     location: applicant.location || applicant.studentLocation || '',
     score: applicant.score ?? applicant.trustScore ?? applicant.studentTrustScore ?? 0,
@@ -312,8 +327,8 @@ function ApplicantsModal({ gig, applicants, onClose, onViewProfile }) {
                     </span>
                   ))}
                   {applicant.taskSubmission && (
-                    <span style={{ background: '#EDE9FE', color: '#6D28D9', padding: '3px 9px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>
-                      Task Submitted
+                    <span style={{ background: TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.bg || '#EDE9FE', color: TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.color || '#6D28D9', padding: '3px 9px', borderRadius: 100, fontSize: 11, fontWeight: 800 }}>
+                      {TASK_SUBMISSION_STATUS_META[applicant.taskSubmission.status]?.label || 'Task Submitted'}
                     </span>
                   )}
                 </div>
@@ -333,7 +348,7 @@ function ApplicantsModal({ gig, applicants, onClose, onViewProfile }) {
   )
 }
 
-function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onReviewSaved }) {
+function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onReviewSaved, onSendInterviewTask }) {
   const videoRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [levelFilter, setLevelFilter] = useState('All')
@@ -341,6 +356,8 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
   const [feedbackNote, setFeedbackNote] = useState(applicant?.taskSubmission?.feedback || '')
   const [isSavingReview, setIsSavingReview] = useState(false)
   const [reviewError, setReviewError] = useState('')
+  const [isSendingInvite, setIsSendingInvite] = useState(false)
+  const [inviteError, setInviteError] = useState('')
 
   if (!applicant) return null
 
@@ -367,7 +384,11 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
   const submissionStatusMeta = {
     submitted: { label: 'Submitted', bg: '#EDE9FE', color: '#6D28D9' },
     reviewed: { label: 'Reviewed', bg: '#DBEAFE', color: '#1D4ED8' },
-    ready_to_hire: { label: 'Ready to Hire', bg: '#D1FAE5', color: '#065F46' },
+    selected: { label: 'Selected', bg: '#D1FAE5', color: '#065F46' },
+    work_started: { label: 'Work Started', bg: '#EDE9FE', color: '#6D28D9' },
+    delivered: { label: 'Delivered', bg: '#FEF3C7', color: '#92400E' },
+    approved: { label: 'Approved', bg: '#DBEAFE', color: '#1D4ED8' },
+    completed: { label: 'Completed', bg: '#D1FAE5', color: '#065F46' },
     needs_revision: { label: 'Needs Revision', bg: '#FEF3C7', color: '#92400E' },
   }
   const currentSubmissionMeta = applicant.taskSubmission ? (submissionStatusMeta[applicant.taskSubmission.status] || submissionStatusMeta.submitted) : null
@@ -649,9 +670,23 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
           )}
 
           <div className="responsive-stack" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn-accent" style={{ padding: '9px 16px', fontSize: 12 }}>Contact Applicant</button>
-            <button style={{ padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
-              Send Interview Task
+            <button
+              onClick={async () => {
+                setInviteError('')
+                setIsSendingInvite(true)
+                try {
+                  await onSendInterviewTask?.(applicant)
+                } catch (error) {
+                  setInviteError(error.message || 'Could not send the interview task.')
+                } finally {
+                  setIsSendingInvite(false)
+                }
+              }}
+              className="btn-accent"
+              disabled={isSendingInvite}
+              style={{ padding: '9px 16px', fontSize: 12, opacity: isSendingInvite ? 0.65 : 1 }}
+            >
+              {isSendingInvite ? 'Sending...' : 'Send Interview Task'}
             </button>
             {applicant.taskSubmission && (
               <button
@@ -663,13 +698,14 @@ function ApplicantProfileModal({ applicant, onClose, onReviewSubmission, onRevie
               </button>
             )}
           </div>
+          {inviteError && <div style={{ fontSize: 12, color: '#B91C1C', fontWeight: 700 }}>{inviteError}</div>}
         </div>
       </div>
     </div>
   )
 }
 
-export default function GigManagement({ gigManagementState, onSaveState, taskSubmissions = [], onReviewTaskSubmission }) {
+export default function GigManagement({ gigManagementState, onSaveState, taskSubmissions = [], talentProfiles = [], onReviewTaskSubmission, onSendInterviewTask, onCreateGig, onUpdateGig }) {
   const [localState, setLocalState] = useState(() => mergeCompanyGigManagementState(gigManagementState || buildDefaultCompanyGigManagementState()))
   const [isCreateGigOpen, setIsCreateGigOpen] = useState(false)
   const [editingGig, setEditingGig] = useState(null)
@@ -696,6 +732,7 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
   const selectedGigApplicants = useMemo(
     () => {
       const applicants = selectedGigId ? localState.applicantsByGig?.[selectedGigId] || [] : []
+      const talentByName = new Map(talentProfiles.map(item => [item.name.toLowerCase(), item]))
 
       if (!selectedGig) {
         return applicants
@@ -707,7 +744,12 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
 
       const mergedApplicants = applicants.map(item => {
         const linkedSubmission = submissionsByName.get(item.name.toLowerCase())
-        return linkedSubmission ? { ...item, taskSubmission: linkedSubmission } : item
+        const talentProfile = talentByName.get(item.name.toLowerCase())
+        return {
+          ...item,
+          studentId: item.studentId || linkedSubmission?.studentId || talentProfile?.id || '',
+          ...(linkedSubmission ? { taskSubmission: linkedSubmission } : {}),
+        }
       })
 
       const submissionOnlyApplicants = relatedSubmissions
@@ -715,6 +757,7 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
         .map(item => ({
           id: `submission-${item.id}`,
           name: item.studentName,
+          studentId: item.studentId,
           trustScore: item.studentTrustScore,
           location: item.studentLocation,
           skills: item.studentSkills,
@@ -733,10 +776,24 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
 
       return [...submissionOnlyApplicants, ...mergedApplicants]
     },
-    [localState.applicantsByGig, selectedGig, selectedGigId, taskSubmissions],
+    [localState.applicantsByGig, selectedGig, selectedGigId, talentProfiles, taskSubmissions],
   )
 
-  const createGig = data => {
+  const createGig = async data => {
+    if (onCreateGig) {
+      const persistedState = await onCreateGig(data)
+      if (persistedState === false) {
+        return
+      }
+      if (persistedState) {
+        updateLocalState(persistedState)
+        setSelectedGigId(persistedState.gigs[0]?.id || null)
+        setSelectedApplicant(null)
+        setIsCreateGigOpen(false)
+        return
+      }
+    }
+
     const nextId = localState.gigs.length ? Math.max(...localState.gigs.map(item => item.id)) + 1 : 1
     const newGig = {
       id: nextId,
@@ -771,41 +828,25 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
     setIsCreateGigOpen(false)
   }
 
-  const updateGig = updatedGig => {
+  const updateGig = async updatedGig => {
+    if (onUpdateGig) {
+      const persistedState = await onUpdateGig(updatedGig)
+      if (persistedState === false) {
+        return
+      }
+      if (persistedState) {
+        updateLocalState(persistedState)
+        setEditingGig(null)
+        return
+      }
+    }
+
     updateLocalState(current => ({
       ...current,
       gigs: current.gigs.map(gig => (gig.id === updatedGig.id ? updatedGig : gig)),
       recentActivity: [`${updatedGig.title} was updated by your team.`, ...current.recentActivity].slice(0, 8),
     }))
     setEditingGig(null)
-  }
-
-  const sendInterviewTask = gigId => {
-    const gig = localState.gigs.find(item => item.id === gigId)
-
-    if (!gig) {
-      return
-    }
-
-    updateLocalState(current => ({
-      ...current,
-      gigs: current.gigs.map(item => (
-        item.id === gigId
-          ? { ...item, interviewTasks: item.interviewTasks + 1 }
-          : item
-      )),
-      stats: current.stats.map((item, index) => (
-        index === 2
-          ? { ...item, value: updateCountString(item.value, 1) }
-          : item
-      )),
-      pipeline: current.pipeline.map((item, index) => (
-        index === 1
-          ? { ...item, value: updateCountString(item.value, 1) }
-          : item
-      )),
-      recentActivity: [`Interview task sent for ${gig.title}.`, ...current.recentActivity].slice(0, 8),
-    }))
   }
 
   return (
@@ -815,17 +856,22 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
         borderRadius: 16,
         padding: '24px 28px',
         border: '1px solid #FED7AA',
+        boxShadow: '0 8px 24px rgba(249,115,22,0.08)',
+        position: 'relative',
+        overflow: 'hidden',
         marginBottom: 20,
         display: 'flex',
         justifyContent: 'space-between',
         gap: 16,
         flexWrap: 'wrap',
       }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 5, background: 'var(--accent)' }} />
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 9 }}>
+            <span style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(249,115,22,0.14)', fontSize: 14 }}>📋</span>
             GIG Management
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--dark)', marginBottom: 8 }}>
+          <div style={{ fontSize: 25, fontWeight: 850, color: 'var(--dark)', marginBottom: 8, letterSpacing: '-0.02em' }}>
             Manage hiring, interview tasks, and student pipeline
           </div>
           <div style={{ fontSize: 13, color: '#9A3412', maxWidth: 700, lineHeight: 1.6 }}>
@@ -836,7 +882,7 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
         <button
           className="btn-accent"
           onClick={() => setIsCreateGigOpen(true)}
-          style={{ padding: '10px 18px', fontSize: 13, alignSelf: 'flex-start' }}
+          style={{ padding: '11px 18px', fontSize: 13, alignSelf: 'flex-start', boxShadow: '0 6px 14px rgba(249,115,22,0.2)' }}
         >
           + Create New GIG
         </button>
@@ -844,8 +890,11 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
 
       <div className="responsive-card-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
         {localState.stats.map(item => (
-          <div key={item.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '16px 18px', border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 20, marginBottom: 8 }}>{item.icon}</div>
+          <div key={item.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '17px 18px 15px', border: '1px solid var(--border)', borderTop: `3px solid ${item.tone}`, boxShadow: '0 2px 8px rgba(15,23,42,0.03)', transition: 'transform 0.15s, box-shadow 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(15,23,42,0.03)' }}
+          >
+            <div style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: item.bg, borderRadius: 9, fontSize: 18, marginBottom: 10 }}>{item.icon}</div>
             <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--dark)', marginBottom: 4 }}>{item.value}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginBottom: 10 }}>{item.label}</div>
             <span style={{ fontSize: 11, fontWeight: 700, background: item.bg, color: item.tone, padding: '4px 10px', borderRadius: 100 }}>
@@ -856,13 +905,19 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
       </div>
 
       <div className="responsive-split-main" style={{ display: 'grid', gridTemplateColumns: '1.55fr 0.95fr', gap: 16 }}>
-        <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px' }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>Posted GIGs</div>
+          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)' }}>Posted GIGs</div>
+            <span style={{ background: 'var(--accent-light)', color: '#C2410C', borderRadius: 100, padding: '4px 10px', fontSize: 11, fontWeight: 800 }}>{localState.gigs.length} roles</span>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {localState.gigs.map(gig => {
               const meta = statusMeta[gig.status]
               return (
-                <div key={gig.id} style={{ background: 'var(--bg)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px' }}>
+                <div key={gig.id} style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, var(--bg) 100%)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', boxShadow: '0 2px 7px rgba(15,23,42,0.025)', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#FDBA74'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(249,115,22,0.08)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = '0 2px 7px rgba(15,23,42,0.025)' }}
+                >
                   <div className="responsive-stack" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -915,12 +970,6 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
                       View Applicants
                     </button>
                     <button
-                      onClick={() => sendInterviewTask(gig.id)}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
-                    >
-                      Send Interview Task
-                    </button>
-                    <button
                       onClick={() => setEditingGig(gig)}
                       style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--muted)', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
                     >
@@ -934,11 +983,14 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>Hiring Pipeline</div>
+          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)' }}>Hiring Pipeline</div>
+              <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>Live view</span>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {localState.pipeline.map(item => (
-                <div key={item.label} style={{ background: item.bg, color: item.color, borderRadius: 10, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700 }}>
+                <div key={item.label} style={{ background: item.bg, color: item.color, borderRadius: 10, padding: '13px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, border: '1px solid rgba(255,255,255,0.7)' }}>
                   <span style={{ fontSize: 13 }}>{item.label}</span>
                   <span style={{ fontSize: 20, fontWeight: 900 }}>{item.value}</span>
                 </div>
@@ -946,11 +998,14 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
             </div>
           </div>
 
-          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)', marginBottom: 14 }}>Recent Activity</div>
+          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)' }}>Recent Activity</div>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 0 4px #D1FAE5' }} />
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {localState.recentActivity.map(item => (
-                <div key={item} style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--dark)', lineHeight: 1.55 }}>
+                <div key={item} style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--dark)', lineHeight: 1.55, borderLeft: '3px solid #FDBA74' }}>
                   {item}
                 </div>
               ))}
@@ -969,6 +1024,7 @@ export default function GigManagement({ gigManagementState, onSaveState, taskSub
         applicant={selectedApplicant}
         onClose={() => setSelectedApplicant(null)}
         onReviewSubmission={onReviewTaskSubmission}
+        onSendInterviewTask={applicant => onSendInterviewTask?.(applicant, selectedGig?.title)}
         onReviewSaved={(reviewedSubmission) => {
           setSelectedApplicant(current => (
             current ? { ...current, taskSubmission: reviewedSubmission } : current

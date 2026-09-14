@@ -42,6 +42,8 @@ const gigSchema = new mongoose.Schema({
 
 const opportunitySchema = new mongoose.Schema({
   id: { type: Number, required: true },
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
+  companyGigId: { type: Number, default: null },
   title: { type: String, default: '' },
   company: { type: String, default: '' },
   companyInitial: { type: String, default: '' },
@@ -80,6 +82,7 @@ const skillHubSkillSchema = new mongoose.Schema({
   lastEvent: { type: String, default: 'created' },
   streak: { type: Number, default: 0 },
   missedDays: { type: Number, default: 0 },
+  wrongAnswers: { type: Number, default: 0 },
 }, { _id: false })
 
 const studentSchema = new mongoose.Schema({
@@ -94,6 +97,7 @@ const studentSchema = new mongoose.Schema({
   aadhaarNumber: { type: String, default: '' },
   digilockerToken: { type: String, default: '' },
   trustScore: { type: Number, default: 750 },
+  trustScoreState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   avatar: { type: String, default: null },
   skills: { type: [String], default: () => buildDefaultStudentProfile().skills },
   githubLink: { type: [profileLinkSchema], default: () => buildDefaultStudentProfile().githubLink },
@@ -101,6 +105,7 @@ const studentSchema = new mongoose.Schema({
   projects: { type: [projectSchema], default: () => buildDefaultStudentProfile().projects },
   videoUrl: { type: String, default: null },
   skillHubSkills: { type: [skillHubSkillSchema], default: undefined },
+  skillHubState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   gigState: { type: gigStateSchema, default: undefined },
   networkState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   earningState: { type: mongoose.Schema.Types.Mixed, default: undefined },
@@ -109,5 +114,10 @@ const studentSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 })
+
+studentSchema.index({ trustScore: -1, createdAt: -1 })
+studentSchema.index({ location: 1 })
+studentSchema.index({ skills: 1 })
+studentSchema.index({ 'skillHubSkills.name': 1 })
 
 module.exports = mongoose.models.Student || mongoose.model('Student', studentSchema)

@@ -37,6 +37,13 @@ export async function fetchCurrentStudent(token) {
   })
 }
 
+export async function fetchPublicCompanyProfile(companyName) {
+  return apiRequest(`/api/companies/profile/${encodeURIComponent(companyName)}`, {
+    method: 'GET',
+    silentErrorToast: true,
+  })
+}
+
 export async function saveStudentProfile(token, payload) {
   return apiRequest('/api/student/profile', {
     method: 'PATCH',
@@ -66,6 +73,16 @@ export async function fetchStudentTrustScore(token) {
   })
 }
 
+export async function recordStudentTrustScoreEvent(token, payload) {
+  return apiRequest('/api/student/trustscore/events', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function fetchStudentSkillHub(token) {
   return apiRequest('/api/student/skillhub', {
     method: 'GET',
@@ -78,6 +95,16 @@ export async function fetchStudentSkillHub(token) {
 export async function saveStudentSkillHub(token, payload) {
   return apiRequest('/api/student/skillhub', {
     method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function recordStudentSkillHubEvent(token, payload) {
+  return apiRequest('/api/student/skillhub/events', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -116,6 +143,16 @@ export async function fetchStudentEarning(token) {
 export async function saveStudentEarning(token, payload) {
   return apiRequest('/api/student/earning', {
     method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function requestStudentWithdrawal(token, payload) {
+  return apiRequest('/api/student/earning/withdraw', {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },

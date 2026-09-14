@@ -21,28 +21,9 @@ const LOSS_FACTORS = [
   { label: 'Skill renewal overdue', points: '-40 to -60', desc: 'Skills past their due date but not yet expired still reduce Trust momentum every week.' },
 ]
 
-export default function TrustScoreCriteria() {
-  const navigate = useNavigate()
-
+export function TrustScoreCriteriaContent() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: '32px 24px' }}>
-      <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-        <button
-          onClick={() => navigate('/student/dashboard')}
-          style={{
-            marginBottom: 18,
-            background: 'transparent',
-            color: 'var(--muted)',
-            border: 'none',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          ← Back to Dashboard
-        </button>
-
+    <div style={{ maxWidth: 1040, margin: '0 auto' }}>
         <div style={{
           background: 'linear-gradient(135deg, var(--dark), #1E1B4B)',
           borderRadius: 16,
@@ -108,6 +89,32 @@ export default function TrustScoreCriteria() {
             ))}
           </div>
         </div>
+    </div>
+  )
+}
+
+export default function TrustScoreCriteria() {
+  const navigate = useNavigate()
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+        <button
+          onClick={() => navigate('/student/dashboard', { state: { activeSection: 'trustscore' } })}
+          style={{
+            marginBottom: 18,
+            background: 'transparent',
+            color: 'var(--muted)',
+            border: 'none',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          ← Back to Dashboard
+        </button>
+        <TrustScoreCriteriaContent />
       </div>
     </div>
   )

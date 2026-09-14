@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { clearStudentSessionToken, fetchStudentEarning, getStudentSessionToken, saveStudentEarning } from '../studentApi'
+import { clearStudentSessionToken, fetchStudentEarning, getStudentSessionToken, requestStudentWithdrawal, saveStudentEarning } from '../studentApi'
 import { buildDemoEarningState } from './earningDemoData'
 import { toast } from '../../ui/toast'
 
@@ -7,6 +7,7 @@ export default function Earning() {
   const sessionTokenRef = useRef(getStudentSessionToken())
   const didHydrateRef = useRef(false)
   const [earningState, setEarningState] = useState(() => buildDemoEarningState())
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -73,9 +74,26 @@ export default function Earning() {
     scrollbarWidth: 'thin',
   }
 
-  const requestWithdraw = () => {
+  const requestWithdraw = async () => {
     if (!withdrawAmount) {
       toast.warning('Enter a withdrawal amount first.', { title: 'Withdrawal Needed' })
+      return
+    }
+
+    if (sessionTokenRef.current) {
+      setIsWithdrawing(true)
+      try {
+        const result = await requestStudentWithdrawal(sessionTokenRef.current, {
+          amount: withdrawAmount,
+          upi: selectedUpi,
+        })
+        setEarningState(result.earningState)
+        toast.success('Withdrawal request created.', { title: 'UPI Payout Requested' })
+      } catch (error) {
+        toast.error(error.message || 'The withdrawal request could not be created.', { title: 'Withdrawal Failed' })
+      } finally {
+        setIsWithdrawing(false)
+      }
       return
     }
 
@@ -236,9 +254,10 @@ export default function Earning() {
             <button
               className="btn-primary"
               onClick={requestWithdraw}
-              style={{ justifyContent: 'center', padding: '10px 14px', fontSize: 13 }}
+              disabled={isWithdrawing}
+              style={{ justifyContent: 'center', padding: '10px 14px', fontSize: 13, opacity: isWithdrawing ? 0.65 : 1 }}
             >
-              Withdraw to UPI
+              {isWithdrawing ? 'Processing...' : 'Withdraw to UPI'}
             </button>
 
             <div style={{ background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: '#9A3412', lineHeight: 1.6 }}>

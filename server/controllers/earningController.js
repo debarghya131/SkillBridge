@@ -2,7 +2,7 @@ const Student = require('../models/Student')
 const { buildDefaultEarningState } = require('../config/earningDefaults')
 const { consumeSectionOperation } = require('../utils/sectionUsage')
 const { clone, mergeTemplateState, reduceTemplateState } = require('../utils/templateState')
-const { findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
+const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 
 async function findStudentByToken(token) {
   return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
@@ -65,6 +65,24 @@ function sanitizeEarningState(earningState) {
   }
 }
 
+function parseRupees(value) {
+  const normalized = String(value ?? '').replace(/,/g, '').replace(/[^0-9.]/g, '')
+  const amount = Number(normalized)
+  return Number.isFinite(amount) ? amount : 0
+}
+
+function formatRupees(value) {
+  return `Rs ${Math.max(0, Math.round(value)).toLocaleString('en-IN')}`
+}
+
+function setWalletBalance(state, balance) {
+  const formattedBalance = formatRupees(balance)
+  state.availableNow = formattedBalance
+  state.walletStats = state.walletStats.map(item => item.label === 'Wallet Balance'
+    ? { ...item, value: formattedBalance }
+    : item)
+}
+
 async function getStudentEarningState(token) {
   const student = await findStudentByToken(token)
   return sanitizeEarningState(student.earningState)
@@ -73,7 +91,14 @@ async function getStudentEarningState(token) {
 async function updateStudentEarningState(token, payload) {
   const student = await findStudentByToken(token)
   const currentState = sanitizeEarningState(student.earningState)
-  const nextState = sanitizeEarningState(payload.earningState)
+  const requestedState = payload?.earningState || {}
+  const selectedUpi = sanitizeString(requestedState.selectedUpi, currentState.selectedUpi)
+  const selectedAccount = currentState.upiAccounts.find(account => account.value === selectedUpi)
+  const nextState = {
+    ...currentState,
+    selectedUpi: selectedAccount?.value || currentState.selectedUpi,
+    withdrawAmount: sanitizeString(requestedState.withdrawAmount, currentState.withdrawAmount),
+  }
 
   if (JSON.stringify(currentState) !== JSON.stringify(nextState)) {
     consumeSectionOperation(
@@ -89,7 +114,59 @@ async function updateStudentEarningState(token, payload) {
   return nextState
 }
 
+async function requestStudentWithdrawal(token, payload) {
+  const student = await findStudentByToken(token)
+  const currentState = sanitizeEarningState(student.earningState)
+  const amount = Math.round(parseRupees(payload?.amount || currentState.withdrawAmount))
+  const selectedUpi = sanitizeString(payload?.upi, currentState.selectedUpi)
+  const account = currentState.upiAccounts.find(item => item.value === selectedUpi)
+  const availableBalance = parseRupees(currentState.availableNow)
+
+  if (amount < 100) {
+    throw buildAuthError('Minimum withdrawal amount is Rs 100')
+  }
+
+  if (amount > availableBalance) {
+    throw buildAuthError('Withdrawal amount exceeds your available balance')
+  }
+
+  if (!account) {
+    throw buildAuthError('Select a valid UPI account')
+  }
+
+  consumeSectionOperation(
+    student,
+    'earning',
+    'Earning',
+    Number(process.env.DAILY_SECTION_OPERATION_LIMIT) || 2,
+  )
+
+  const nextState = {
+    ...currentState,
+    selectedUpi: account.value,
+    withdrawAmount: '',
+    paymentHistory: [
+      {
+        id: Date.now(),
+        title: 'UPI withdrawal request',
+        company: account.value,
+        amount: `-Rs ${Math.round(amount).toLocaleString('en-IN')}`,
+        date: 'Just now',
+        status: 'Processing',
+      },
+      ...currentState.paymentHistory,
+    ],
+  }
+
+  setWalletBalance(nextState, availableBalance - amount)
+  student.earningState = reduceTemplateState(nextState, buildDefaultEarningState())
+  await student.save()
+
+  return nextState
+}
+
 module.exports = {
   getStudentEarningState,
+  requestStudentWithdrawal,
   updateStudentEarningState,
 }

@@ -7,6 +7,9 @@ import {
 } from './companyDemoData'
 import {
   clearCompanySessionToken,
+  addCompanyFunds,
+  createCompanyGig,
+  fetchCompanyDashboard,
   fetchCompanyTaskSubmissions,
   fetchCurrentCompany,
   getCompanySessionToken,
@@ -15,10 +18,15 @@ import {
   fetchCompanyWorkspace,
   logoutCompany,
   reviewCompanyTaskSubmission,
+  sendCompanyInterviewTask,
+  updateCompanyGig,
   saveCompanyGigManagement,
   saveCompanyPayment,
   saveCompanyProfile,
   saveCompanyWorkspace,
+  setCompanyWorkspaceMilestone,
+  setupCompanyPayouts,
+  shareCompanyWorkspaceUpdate,
 } from './companyApi'
 import { buildDefaultCompanyGigManagementState, mergeCompanyGigManagementState } from './companyGigDemoData'
 import { buildDefaultCompanyPaymentState, mergeCompanyPaymentState } from './companyPaymentDemoData'
@@ -47,6 +55,14 @@ function getSkillLevel(profile, skill) {
     if (list.includes(skill)) return level
   }
   return null
+}
+
+function formatActivityWhen(value) {
+  if (!value) return 'Recently'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
 const NAV_ITEMS = [
@@ -327,15 +343,23 @@ export default function CompanyDashboard() {
   })
   const [businessProfile, setBusinessProfile] = useState(() => mergeCompanyProfile(initialCompany.businessProfile || initialCompany, { businessName: companyName, location }))
   const [dashboardState, setDashboardState] = useState(() => mergeCompanyDashboardState(initialCompany.dashboardState || buildDefaultCompanyDashboardState()))
+  const [dashboardOverview, setDashboardOverview] = useState(null)
   const [gigManagementState, setGigManagementState] = useState(() => mergeCompanyGigManagementState(initialCompany.gigManagementState || buildDefaultCompanyGigManagementState()))
   const [paymentState, setPaymentState] = useState(() => mergeCompanyPaymentState(initialCompany.paymentState || buildDefaultCompanyPaymentState()))
   const [projectWorkspaceState, setProjectWorkspaceState] = useState(() => mergeCompanyWorkspaceState(initialCompany.projectWorkspaceState || buildDefaultCompanyWorkspaceState()))
   const [talentProfiles, setTalentProfiles] = useState(() => DEMO_TALENT_PROFILES)
+  const [talentSearchMeta, setTalentSearchMeta] = useState({ availableLocations: [], availableSkills: [], total: 0 })
   const [taskSubmissions, setTaskSubmissions] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const availableLocations = ['All', ...new Set(talentProfiles.map(profile => profile.location))]
-  const availableSkills = ['All', ...new Set(talentProfiles.flatMap(profile => profile.skills))]
+  const availableLocations = ['All', ...new Set([
+    ...(talentSearchMeta.availableLocations || []),
+    ...talentProfiles.map(profile => profile.location),
+  ])]
+  const availableSkills = ['All', ...new Set([
+    ...(talentSearchMeta.availableSkills || []),
+    ...talentProfiles.flatMap(profile => profile.skills),
+  ])]
 
   const filteredTalent = talentProfiles.filter(profile => {
     const trustPass = profile.score >= talentFilters.minTrustScore
@@ -368,6 +392,7 @@ export default function CompanyDashboard() {
     businessProfile.requiredSkills,
     businessProfile.contactEmail,
     businessProfile.contactPhone,
+    businessProfile.workModes.length > 0,
   ]
   const completedFields = businessFields.filter(Boolean).length
   const profileCompletion = Math.round((completedFields / businessFields.length) * 100)
@@ -379,6 +404,38 @@ export default function CompanyDashboard() {
     { label: 'Contact details for applicants', done: Boolean(businessProfile.contactEmail && businessProfile.contactPhone) },
   ]
   const doneChecklist = checklist.filter(item => item.done).length
+  const activeGigCount = gigManagementState.gigs.filter(gig => (
+    ['active', 'in progress', 'hiring', 'reviewing'].includes(String(gig.status).toLowerCase())
+  )).length
+  const applicationCount = gigManagementState.gigs.reduce((total, gig) => total + (Number(gig.applicants) || 0), 0)
+  const overviewStats = [
+    { label: 'Active GIGs', value: activeGigCount, icon: '📋', target: 'gig' },
+    { label: 'Applications', value: applicationCount, icon: '📥', target: 'gig' },
+    { label: 'Total Talent', value: talentProfiles.length, icon: '👥', target: 'talent' },
+  ]
+  const submissionStatusLabels = {
+    submitted: 'submitted an interview task for',
+    reviewed: 'had their interview task reviewed for',
+    ready_to_hire: 'is ready to hire for',
+    needs_revision: 'was asked to revise their task for',
+  }
+  const recentHiringActivity = dashboardOverview?.recentHiringActivity || (taskSubmissions.length > 0
+    ? [...taskSubmissions]
+      .sort((left, right) => new Date(right.updatedAt || right.submittedAt) - new Date(left.updatedAt || left.submittedAt))
+      .slice(0, 3)
+      .map(submission => ({
+        name: submission.studentName,
+        status: `${submissionStatusLabels[submission.status] || 'updated their application for'} ${submission.gigTitle}`,
+        when: submission.updatedAt || submission.submittedAt
+          ? new Date(submission.updatedAt || submission.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+          : 'Recently',
+        color: submission.status === 'ready_to_hire' ? '#065F46' : submission.status === 'needs_revision' ? '#92400E' : '#1D4ED8',
+        bg: submission.status === 'ready_to_hire' ? '#D1FAE5' : submission.status === 'needs_revision' ? '#FEF3C7' : '#DBEAFE',
+      }))
+    : dashboardState.recentHiringActivity)
+  const displayedOverviewStats = dashboardOverview?.stats || overviewStats
+  const displayedProfileCompletion = dashboardOverview?.profileCompletion ?? profileCompletion
+  const displayedChecklist = dashboardOverview?.checklist || checklist
 
   useEffect(() => {
     let cancelled = false
@@ -425,8 +482,33 @@ export default function CompanyDashboard() {
   useEffect(() => {
     let cancelled = false
 
+    async function loadDashboardOverview() {
+      if (!sessionTokenRef.current || active !== 'business') {
+        return
+      }
+
+      try {
+        const result = await fetchCompanyDashboard(sessionTokenRef.current)
+        if (!cancelled && result.dashboard) {
+          setDashboardOverview(result.dashboard)
+        }
+      } catch (error) {
+        // Keep the local demo-backed dashboard if the overview request fails.
+      }
+    }
+
+    loadDashboardOverview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [active])
+
+  useEffect(() => {
+    let cancelled = false
+
     async function loadTaskSubmissions() {
-      if (!sessionTokenRef.current || active !== 'gig') {
+      if (!sessionTokenRef.current || !['business', 'gig'].includes(active)) {
         return
       }
 
@@ -454,19 +536,25 @@ export default function CompanyDashboard() {
     let cancelled = false
 
     async function loadTalentProfiles() {
-      if (!sessionTokenRef.current) {
+      if (!sessionTokenRef.current || active !== 'talent') {
         return
       }
 
       try {
-        const result = await fetchCompanyTalent(sessionTokenRef.current)
+        const result = await fetchCompanyTalent(sessionTokenRef.current, talentFilters)
 
         if (!cancelled) {
           setTalentProfiles(mergeTalentProfiles(result.talentProfiles || []))
+          setTalentSearchMeta({
+            availableLocations: result.availableLocations || [],
+            availableSkills: result.availableSkills || [],
+            total: Number(result.total) || 0,
+          })
         }
       } catch (error) {
         if (!cancelled) {
           setTalentProfiles(DEMO_TALENT_PROFILES)
+          setTalentSearchMeta({ availableLocations: [], availableSkills: [], total: 0 })
         }
       }
     }
@@ -476,7 +564,7 @@ export default function CompanyDashboard() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [active, talentFilters])
 
   useEffect(() => {
     let cancelled = false
@@ -635,6 +723,153 @@ export default function CompanyDashboard() {
     return reviewedSubmission
   }
 
+  const handleSendInterviewTask = async (applicant, gigTitle) => {
+    const token = sessionTokenRef.current
+    const studentId = applicant.studentId || applicant.taskSubmission?.studentId
+
+    if (!token || !studentId) {
+      throw new Error('This demo applicant is not linked to a student account yet.')
+    }
+
+    const result = await sendCompanyInterviewTask(token, {
+      studentId,
+      gigTitle: gigTitle || applicant.taskSubmission?.gigTitle,
+    })
+
+    if (result.gigManagementState) {
+      setGigManagementState(mergeCompanyGigManagementState(result.gigManagementState))
+    }
+    toast.success('The interview task is now visible in the student Opportunity section.', { title: 'Interview Task Sent' })
+    return result.opportunity
+  }
+
+  const handleCreateCompanyGig = async gig => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      return null
+    }
+
+    try {
+      const result = await createCompanyGig(token, gig)
+      const nextState = mergeCompanyGigManagementState(result.gigManagementState)
+      setGigManagementState(nextState)
+      toast.success('The new GIG is saved and visible to students.', { title: 'GIG Created' })
+      return nextState
+    } catch (error) {
+      toast.error(error.message || 'The GIG could not be created.', { title: 'Create GIG Failed' })
+      return false
+    }
+  }
+
+  const handleUpdateCompanyGig = async gig => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      return null
+    }
+
+    try {
+      const result = await updateCompanyGig(token, gig.id, gig)
+      const nextState = mergeCompanyGigManagementState(result.gigManagementState)
+      setGigManagementState(nextState)
+      toast.success('GIG details updated.', { title: 'GIG Updated' })
+      return nextState
+    } catch (error) {
+      toast.error(error.message || 'The GIG could not be updated.', { title: 'Update GIG Failed' })
+      return false
+    }
+  }
+
+  const handleSaveBusinessProfile = async profile => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      setBusinessProfile(mergeCompanyProfile(profile, { businessName: companyName, location }))
+      return profile
+    }
+
+    const result = await saveCompanyProfile(token, {
+      businessProfile: profile,
+    })
+    const savedProfile = mergeCompanyProfile(result.company?.businessProfile || profile, { businessName: companyName, location })
+    setBusinessProfile(savedProfile)
+    toast.success('Business profile saved successfully.', { title: 'Profile Updated' })
+    return savedProfile
+  }
+
+  const handleAddCompanyFunds = async amount => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      throw new Error('Sign in again to add company funds.')
+    }
+
+    const result = await addCompanyFunds(token, amount)
+    setPaymentState(mergeCompanyPaymentState(result.paymentState))
+    toast.success(`${amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })} added to the company wallet.`, { title: 'Funds Added' })
+    return result.paymentState
+  }
+
+  const handleSetupCompanyPayouts = async () => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      throw new Error('Sign in again to set up payouts.')
+    }
+
+    const result = await setupCompanyPayouts(token)
+    setPaymentState(mergeCompanyPaymentState(result.paymentState))
+    toast.success('Payout methods were verified and saved.', { title: 'Payout Setup Updated' })
+    return result.paymentState
+  }
+
+  const handleShareWorkspaceUpdate = async (projectId, message) => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      throw new Error('Sign in again to share a project update.')
+    }
+
+    const result = await shareCompanyWorkspaceUpdate(token, projectId, message)
+    setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
+    toast.success('The project update was saved.', { title: 'Update Shared' })
+    return result.projectWorkspaceState
+  }
+
+  const handleSetWorkspaceMilestone = async (projectId, milestone) => {
+    const token = sessionTokenRef.current
+    if (!token) {
+      throw new Error('Sign in again to set a project milestone.')
+    }
+
+    const result = await setCompanyWorkspaceMilestone(token, projectId, milestone)
+    setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
+    toast.success('The project milestone was saved.', { title: 'Milestone Set' })
+    return result.projectWorkspaceState
+  }
+
+  const profileNavItem = NAV_ITEMS.find(item => item.key === 'profile')
+  const primaryNavItems = NAV_ITEMS.filter(item => item.key !== 'profile')
+  const renderSidebarItem = item => (
+    <button key={item.key} type="button" onClick={() => {
+      setActive(item.key)
+      setSidebarOpen(false)
+    }} style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '11px 14px', borderRadius: 10, border: 'none',
+      background: active === item.key ? 'var(--accent-light)' : 'transparent',
+      color: active === item.key ? 'var(--accent)' : 'var(--muted)',
+      fontWeight: active === item.key ? 700 : 500,
+      fontSize: 14, cursor: 'pointer', textAlign: 'left', width: '100%',
+      transition: 'all 0.15s',
+      boxShadow: active === item.key ? 'inset 3px 0 0 var(--accent)' : 'inset 0 0 0 transparent',
+    }}
+    onMouseEnter={e => { if (active !== item.key) e.currentTarget.style.background = 'var(--bg)' }}
+    onMouseLeave={e => { if (active !== item.key) e.currentTarget.style.background = 'transparent' }}>
+      <span style={{
+        width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 8, background: active === item.key ? 'rgba(249,115,22,0.12)' : 'var(--bg)',
+        fontSize: 15, flexShrink: 0,
+      }}>{item.icon}</span>
+      {item.label}
+    </button>
+  )
+
   return (
     <div className="dashboard-shell company-dashboard" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
 
@@ -646,7 +881,7 @@ export default function CompanyDashboard() {
         padding: '0 24px', position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button type="button" className="mobile-only mobile-menu-toggle" onClick={() => setSidebarOpen(true)}>
+          <button type="button" className="mobile-only mobile-menu-toggle" onClick={() => setSidebarOpen(true)} aria-label="Open company workspace navigation">
             ☰
           </button>
           <img
@@ -681,39 +916,27 @@ export default function CompanyDashboard() {
         <aside className={`dashboard-sidebar${sidebarOpen ? ' is-open' : ''}`} style={{
           width: 220, background: 'var(--white)',
           borderRight: '1px solid var(--border)',
-          padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4,
+          padding: '18px 12px 14px', display: 'flex', flexDirection: 'column', gap: 5,
           position: 'sticky', top: 52, height: 'calc(100vh - 52px)', overflowY: 'auto',
         }}>
-          {NAV_ITEMS.map(item => (
-            <button key={item.key} onClick={() => {
-              setActive(item.key)
-              setSidebarOpen(false)
-            }} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '10px 14px', borderRadius: 9, border: 'none',
-              background: active === item.key ? 'var(--accent-light)' : 'transparent',
-              color: active === item.key ? 'var(--accent)' : 'var(--muted)',
-              fontWeight: active === item.key ? 700 : 500,
-              fontSize: 14, cursor: 'pointer', textAlign: 'left', width: '100%',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { if (active !== item.key) e.currentTarget.style.background = 'var(--bg)' }}
-            onMouseLeave={e => { if (active !== item.key) e.currentTarget.style.background = 'transparent' }}>
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
+          <div style={{ padding: '2px 14px 12px', color: 'var(--muted)', fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            Company workspace
+          </div>
+          {primaryNavItems.map(renderSidebarItem)}
           <div style={{ flex: 1 }} />
-          <button onClick={handleLogout} style={{
+          <div style={{ height: 1, background: 'var(--border)', margin: '12px 8px 8px' }} />
+          {profileNavItem && renderSidebarItem(profileNavItem)}
+          <button type="button" onClick={handleLogout} style={{
             display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 14px', borderRadius: 9, border: 'none',
+            padding: '11px 14px', borderRadius: 10, border: 'none',
             background: 'transparent', color: '#EF4444',
             fontWeight: 600, fontSize: 14, cursor: 'pointer', width: '100%',
             transition: 'all 0.15s',
           }}
           onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <span style={{ fontSize: 16 }}>🚪</span> Logout
+            <span style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#FEF2F2', fontSize: 15 }}>🚪</span>
+            Logout
           </button>
         </aside>
 
@@ -725,6 +948,7 @@ export default function CompanyDashboard() {
               <div className="responsive-hero" style={{
                 background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
                 borderRadius: 16, padding: '24px 28px',
+                boxShadow: '0 10px 28px rgba(249,115,22,0.16)',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 marginBottom: 20, flexWrap: 'wrap', gap: 16,
               }}>
@@ -742,38 +966,51 @@ export default function CompanyDashboard() {
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: '14px 22px', textAlign: 'center' }}>
                   <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, marginBottom: 2 }}>Matched Students</div>
-                  <div style={{ color: 'white', fontSize: 36, fontWeight: 900, lineHeight: 1 }}>{dashboardState.matchedStudents}</div>
+                  <div style={{ color: 'white', fontSize: 36, fontWeight: 900, lineHeight: 1 }}>{talentProfiles.length}</div>
                 </div>
               </div>
 
               <div className="responsive-card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
-                {dashboardState.stats.map(stat => (
-                  <div key={stat.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '16px 18px', border: '1px solid var(--border)' }}>
+                {displayedOverviewStats.map(stat => (
+                  <button
+                    key={stat.label}
+                    type="button"
+                    onClick={() => setActive(stat.target)}
+                    style={{ background: 'var(--white)', borderRadius: 12, padding: '16px 18px', border: '1px solid var(--border)', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'transform 0.15s, box-shadow 0.15s' }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = 'var(--shadow)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
                     <div style={{ fontSize: 20, marginBottom: 6 }}>{stat.icon}</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--dark)', marginBottom: 2 }}>{stat.value}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--dark)', marginBottom: 2 }}>{stat.value}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{stat.label}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
               <div className="responsive-split-main" style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 16, marginBottom: 20 }}>
-                <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 20px' }}>
+                <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', borderTop: '3px solid var(--success)', padding: '18px 20px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)', marginBottom: 4 }}>Business Setup Health</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>Complete profile details to increase applicant trust and improve match quality.</div>
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 700, background: '#D1FAE5', color: '#065F46', padding: '4px 9px', borderRadius: 100 }}>
-                      {profileCompletion}% complete
+                      {displayedProfileCompletion}% complete
                     </span>
                   </div>
 
                   <div style={{ height: 9, borderRadius: 999, background: '#E2E8F0', marginBottom: 14, overflow: 'hidden' }}>
-                    <div style={{ width: `${profileCompletion}%`, height: '100%', background: 'linear-gradient(90deg, #22C55E, #16A34A)' }} />
+                    <div style={{ width: `${displayedProfileCompletion}%`, height: '100%', background: 'linear-gradient(90deg, #22C55E, #16A34A)' }} />
                   </div>
 
                   <div className="responsive-form-grid-tight" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
-                    {checklist.map(item => (
+                    {displayedChecklist.map(item => (
                       <div key={item.label} style={{ background: 'var(--bg)', borderRadius: 9, border: '1px solid var(--border)', padding: '9px 10px', fontSize: 12, color: item.done ? '#065F46' : 'var(--muted)', fontWeight: 600 }}>
                         {item.done ? '✅' : '⬜'} {item.label}
                       </div>
@@ -788,8 +1025,8 @@ export default function CompanyDashboard() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '14px 16px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--dark)', marginBottom: 8 }}>Quick Actions</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <button onClick={() => setActive('gig')} className="btn-accent" style={{ fontSize: 12, padding: '8px 12px', justifyContent: 'center' }}>Create / Manage GIGs</button>
@@ -802,7 +1039,7 @@ export default function CompanyDashboard() {
                     </div>
                   </div>
 
-                  <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '14px 16px' }}>
+                  <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '14px 16px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
                     <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--dark)', marginBottom: 6 }}>Setup Checklist Progress</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>{doneChecklist}/{checklist.length} tasks complete</div>
                     <span style={{ fontSize: 11, fontWeight: 700, background: doneChecklist === checklist.length ? '#D1FAE5' : '#FEF3C7', color: doneChecklist === checklist.length ? '#065F46' : '#92400E', padding: '4px 9px', borderRadius: 100 }}>
@@ -815,12 +1052,12 @@ export default function CompanyDashboard() {
               <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 20px' }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)', marginBottom: 10 }}>Recent Hiring Activity</div>
                 <div className="responsive-card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  {dashboardState.recentHiringActivity.map(item => (
+                  {recentHiringActivity.map(item => (
                     <div key={item.name + item.status} style={{ background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', padding: '11px 12px' }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--dark)', marginBottom: 4 }}>{item.name}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, lineHeight: 1.5 }}>{item.status}</div>
                       <span style={{ fontSize: 11, fontWeight: 700, background: item.bg, color: item.color, padding: '3px 8px', borderRadius: 100 }}>
-                        {item.when}
+                        {formatActivityWhen(item.when)}
                       </span>
                     </div>
                   ))}
@@ -831,11 +1068,12 @@ export default function CompanyDashboard() {
 
           {active === 'talent' && (
             <div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--dark)', marginBottom: 16 }}>
-                Top Talent Matches <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 500 }}>({filteredTalent.length} found)</span>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 16 }}>
+                <span style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--accent-light)', fontSize: 16 }}>🔍</span>
+                Top Talent Matches <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>({filteredTalent.length} found)</span>
               </h3>
 
-              <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '14px 16px', marginBottom: 14 }}>
+              <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
                 <div className="responsive-filter-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: 10, alignItems: 'end', marginBottom: 10 }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -936,6 +1174,7 @@ export default function CompanyDashboard() {
                   <div className="responsive-hero" key={p.name} style={{
                     background: 'var(--white)', borderRadius: 12,
                     padding: '18px 22px', border: '1px solid var(--border)',
+                    boxShadow: '0 2px 8px rgba(15,23,42,0.03)',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     flexWrap: 'wrap', gap: 12, transition: 'all 0.2s',
                   }}
@@ -989,7 +1228,7 @@ export default function CompanyDashboard() {
           )}
 
           {active === 'profile' && (
-            <SetupBusinessProfile profile={businessProfile} onSave={setBusinessProfile} />
+            <SetupBusinessProfile profile={businessProfile} onSave={handleSaveBusinessProfile} />
           )}
 
           {active === 'gig'       && (
@@ -997,11 +1236,29 @@ export default function CompanyDashboard() {
               gigManagementState={gigManagementState}
               onSaveState={setGigManagementState}
               taskSubmissions={taskSubmissions}
+              talentProfiles={talentProfiles}
               onReviewTaskSubmission={handleReviewTaskSubmission}
+              onSendInterviewTask={handleSendInterviewTask}
+              onCreateGig={handleCreateCompanyGig}
+              onUpdateGig={handleUpdateCompanyGig}
             />
           )}
-          {active === 'workspace' && <ProjectWorkspace projectWorkspaceState={projectWorkspaceState} onSaveState={setProjectWorkspaceState} />}
-          {active === 'payment'   && <PaymentSection paymentState={paymentState} onSaveState={setPaymentState} />}
+          {active === 'workspace' && (
+            <ProjectWorkspace
+              projectWorkspaceState={projectWorkspaceState}
+              onSaveState={setProjectWorkspaceState}
+              onShareUpdate={handleShareWorkspaceUpdate}
+              onSetMilestone={handleSetWorkspaceMilestone}
+            />
+          )}
+          {active === 'payment'   && (
+            <PaymentSection
+              paymentState={paymentState}
+              onSaveState={setPaymentState}
+              onAddFunds={handleAddCompanyFunds}
+              onSetupPayouts={handleSetupCompanyPayouts}
+            />
+          )}
 
         </main>
       </div>

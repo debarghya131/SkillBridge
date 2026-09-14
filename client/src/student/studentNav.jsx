@@ -13,7 +13,7 @@ export default function StudentNav({
       padding: '0 24px', position: 'sticky', top: 0, zIndex: 100,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button type="button" className="mobile-only mobile-menu-toggle" onClick={onToggleSidebar}>
+        <button type="button" className="mobile-only mobile-menu-toggle" onClick={onToggleSidebar} aria-label="Open student workspace navigation">
           ☰
         </button>
         <img
@@ -28,6 +28,14 @@ export default function StudentNav({
         <div
           className="dashboard-user-meta"
           onClick={onOpenProfile}
+          role="button"
+          tabIndex={0}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              onOpenProfile()
+            }
+          }}
           style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
