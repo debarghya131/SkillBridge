@@ -1,6 +1,9 @@
 import { apiRequest } from '../lib/apiRequest'
 
 const COMPANY_SESSION_KEY = 'skillbridge.company.session'
+export function deleteCompanyAccount(token, payload) {
+  return apiRequest('/api/company/account', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+}
 
 export function getCompanySessionToken() {
   return window.localStorage.getItem(COMPANY_SESSION_KEY) || ''
@@ -75,15 +78,6 @@ export async function fetchCompanyGigManagement(token) {
   })
 }
 
-export async function saveCompanyGigManagement(token, payload) {
-  return apiRequest('/api/company/gigs', {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  })
-}
 
 export async function createCompanyGig(token, gig) {
   return apiRequest('/api/company/gigs', {
@@ -105,6 +99,15 @@ export async function updateCompanyGig(token, gigId, gig) {
   })
 }
 
+export async function deleteCompanyGig(token, gigId) {
+  return apiRequest(`/api/company/gigs/${encodeURIComponent(gigId)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
 export async function fetchCompanyTalent(token, filters = {}) {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => {
@@ -122,6 +125,17 @@ export async function fetchCompanyTalent(token, filters = {}) {
   })
 }
 
+export function fetchCompanyStudentProfile(token, studentId) {
+  return apiRequest(`/api/company/students/${encodeURIComponent(studentId)}/profile`, { headers: { Authorization: `Bearer ${token}` } })
+}
+
+export async function fetchCompanyGigApplicants(token, gigId) {
+  return apiRequest(`/api/company/gigs/${encodeURIComponent(gigId)}/applicants`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
 export async function fetchCompanyWorkspace(token) {
   return apiRequest('/api/company/workspace', {
     method: 'GET',
@@ -131,15 +145,6 @@ export async function fetchCompanyWorkspace(token) {
   })
 }
 
-export async function saveCompanyWorkspace(token, payload) {
-  return apiRequest('/api/company/workspace', {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  })
-}
 
 export async function shareCompanyWorkspaceUpdate(token, projectId, message) {
   return apiRequest(`/api/company/workspace/projects/${encodeURIComponent(projectId)}/update`, {
@@ -170,34 +175,8 @@ export async function fetchCompanyPayment(token) {
   })
 }
 
-export async function saveCompanyPayment(token, payload) {
-  return apiRequest('/api/company/payment', {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  })
-}
 
-export async function addCompanyFunds(token, amount) {
-  return apiRequest('/api/company/payment/funds', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ amount }),
-  })
-}
 
-export async function setupCompanyPayouts(token) {
-  return apiRequest('/api/company/payment/payouts/setup', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-}
 
 export async function fetchCompanyTaskSubmissions(token) {
   return apiRequest('/api/company/tasks/submissions', {
@@ -205,6 +184,25 @@ export async function fetchCompanyTaskSubmissions(token) {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+  })
+}
+
+export async function fetchCompanyTaskLibrary(token) {
+  return apiRequest('/api/company/tasks/library', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
+export async function saveCompanyTaskLibrary(token, payload) {
+  return apiRequest('/api/company/tasks/library', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
   })
 }
 
@@ -225,5 +223,11 @@ export async function sendCompanyInterviewTask(token, payload) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+  })
+}
+
+export async function recordCompanyExternalPayment(token, submissionId, payment) {
+  return apiRequest(`/api/company/payment/submissions/${encodeURIComponent(submissionId)}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payment),
   })
 }

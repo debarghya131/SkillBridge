@@ -1,41 +1,43 @@
-const VERIFIED_SKILL_SET = new Set(['React', 'Node.js', 'UI/UX Design'])
+const { isVerifiedSkill, dayKey } = require('../utils/skillPolicy')
+const { normalizeTrustEvents } = require('../utils/trustLedger')
 
 function buildTrustScoreFactors(student) {
-  const skills = Array.isArray(student.skills) ? student.skills : []
-  const projects = Array.isArray(student.projects) ? student.projects : []
-  const githubLink = Array.isArray(student.githubLink) ? student.githubLink : []
-  const trustEvents = Array.isArray(student.trustScoreState?.events) ? student.trustScoreState.events : []
-  const hasTrustEvent = eventType => trustEvents.some(event => event?.type === eventType)
-
-  const savedProjects = projects.filter(project => project.saved)
-  const verifiedSkills = skills.filter(skill => VERIFIED_SKILL_SET.has(skill)).length
-  const profileLinks = githubLink.length
-
-  return [
-    { label: 'Daily Challenge Solved', icon: '⚡', desc: "Solved today's daily challenge", points: 80, earned: true, category: 'Daily' },
-    { label: 'Retention Task Completed', icon: '🔒', desc: 'Completed daily retention tasks · 5 day streak', points: 20, earned: true, category: 'Daily' },
-    { label: 'Skill Verified', icon: '✅', desc: `${verifiedSkills} verified skill${verifiedSkills !== 1 ? 's' : ''} on profile`, points: 60, earned: verifiedSkills > 0 || hasTrustEvent('skill_verified'), category: 'Skills' },
-    { label: 'New Skill Added', icon: '➕', desc: 'Added a new skill to your profile', points: 20, earned: true, category: 'Skills' },
-    { label: 'Skill Level Upgraded', icon: '📈', desc: 'Upgraded a skill from Beginner to Intermediate', points: 100, earned: hasTrustEvent('skill_level_upgraded'), category: 'Skills' },
-    { label: 'Project Uploaded', icon: '🚀', desc: `${savedProjects.length} project${savedProjects.length !== 1 ? 's' : ''} with GitHub / live link`, points: 80, earned: savedProjects.length > 0 || hasTrustEvent('project_uploaded'), category: 'Projects' },
-    { label: 'GIG Completed', icon: '💼', desc: 'Delivered a GIG with a company rating', points: 150, earned: hasTrustEvent('gig_completed'), category: 'GIGs' },
-    { label: 'Skill Re-Verified', icon: '🔄', desc: 'Re-verified a skill before expiry', points: 50, earned: true, category: 'Skills' },
-    { label: 'Profile Links Added', icon: '🔗', desc: profileLinks > 0 ? `${profileLinks} link${profileLinks !== 1 ? 's' : ''} added` : 'No GitHub / LinkedIn links yet', points: 50, earned: profileLinks > 0 || hasTrustEvent('profile_link_added'), category: 'Profile' },
-    { label: 'Intro Video Uploaded', icon: '🎥', desc: 'Short intro video uploaded to profile', points: 50, earned: true, category: 'Profile' },
-    { label: 'Skill Expired (Penalty)', icon: '⚠️', desc: 'UI/UX Design verification expired', points: -80, earned: false, category: 'Penalty' },
-    { label: 'Retention Task Missed (Penalty)', icon: '❌', desc: 'Missed 2 days of retention tasks', points: -30, earned: false, category: 'Penalty' },
+  const events = normalizeTrustEvents(student.trustScoreState?.events)
+  const has = type => events.some(item => item.type === type)
+  const today = dayKey()
+  const daily = type => events.some(item => item.type === type && item.referenceId === today)
+  const verifiedCount = (student.skillHubSkills || []).filter(skill => isVerifiedSkill(skill)).length
+  const factors = [
+    { label: 'Daily Challenge Solved', icon: '⚡', desc: 'Reviewed challenge; up to 80 points per submission day', points: 80, earned: daily('daily_challenge_solved'), category: 'Daily' },
+    { label: 'Retention Task Completed', icon: '🔒', desc: 'Reviewed practice; up to 20 points per submission day', points: 20, earned: daily('retention_task_completed'), category: 'Daily' },
+    { label: 'Skill Verified', icon: '✅', desc: `${verifiedCount} actively verified skills on profile`, points: 60, earned: has('skill_verified'), category: 'Skills' },
+    { label: 'Skill Level Upgraded', icon: '📈', desc: 'Approved next-level assessment', points: 100, earned: has('skill_level_upgraded'), category: 'Skills' },
+    { label: 'Skill Re-Verified', icon: '🔄', desc: 'Approved verification renewal', points: 50, earned: has('skill_reverified'), category: 'Skills' },
+    { label: 'Project Uploaded', icon: '🚀', desc: 'No credit for unreviewed uploads; submit evidence for assessment', points: 0, earned: has('project_uploaded'), category: 'Projects' },
+    { label: 'GIG Completed', icon: '💼', desc: 'Completed GIG work', points: 150, earned: has('gig_completed'), category: 'GIGs' },
+    { label: 'Profile Links Added', icon: '🔗', desc: 'Profile completeness does not prove skill', points: 0, earned: has('profile_link_added'), category: 'Profile' },
+    { label: 'Intro Video Uploaded', icon: '🎥', desc: 'No credit without an assessment', points: 0, earned: has('intro_video_uploaded'), category: 'Profile' },
+    { label: 'High-quality assessment', icon: '✅', desc: 'Assigned reviewer approves with a complete rubric score of at least 90%', points: 25, earned: has('assessment_quality'), category: 'Quality' },
+    { label: 'Practice milestone', icon: '📈', desc: 'Every 30 distinct approved practice days, up to 240 days', points: 25, earned: has('practice_milestone'), category: 'Consistency' },
+    { label: 'Network milestone — 100', icon: '🤝', desc: '100 accepted real connections', points: 25, earned: has('network_connections_100'), category: 'Network' },
+    { label: 'Network milestone — 500', icon: '🤝', desc: '500 accepted real connections', points: 75, earned: has('network_connections_500'), category: 'Network' },
+    { label: 'Network milestone — 1,000', icon: '🤝', desc: '1,000 accepted real connections', points: 150, earned: has('network_connections_1000'), category: 'Network' },
+    { label: 'Team-Up milestone — 10', icon: '👥', desc: 'Participated in 10 accepted real Team-Ups', points: 25, earned: has('team_up_10'), category: 'Team-Up' },
+    { label: 'Team-Up milestone — 50', icon: '👥', desc: 'Participated in 50 accepted real Team-Ups', points: 75, earned: has('team_up_50'), category: 'Team-Up' },
+    { label: 'Team-Up milestone — 100', icon: '👥', desc: 'Participated in 100 accepted real Team-Ups', points: 150, earned: has('team_up_100'), category: 'Team-Up' },
+    { label: 'Assessment below standard', icon: '⚠️', desc: 'Assigned reviewer rejects with a rubric below 40%; at most once per submission day', points: -10, earned: has('assessment_below_standard'), category: 'Penalty' },
   ]
+  for (const type of ['skill_expired', 'retention_task_missed', 'retention_answer_wrong']) {
+    const event = events.find(item => item.type === type)
+    if (event) factors.push({ label: event.label, icon: '⚠️', desc: 'Recorded penalty; see account activity', points: event.points, earned: true, category: 'Penalty' })
+  }
+  return factors
 }
-
 function buildTrustScoreSummary(factors) {
   return {
     earnedPoints: factors.filter(item => item.earned && item.points > 0).reduce((sum, item) => sum + item.points, 0),
-    penalties: factors.filter(item => !item.earned && item.points < 0).reduce((sum, item) => sum + item.points, 0),
-    maxPoints: factors.filter(item => item.points > 0).reduce((sum, item) => sum + item.points, 0),
+    penalties: factors.filter(item => item.earned && item.points < 0).reduce((sum, item) => sum + item.points, 0),
+    maxPoints: 1000,
   }
 }
-
-module.exports = {
-  buildTrustScoreFactors,
-  buildTrustScoreSummary,
-}
+module.exports = { buildTrustScoreFactors, buildTrustScoreSummary }

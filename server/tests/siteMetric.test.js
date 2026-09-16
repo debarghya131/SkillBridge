@@ -39,6 +39,6 @@ test('incrementSiteViewCount uses an atomic upsert and returns the total', async
     $inc: { count: 1 },
     $setOnInsert: { key: 'site-views' },
   })
-  assert.equal(receivedOptions.new, true)
+  assert.equal(receivedOptions.returnDocument, 'after')
   assert.equal(receivedOptions.upsert, true)
 })

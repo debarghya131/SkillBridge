@@ -7,11 +7,11 @@ export async function apiRequest(path, options = {}) {
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
         ...(fetchOptions.headers || {}),
       },
-      ...fetchOptions,
     })
   } catch (error) {
     const message = import.meta.env.DEV
@@ -28,10 +28,14 @@ export async function apiRequest(path, options = {}) {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    const message = data.message || 'Request failed'
+    const message = data.message
+      || (response.status >= 500
+        ? 'The server could not complete this request. Please retry.'
+        : `Request failed (${response.status}). Please retry.`)
     const error = new Error(message)
     error.status = response.status
     error.payload = data
+    error.requestId = response.headers.get('X-Request-Id') || data.requestId || ''
 
     if (!silentErrorToast) {
       if (response.status === 429) {

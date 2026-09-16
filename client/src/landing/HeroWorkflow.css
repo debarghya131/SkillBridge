@@ -1,0 +1,44 @@
+.sb-workflow { border-top: 1px solid var(--sb-line); padding: 24px 0 20px; }
+.sb-workflow-intro { margin-bottom: 24px; }
+.sb-workflow-intro h2 { font-size: 23px; line-height: 1.3; margin: 0 0 8px; }
+.sb-workflow-intro p { font-size: 13px; color: var(--sb-muted); margin: 0; }
+.sb-workflow-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px; }
+.sb-workflow-step { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 18px; border: 1px solid #d7e3dc; border-radius: 6px; background: #fff; }
+.sb-workflow-step-4 { grid-column: 3; grid-row: 2; }
+.sb-workflow-step-5 { grid-column: 2; grid-row: 2; }
+.sb-workflow-step-6 { grid-column: 1; grid-row: 2; }
+.sb-workflow-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.sb-workflow-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px; color: #17684f; background: #e8f3ed; }
+.sb-workflow-step-3 .sb-workflow-icon { color: #6b54cf; background: #f0ecfa; }
+.sb-workflow-step-4 .sb-workflow-icon, .sb-workflow-step-6 .sb-workflow-icon { color: #98620e; background: #fcf3df; }
+.sb-workflow-number { font-size: 12px; color: #65796c; font-weight: 700; }
+.sb-workflow-role { display: block; color: #52695d; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.sb-workflow-step h3 { font-size: 17px; line-height: 1.35; margin: 7px 0 9px; }
+.sb-workflow-step p { font-size: 12px; line-height: 1.65; color: var(--sb-muted); margin: 0; }
+.sb-workflow-outcome { margin-top: auto; padding-top: 18px; font-size: 12px; line-height: 1.5; color: #17684f; font-weight: 600; }
+.sb-workflow-outcome span { display: block; border-top: 1px solid #e3ebe5; padding-top: 10px; margin-bottom: 4px; color: #607267; font-size: 10px; text-transform: uppercase; }
+.sb-workflow-connector { position: absolute; left: 100%; top: 50%; width: 46px; height: 2px; background: #b7d0c0; color: #17684f; }
+.sb-workflow-connector svg { position: absolute; right: 0; top: -8px; }
+.sb-workflow-step-3 .sb-workflow-connector { left: 50%; top: 100%; transform-origin: 0 0; transform: rotate(90deg); }
+.sb-workflow-step-4 .sb-workflow-connector, .sb-workflow-step-5 .sb-workflow-connector { left: 0; transform-origin: 0 0; transform: rotate(180deg); }
+.sb-workflow-note { margin: 20px 0 0; text-align: center; font-size: 11px; color: var(--sb-muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .sb-workflow-icon { animation: sb-workflow-highlight 8.4s ease-in-out infinite; animation-delay: var(--step-delay); }
+  .sb-workflow-connector svg { animation: sb-workflow-flow 1.4s ease-in-out infinite; animation-delay: var(--step-delay); }
+}
+@keyframes sb-workflow-highlight { 0%, 18%, 100% { box-shadow: 0 0 0 0 transparent; } 5%, 12% { box-shadow: 0 0 0 4px #cce5d6; } }
+@keyframes sb-workflow-flow { from { transform: translateX(-25px); opacity: 0; } 25%, 75% { opacity: 1; } to { transform: translateX(0); opacity: 0; } }
+@media (max-width: 640px) {
+  .sb-workflow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; }
+  .sb-workflow-step { padding: 12px; }
+  .sb-workflow-step h3 { font-size: 15px; overflow-wrap: anywhere; }
+  .sb-workflow-step-3 { grid-column: 2; grid-row: 2; }
+  .sb-workflow-step-4 { grid-column: 1; grid-row: 2; }
+  .sb-workflow-step-5 { grid-column: 1; grid-row: 3; }
+  .sb-workflow-step-6 { grid-column: 2; grid-row: 3; }
+  .sb-workflow-connector { width: 26px; }
+  .sb-workflow-step-2 .sb-workflow-connector, .sb-workflow-step-4 .sb-workflow-connector { width: 34px; left: 50%; top: 100%; transform-origin: 0 0; transform: rotate(90deg); }
+  .sb-workflow-step-3 .sb-workflow-connector { left: 0; top: 50%; transform: rotate(180deg); }
+  .sb-workflow-step-5 .sb-workflow-connector { left: 100%; transform: none; }
+  .sb-workflow-note { text-align: left; }
+}

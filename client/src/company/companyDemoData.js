@@ -1,7 +1,21 @@
+import companyIntroVideo from '../assets/companyintro.mp4'
+
+export function isBundledCompanyIntroVideoUrl(videoUrl) {
+  if (typeof videoUrl !== 'string' || !videoUrl.trim()) return false
+  const rawValue = videoUrl.trim()
+  const pathname = (() => {
+    try { return new URL(rawValue, 'https://skillbridge.local').pathname } catch { return rawValue.split(/[?#]/)[0] }
+  })()
+  return rawValue === companyIntroVideo || pathname === '/src/assets/companyintro.mp4' || /^\/assets\/companyintro-[A-Za-z0-9_-]+\.mp4$/.test(pathname)
+}
+
 export function buildDefaultCompanyProfile(overrides = {}) {
   return {
     businessName: overrides.businessName || 'Your Business',
     location: overrides.location || '',
+    logo: '',
+    // This is a local starter preview. It is never saved as company content.
+    introVideoUrl: companyIntroVideo,
     industry: '',
     website: '',
     teamSize: '',
@@ -19,6 +33,12 @@ export function mergeCompanyProfile(profile = {}, overrides = {}) {
     ...buildDefaultCompanyProfile(overrides),
     businessName: typeof profile.businessName === 'string' ? profile.businessName : (overrides.businessName || 'Your Business'),
     location: typeof profile.location === 'string' ? profile.location : (overrides.location || ''),
+    logo: typeof profile.logo === 'string' ? profile.logo : '',
+    introVideoUrl: isBundledCompanyIntroVideoUrl(profile.introVideoUrl)
+      ? companyIntroVideo
+      : typeof profile.introVideoUrl === 'string' && profile.introVideoUrl.trim()
+        ? profile.introVideoUrl
+        : companyIntroVideo,
     industry: typeof profile.industry === 'string' ? profile.industry : '',
     website: typeof profile.website === 'string' ? profile.website : '',
     teamSize: typeof profile.teamSize === 'string' ? profile.teamSize : '',
@@ -34,34 +54,12 @@ export function mergeCompanyProfile(profile = {}, overrides = {}) {
 export function buildDefaultCompanyDashboardState() {
   return {
     stats: [
-      { label: 'Active GIGs', value: '2', icon: '📋' },
-      { label: 'Applications', value: '7', icon: '📥' },
-      { label: 'Total Talent', value: '4', icon: '👥' },
+      { label: 'Active GIGs', value: '0', icon: '📋' },
+      { label: 'Applications', value: '0', icon: '📥' },
+      { label: 'Total Talent', value: '0', icon: '👥' },
     ],
-    matchedStudents: 4,
-    recentHiringActivity: [
-      {
-        name: 'Aman Verma',
-        status: 'Submitted interview task for Frontend Internship',
-        when: '2 hours ago',
-        color: '#1D4ED8',
-        bg: '#DBEAFE',
-      },
-      {
-        name: 'Ritika Sen',
-        status: 'Shortlisted for Frontend Internship',
-        when: 'Today',
-        color: '#065F46',
-        bg: '#D1FAE5',
-      },
-      {
-        name: 'Priya Singh',
-        status: 'Applied to Social Media Content Role',
-        when: 'Yesterday',
-        color: '#92400E',
-        bg: '#FEF3C7',
-      },
-    ],
+    matchedStudents: 0,
+    recentHiringActivity: [],
   }
 }
 

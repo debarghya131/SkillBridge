@@ -15,7 +15,7 @@ async function incrementSiteViewCount(metricModel = SiteMetric) {
       $setOnInsert: { key: SITE_VIEW_KEY },
     },
     {
-      new: true,
+      returnDocument: 'after',
       upsert: true,
       setDefaultsOnInsert: true,
     },

@@ -1,11 +1,14 @@
 const http = require('http')
+const { deleteCompanyAccount } = require('./controllers/companyDeletionController')
 const { connectToDatabase, disconnectFromDatabase, getDatabaseStatus } = require('./config/db')
 const { getEnvConfig } = require('./config/env')
 const {
+  getCompanyStudentProfile,
   getCurrentCompany,
+  getCurrentCompanyTaskLibraryState,
   getCurrentCompanyDashboard,
   getCurrentCompanyGigManagementState,
-  getCurrentCompanyPaymentState,
+  getCompanyGigApplicants,
   getCurrentCompanyProjectWorkspaceState,
   getCompanyTalentProfiles,
   getPublicCompanyProfile,
@@ -13,18 +16,17 @@ const {
   signInCompany,
   signUpCompany,
   createCompanyGig,
-  addCompanyFunds,
-  setupCompanyPayouts,
+  deleteCompanyGig,
   updateCurrentCompany,
-  updateCurrentCompanyGigManagementState,
+  updateCurrentCompanyTaskLibraryState,
   updateCompanyGig,
-  updateCurrentCompanyPaymentState,
-  updateCurrentCompanyProjectWorkspaceState,
   setCompanyWorkspaceMilestone,
   shareCompanyWorkspaceUpdate,
 } = require('./controllers/companyController')
 const {
   getCurrentStudent,
+  getCurrentStudentProfileMedia,
+  deleteCurrentStudentAccount,
   logoutCurrentStudent,
   signInStudent,
   signUpStudent,
@@ -33,14 +35,21 @@ const {
 const {
   acceptOpportunity,
   applyToGig,
+  compactGigStateMedia,
   declineOpportunity,
   getStudentGigState,
   saveGig,
   unsaveGig,
 } = require('./controllers/gigController')
 const { getStudentEarningState, requestStudentWithdrawal, updateStudentEarningState } = require('./controllers/earningController')
-const { getStudentNetworkState, updateStudentNetworkState } = require('./controllers/networkController')
-const { getStudentSkillHub, recordStudentSkillHubEvent, updateStudentSkillHub } = require('./controllers/skillHubController')
+const {
+  createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile,
+  getStudentNetworkState, inviteStudentToTeam, removeConnection, requestToJoinTeam, sendConnectionRequest,
+  updateTeamPost, withdrawTeamRequest, leaveTeam,
+} = require('./controllers/networkController')
+const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub } = require('./controllers/skillHubController')
+const { listStudentAssessments, submitSkillAssessment } = require('./controllers/skillAssessmentController')
+const { claimAssessment, decideAssessment, getCurrentReviewer, listReviewQueue, logoutReviewer, releaseAssessment, signInReviewer } = require('./controllers/reviewerController')
 const { getStudentTrustScore, recordStudentTrustScoreEvent } = require('./controllers/trustScoreController')
 const {
   getCompanyTaskSubmissions,
@@ -54,8 +63,11 @@ const { createRateLimiter } = require('./utils/rateLimit')
 const { createRequestId, serializeError, writeLog } = require('./utils/logger')
 const { getBearerToken, readJsonBody } = require('./utils/request')
 const { getSessionTtlMs, resolveSessionSubject } = require('./utils/session')
+const { getCompanyPayments, recordExternalPayment } = require('./controllers/companyPaymentController')
+const { DEMO_READ_ONLY_MESSAGE, isProtectedDemoWrite } = require('./utils/demoProtection')
 const Student = require('./models/Student')
 const Company = require('./models/Company')
+const Reviewer = require('./models/Reviewer')
 
 const env = getEnvConfig()
 const port = env.port
@@ -129,7 +141,7 @@ async function handlePublicApi(req, res, pathname) {
   } catch (error) {
     sendJson(res, error.statusCode || 500, {
       status: 'error',
-      message: error.message || 'Something went wrong',
+      message: error.statusCode ? error.message : 'The server could not complete this request.',
       requestId: res.requestId,
     })
     return true
@@ -140,6 +152,12 @@ async function handlePublicApi(req, res, pathname) {
 
 async function handleCompanyApi(req, res, pathname) {
   try {
+    const studentProfileMatch = pathname.match(/^\/api\/company\/students\/([^/]+)\/profile$/)
+    if (req.method === 'GET' && studentProfileMatch) {
+      const profile = await getCompanyStudentProfile(getBearerToken(req), decodeURIComponent(studentProfileMatch[1]))
+      sendJson(res, 200, { profile })
+      return true
+    }
     if (req.method === 'POST' && pathname === '/api/company/signup') {
       const payload = await readJsonBody(req)
       const result = await signUpCompany(payload)
@@ -166,6 +184,11 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'DELETE' && pathname === '/api/company/account') {
+      const result = await deleteCompanyAccount(getBearerToken(req), await readJsonBody(req))
+      sendJson(res, 200, result)
+      return true
+    }
     if (req.method === 'PATCH' && pathname === '/api/company/profile') {
       const payload = await readJsonBody(req)
       const company = await updateCurrentCompany(getBearerToken(req), payload)
@@ -186,7 +209,20 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
+    const applicantsMatch = pathname.match(/^\/api\/company\/gigs\/(\d+)\/applicants$/)
+    if (req.method === 'GET' && applicantsMatch) {
+      const applicants = await getCompanyGigApplicants(getBearerToken(req), applicantsMatch[1])
+      sendJson(res, 200, { applicants })
+      return true
+    }
+
     const gigIdMatch = pathname.match(/^\/api\/company\/gigs\/(\d+)$/)
+    if (req.method === 'DELETE' && gigIdMatch) {
+      const gigManagementState = await deleteCompanyGig(getBearerToken(req), gigIdMatch[1])
+      sendJson(res, 200, { gigManagementState })
+      return true
+    }
+
     if (req.method === 'PATCH' && gigIdMatch) {
       const payload = await readJsonBody(req)
       const gigManagementState = await updateCompanyGig(getBearerToken(req), gigIdMatch[1], payload)
@@ -194,10 +230,18 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'PATCH' && pathname === '/api/company/gigs') {
+
+
+    if (req.method === 'GET' && pathname === '/api/company/tasks/library') {
+      const taskLibraryState = await getCurrentCompanyTaskLibraryState(getBearerToken(req))
+      sendJson(res, 200, { taskLibraryState })
+      return true
+    }
+
+    if (req.method === 'PATCH' && pathname === '/api/company/tasks/library') {
       const payload = await readJsonBody(req)
-      const gigManagementState = await updateCurrentCompanyGigManagementState(getBearerToken(req), payload)
-      sendJson(res, 200, { gigManagementState })
+      const taskLibraryState = await updateCurrentCompanyTaskLibraryState(getBearerToken(req), payload)
+      sendJson(res, 200, { taskLibraryState })
       return true
     }
 
@@ -217,12 +261,7 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'PATCH' && pathname === '/api/company/workspace') {
-      const payload = await readJsonBody(req)
-      const projectWorkspaceState = await updateCurrentCompanyProjectWorkspaceState(getBearerToken(req), payload)
-      sendJson(res, 200, { projectWorkspaceState })
-      return true
-    }
+
 
     const workspaceProjectMatch = pathname.match(/^\/api\/company\/workspace\/projects\/([^/]+)\/(update|milestone)$/)
     if (req.method === 'POST' && workspaceProjectMatch) {
@@ -236,7 +275,7 @@ async function handleCompanyApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/company/payment') {
-      const paymentState = await getCurrentCompanyPaymentState(getBearerToken(req))
+      const paymentState = await getCompanyPayments(getBearerToken(req))
       sendJson(res, 200, { paymentState })
       return true
     }
@@ -254,22 +293,16 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'PATCH' && pathname === '/api/company/payment') {
-      const payload = await readJsonBody(req)
-      const paymentState = await updateCurrentCompanyPaymentState(getBearerToken(req), payload)
-      sendJson(res, 200, { paymentState })
-      return true
-    }
 
-    if (req.method === 'POST' && pathname === '/api/company/payment/funds') {
-      const payload = await readJsonBody(req)
-      const paymentState = await addCompanyFunds(getBearerToken(req), payload.amount)
-      sendJson(res, 200, { paymentState })
-      return true
-    }
 
-    if (req.method === 'POST' && pathname === '/api/company/payment/payouts/setup') {
-      const paymentState = await setupCompanyPayouts(getBearerToken(req))
+
+
+
+
+    const paymentMatch = pathname.match(/^\/api\/company\/payment\/submissions\/([a-f0-9]{24})$/i)
+    if (req.method === 'POST' && paymentMatch) {
+      const payload = await readJsonBody(req)
+      const paymentState = await recordExternalPayment(getBearerToken(req), paymentMatch[1], payload)
       sendJson(res, 200, { paymentState })
       return true
     }
@@ -290,12 +323,53 @@ async function handleCompanyApi(req, res, pathname) {
   } catch (error) {
     sendJson(res, error.statusCode || 500, {
       status: 'error',
-      message: error.message || 'Something went wrong',
+      message: error.statusCode ? error.message : 'The server could not complete this request.',
       requestId: res.requestId,
     })
     return true
   }
 
+  return false
+}
+
+async function handleReviewerApi(req, res, pathname) {
+  try {
+    if (req.method === 'POST' && pathname === '/api/reviewer/signin') {
+      sendJson(res, 200, await signInReviewer(await readJsonBody(req)))
+      return true
+    }
+    if (req.method === 'GET' && pathname === '/api/reviewer/me') {
+      sendJson(res, 200, { reviewer: await getCurrentReviewer(getBearerToken(req)) })
+      return true
+    }
+    if (req.method === 'POST' && pathname === '/api/reviewer/logout') {
+      sendJson(res, 200, await logoutReviewer(getBearerToken(req)))
+      return true
+    }
+    if (req.method === 'GET' && pathname === '/api/reviewer/assessments') {
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      sendJson(res, 200, await listReviewQueue(getBearerToken(req), Object.fromEntries(searchParams.entries())))
+      return true
+    }
+    const assessmentAction = pathname.match(/^\/api\/reviewer\/assessments\/([a-f0-9]{24})\/(claim|release|review)$/i)
+    if (req.method === 'POST' && assessmentAction) {
+      const [, id, action] = assessmentAction
+      const result = action === 'claim'
+        ? await claimAssessment(getBearerToken(req), id)
+        : action === 'release'
+          ? await releaseAssessment(getBearerToken(req), id)
+          : await decideAssessment(getBearerToken(req), id, await readJsonBody(req))
+      sendJson(res, 200, { assessment: result })
+      return true
+    }
+  } catch (error) {
+    sendJson(res, error.statusCode || 500, {
+      status: 'error',
+      message: error.statusCode ? error.message : 'The server could not complete this request.',
+      requestId: res.requestId,
+    })
+    return true
+  }
   return false
 }
 
@@ -316,8 +390,15 @@ async function handleStudentApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/student/me') {
-      const student = await getCurrentStudent(getBearerToken(req))
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const student = await getCurrentStudent(getBearerToken(req), { workspace: searchParams.get('view') === 'workspace' })
       sendJson(res, 200, { student })
+      return true
+    }
+
+    if (req.method === 'GET' && pathname === '/api/student/profile-media') {
+      const media = await getCurrentStudentProfileMedia(getBearerToken(req))
+      sendJson(res, 200, media)
       return true
     }
 
@@ -325,6 +406,12 @@ async function handleStudentApi(req, res, pathname) {
       const payload = await readJsonBody(req)
       const student = await updateCurrentStudent(getBearerToken(req), payload)
       sendJson(res, 200, { student })
+      return true
+    }
+
+    if (req.method === 'DELETE' && pathname === '/api/student/account') {
+      await deleteCurrentStudentAccount(getBearerToken(req), await readJsonBody(req))
+      sendJson(res, 200, { deleted: true })
       return true
     }
 
@@ -336,7 +423,7 @@ async function handleStudentApi(req, res, pathname) {
 
     if (req.method === 'GET' && pathname === '/api/student/gigs') {
       const gigState = await getStudentGigState(getBearerToken(req))
-      sendJson(res, 200, { gigState })
+      sendJson(res, 200, { gigState: compactGigStateMedia(gigState) })
       return true
     }
 
@@ -359,6 +446,79 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
+    const networkProfileMatch = pathname.match(/^\/api\/student\/network\/profiles\/([^/]+)$/)
+    if (req.method === 'GET' && networkProfileMatch) {
+      const profile = await getNetworkProfile(getBearerToken(req), decodeURIComponent(networkProfileMatch[1]))
+      sendJson(res, 200, { profile })
+      return true
+    }
+
+    const connectionTargetMatch = pathname.match(/^\/api\/student\/network\/connections\/([^/]+)$/)
+    if (req.method === 'POST' && connectionTargetMatch) {
+      sendJson(res, 201, { connection: await sendConnectionRequest(getBearerToken(req), decodeURIComponent(connectionTargetMatch[1])) })
+      return true
+    }
+    if (req.method === 'DELETE' && connectionTargetMatch) {
+      sendJson(res, 200, await removeConnection(getBearerToken(req), decodeURIComponent(connectionTargetMatch[1])))
+      return true
+    }
+
+    const connectionDecisionMatch = pathname.match(/^\/api\/student\/network\/connection-requests\/([^/]+)$/)
+    if (req.method === 'PATCH' && connectionDecisionMatch) {
+      const payload = await readJsonBody(req)
+      sendJson(res, 200, { connection: await decideConnectionRequest(getBearerToken(req), decodeURIComponent(connectionDecisionMatch[1]), payload.decision) })
+      return true
+    }
+
+    if (req.method === 'POST' && pathname === '/api/student/network/team-posts') {
+      sendJson(res, 201, { teamPost: await createTeamPost(getBearerToken(req), await readJsonBody(req)) })
+      return true
+    }
+
+    const teamPostMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)$/)
+    if (req.method === 'PATCH' && teamPostMatch) {
+      sendJson(res, 200, { teamPost: await updateTeamPost(getBearerToken(req), decodeURIComponent(teamPostMatch[1]), await readJsonBody(req)) })
+      return true
+    }
+    if (req.method === 'DELETE' && teamPostMatch) {
+      sendJson(res, 200, await deleteTeamPost(getBearerToken(req), decodeURIComponent(teamPostMatch[1])))
+      return true
+    }
+
+    const teamJoinMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/join$/)
+    if (req.method === 'POST' && teamJoinMatch) {
+      sendJson(res, 201, { teamPost: await requestToJoinTeam(getBearerToken(req), decodeURIComponent(teamJoinMatch[1]), await readJsonBody(req)) })
+      return true
+    }
+
+    const teamInviteMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/invitations\/([^/]+)$/)
+    if (req.method === 'POST' && teamInviteMatch) {
+      sendJson(res, 201, { teamPost: await inviteStudentToTeam(getBearerToken(req), decodeURIComponent(teamInviteMatch[1]), decodeURIComponent(teamInviteMatch[2]), await readJsonBody(req)) })
+      return true
+    }
+    if (req.method === 'PATCH' && teamInviteMatch) {
+      const payload = await readJsonBody(req)
+      sendJson(res, 200, { teamPost: await decideTeamInvitation(getBearerToken(req), decodeURIComponent(teamInviteMatch[1]), decodeURIComponent(teamInviteMatch[2]), payload.decision) })
+      return true
+    }
+    if (req.method === 'DELETE' && teamJoinMatch) {
+      sendJson(res, 200, await withdrawTeamRequest(getBearerToken(req), decodeURIComponent(teamJoinMatch[1])))
+      return true
+    }
+
+    const teamMembershipMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/membership$/)
+    if (req.method === 'DELETE' && teamMembershipMatch) {
+      sendJson(res, 200, await leaveTeam(getBearerToken(req), decodeURIComponent(teamMembershipMatch[1])))
+      return true
+    }
+
+    const teamDecisionMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/requests\/([^/]+)$/)
+    if (req.method === 'PATCH' && teamDecisionMatch) {
+      const payload = await readJsonBody(req)
+      sendJson(res, 200, { teamPost: await decideTeamRequest(getBearerToken(req), decodeURIComponent(teamDecisionMatch[1]), decodeURIComponent(teamDecisionMatch[2]), payload.decision) })
+      return true
+    }
+
     if (req.method === 'GET' && pathname === '/api/student/earning') {
       const earningState = await getStudentEarningState(getBearerToken(req))
       sendJson(res, 200, { earningState })
@@ -371,9 +531,23 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'GET' && pathname === '/api/student/activity-heatmap') {
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const heatmap = await getStudentActivityHeatmap(getBearerToken(req), Object.fromEntries(searchParams.entries()))
+      sendJson(res, 200, { heatmap })
+      return true
+    }
+
     if (req.method === 'PATCH' && pathname === '/api/student/skillhub') {
       const payload = await readJsonBody(req)
       const skillHub = await updateStudentSkillHub(getBearerToken(req), payload)
+      sendJson(res, 200, { skillHub })
+      return true
+    }
+
+    if (req.method === 'PATCH' && pathname === '/api/student/skillhub/skill-visibility') {
+      const payload = await readJsonBody(req)
+      const skillHub = await setStudentSkillArchived(getBearerToken(req), payload)
       sendJson(res, 200, { skillHub })
       return true
     }
@@ -385,10 +559,12 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'PATCH' && pathname === '/api/student/network') {
-      const payload = await readJsonBody(req)
-      const networkState = await updateStudentNetworkState(getBearerToken(req), payload)
-      sendJson(res, 200, { networkState })
+    if (pathname === '/api/student/skillhub/assessments' && req.method === 'GET') {
+      sendJson(res, 200, { assessments: await listStudentAssessments(getBearerToken(req)) })
+      return true
+    }
+    if (pathname === '/api/student/skillhub/assessments' && req.method === 'POST') {
+      sendJson(res, 201, { assessment: await submitSkillAssessment(getBearerToken(req), await readJsonBody(req)) })
       return true
     }
 
@@ -408,8 +584,8 @@ async function handleStudentApi(req, res, pathname) {
 
     if (req.method === 'POST' && pathname === '/api/student/tasks/company-interview/load') {
       const payload = await readJsonBody(req)
-      const result = await getStudentCompanyInterviewTask(getBearerToken(req), payload)
-      sendJson(res, 200, result)
+      const taskResult = await getStudentCompanyInterviewTask(getBearerToken(req), payload)
+      sendJson(res, 200, taskResult)
       return true
     }
 
@@ -440,16 +616,16 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
-    const acceptMatch = pathname.match(/^\/api\/student\/opportunities\/(\d+)\/accept$/)
+    const acceptMatch = pathname.match(/^\/api\/student\/opportunities\/([^/]+)\/accept$/)
     if (req.method === 'POST' && acceptMatch) {
-      const gigState = await acceptOpportunity(getBearerToken(req), acceptMatch[1])
+      const gigState = await acceptOpportunity(getBearerToken(req), decodeURIComponent(acceptMatch[1]))
       sendJson(res, 200, { gigState })
       return true
     }
 
-    const declineMatch = pathname.match(/^\/api\/student\/opportunities\/(\d+)\/decline$/)
+    const declineMatch = pathname.match(/^\/api\/student\/opportunities\/([^/]+)\/decline$/)
     if (req.method === 'POST' && declineMatch) {
-      const gigState = await declineOpportunity(getBearerToken(req), declineMatch[1])
+      const gigState = await declineOpportunity(getBearerToken(req), decodeURIComponent(declineMatch[1]))
       sendJson(res, 200, { gigState })
       return true
     }
@@ -488,7 +664,9 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  const rateLimitResult = rateLimiter.check(req, pathname)
+  const rateLimitResult = env.rateLimitingEnabled
+    ? rateLimiter.check(req, pathname)
+    : { limited: false, retryAfterMs: 0 }
 
   if (rateLimitResult.limited) {
     res.setHeader('Retry-After', String(Math.ceil(rateLimitResult.retryAfterMs / 1000)))
@@ -509,10 +687,11 @@ const server = http.createServer(async (req, res) => {
     token: bearerToken,
     studentModel: Student,
     companyModel: Company,
+    reviewerModel: Reviewer,
     sessionTtlMs: getSessionTtlMs(env.sessionTtlDays),
   })
 
-  if (sessionSubject) {
+  if (env.rateLimitingEnabled && sessionSubject) {
     const dailyUserLimitResult = rateLimiter.consumeDailyUser(`${sessionSubject.type}:${sessionSubject.id}`)
 
     if (dailyUserLimitResult.limited) {
@@ -526,11 +705,24 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (isProtectedDemoWrite({ method: req.method, pathname })) {
+    sendJson(res, 403, {
+      status: 'error',
+      message: DEMO_READ_ONLY_MESSAGE,
+      requestId: req.requestId,
+    })
+    return
+  }
+
   if (await handleStudentApi(req, res, pathname)) {
     return
   }
 
   if (await handleCompanyApi(req, res, pathname)) {
+    return
+  }
+
+  if (await handleReviewerApi(req, res, pathname)) {
     return
   }
 
@@ -602,7 +794,7 @@ server.on('error', (error) => {
 
 async function startServer() {
   try {
-    await connectToDatabase(mongoUrl)
+    await connectToDatabase(mongoUrl, env)
     writeLog('info', 'database.connected', {
       database: getDatabaseStatus(),
     })
@@ -622,44 +814,57 @@ async function startServer() {
   }
 }
 
-async function shutdown(signal) {
-  writeLog('warn', 'server.shutdown_requested', { signal })
+let shutdownPromise = null
 
-  server.close(async closeError => {
-    if (closeError) {
-      writeLog('error', 'server.shutdown_close_failed', {
-        signal,
-        error: serializeError(closeError),
-      })
-      process.exit(1)
-      return
+async function shutdown(signal, exitCode = 0) {
+  if (shutdownPromise) return shutdownPromise
+
+  shutdownPromise = new Promise(resolve => {
+    writeLog('warn', 'server.shutdown_requested', { signal })
+
+    const finish = async closeError => {
+      if (closeError && closeError.code !== 'ERR_SERVER_NOT_RUNNING') {
+        writeLog('error', 'server.shutdown_close_failed', {
+          signal,
+          error: serializeError(closeError),
+        })
+      }
+
+      try {
+        await disconnectFromDatabase()
+        writeLog('info', 'server.shutdown_complete', { signal })
+        resolve()
+        process.exit(exitCode)
+      } catch (error) {
+        writeLog('error', 'server.shutdown_db_disconnect_failed', {
+          signal,
+          error: serializeError(error),
+        })
+        resolve()
+        process.exit(1)
+      }
     }
 
-    try {
-      await disconnectFromDatabase()
-      writeLog('info', 'server.shutdown_complete', { signal })
-      process.exit(0)
-    } catch (error) {
-      writeLog('error', 'server.shutdown_db_disconnect_failed', {
-        signal,
-        error: serializeError(error),
-      })
-      process.exit(1)
-    }
+    if (server.listening) server.close(finish)
+    else finish()
   })
+
+  return shutdownPromise
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'))
-process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
 process.on('uncaughtException', error => {
   writeLog('error', 'process.uncaught_exception', {
     error: serializeError(error),
   })
+  void shutdown('uncaughtException', 1)
 })
 process.on('unhandledRejection', error => {
   writeLog('error', 'process.unhandled_rejection', {
     error: serializeError(error),
   })
+  void shutdown('unhandledRejection', 1)
 })
 
 startServer()

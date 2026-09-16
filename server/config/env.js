@@ -46,6 +46,24 @@ function parseCorsOrigins(value) {
     .filter(Boolean)
 }
 
+function databaseNameFromMongoUrl(value) {
+  if (!value) return ''
+
+  try {
+    const pathname = new URL(value).pathname.replace(/^\/+/, '')
+    return decodeURIComponent(pathname.split('/')[0] || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function isValidDatabaseName(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 63
+    && !/[\/\\. "$*<>:|?]/.test(value)
+}
+
 function getEnvConfig() {
   const envFilePath = path.join(__dirname, '..', '.env')
   loadEnvFile(envFilePath)
@@ -54,7 +72,13 @@ function getEnvConfig() {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInteger(process.env.PORT, 5000),
     mongoUrl: process.env.MONGO_URL || '',
-    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN || '*'),
+    mongoDbName: process.env.MONGO_DB_NAME?.trim() || '',
+    dbMaxPoolSize: Math.max(parseInteger(process.env.DB_MAX_POOL_SIZE, 20), 1),
+    dbMinPoolSize: Math.max(parseInteger(process.env.DB_MIN_POOL_SIZE, 0), 0),
+    dbMaxIdleTimeMs: Math.max(parseInteger(process.env.DB_MAX_IDLE_TIME_MS, 30_000), 1_000),
+    dbServerSelectionTimeoutMs: Math.max(parseInteger(process.env.DB_SERVER_SELECTION_TIMEOUT_MS, 10_000), 1_000),
+    verificationHashSecret: process.env.VERIFICATION_HASH_SECRET || '',
+    corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : '*')),
     sessionTtlDays: Math.max(parseInteger(process.env.SESSION_TTL_DAYS, 30), 1),
     maxSessionsPerAccount: Math.max(parseInteger(process.env.MAX_SESSIONS_PER_ACCOUNT, 5), 1),
     rateLimitWindowMs: Math.max(parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 60_000), 1_000),
@@ -62,6 +86,7 @@ function getEnvConfig() {
     authRateLimitMaxRequests: Math.max(parseInteger(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS, 12), 3),
     dailyUserRateLimitMaxRequests: Math.max(parseInteger(process.env.DAILY_USER_RATE_LIMIT_MAX_REQUESTS, 2000), 100),
     dailySectionOperationLimit: Math.max(parseInteger(process.env.DAILY_SECTION_OPERATION_LIMIT, 2), 1),
+    rateLimitingEnabled: process.env.RATE_LIMITING_ENABLED !== 'false',
     logLevel: process.env.LOG_LEVEL || 'info',
   }
 
@@ -69,6 +94,24 @@ function getEnvConfig() {
 
   if (!config.mongoUrl) {
     missingKeys.push('MONGO_URL')
+  }
+
+  const configuredDatabaseName = config.mongoDbName || databaseNameFromMongoUrl(config.mongoUrl)
+
+  if (config.mongoDbName && !isValidDatabaseName(config.mongoDbName)) {
+    missingKeys.push('MONGO_DB_NAME (valid MongoDB database name)')
+  }
+
+  if (config.nodeEnv === 'production' && !configuredDatabaseName) {
+    missingKeys.push('MONGO_DB_NAME (or a database name in MONGO_URL)')
+  }
+
+  if (config.nodeEnv === 'production' && (!config.corsOrigins.length || config.corsOrigins.includes('*'))) {
+    missingKeys.push('CORS_ORIGIN')
+  }
+
+  if (config.nodeEnv === 'production' && config.verificationHashSecret.trim().length < 32) {
+    missingKeys.push('VERIFICATION_HASH_SECRET (at least 32 characters)')
   }
 
   if (missingKeys.length > 0) {
@@ -79,5 +122,7 @@ function getEnvConfig() {
 }
 
 module.exports = {
+  databaseNameFromMongoUrl,
   getEnvConfig,
+  isValidDatabaseName,
 }

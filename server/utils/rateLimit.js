@@ -25,6 +25,7 @@ function createRateLimiter({ windowMs, maxRequests, authMaxRequests, dailyUserMa
       || pathname === '/api/student/signup'
       || pathname === '/api/company/signin'
       || pathname === '/api/company/signup'
+      || pathname === '/api/reviewer/signin'
 
     return isAuthRoute ? authMaxRequests : maxRequests
   }

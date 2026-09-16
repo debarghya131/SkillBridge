@@ -1,0 +1,27 @@
+.not-found-page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  color: #173329;
+  background: #f3f7f3;
+}
+.not-found-nav { min-height: 72px; display: flex; align-items: center; padding: 16px clamp(20px, 5vw, 64px); border-bottom: 1px solid #d7e3dc; background: #fff; }
+.not-found-content { width: min(680px, calc(100% - 40px)); margin: auto; padding: 64px 0; text-align: center; }
+.not-found-code { display: inline-flex; align-items: center; gap: 12px; color: #176548; }
+.not-found-code span { font-size: clamp(54px, 10vw, 92px); font-weight: 800; line-height: 1; }
+.not-found-kicker { margin: 24px 0 10px; color: #176548; font-size: 11px; font-weight: 800; }
+.not-found-content h1 { max-width: 620px; margin: 0 auto; font-size: clamp(30px, 5vw, 48px); line-height: 1.15; letter-spacing: 0; }
+.not-found-content > p:not(.not-found-kicker) { max-width: 540px; margin: 22px auto 0; color: #5b6b61; font-size: 15px; line-height: 1.8; }
+.not-found-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
+.not-found-actions a { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 11px 20px; border: 1px solid #176548; border-radius: 6px; font-size: 14px; font-weight: 700; transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+.not-found-primary { color: #fff; background: #176548; }
+.not-found-secondary { color: #173329; background: #fff; }
+.not-found-actions a:hover { transform: translateY(-2px); box-shadow: 0 6px 16px #1733291f; }
+.not-found-actions a:focus-visible { outline: 3px solid #846ad7; outline-offset: 3px; }
+.not-found-footer { padding: 18px 20px; border-top: 1px solid #d7e3dc; color: #607267; font-size: 11px; text-align: center; background: #fff; }
+@media (max-width: 480px) {
+  .not-found-content { padding: 44px 0; }
+  .not-found-actions { align-items: stretch; flex-direction: column; }
+  .not-found-actions a { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .not-found-actions a { transition: none; } }
