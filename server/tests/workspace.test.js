@@ -34,15 +34,24 @@ test('workspace history is retained beyond twenty updates and IDs are unique', (
 })
 
 test('workspace is projected from work submissions and preserves project-specific milestones', () => {
-  const submission = { id: 'one', gigTitle: 'API', studentName: 'Student', status: 'selected' }
+  const submission = { id: 'one', studentId: 'student-one', studentAvatar: 'https://images.example/student.png', gigTitle: 'API', studentName: 'Student', status: 'selected' }
   let state = buildWorkspaceState({}, [submission, { ...submission, id: 'two', status: 'submitted' }])
   assert.equal(state.projects.length, 1)
+  assert.equal(state.projects[0].studentId, 'student-one')
+  assert.equal(state.projects[0].studentAvatar, 'https://images.example/student.png')
   state = buildWorkspaceMilestoneState(state, 'submission-one', { title: 'Draft', dueDate: '2026-10-01' })
-  for (const [status, expected] of [['work_started', 'In Progress'], ['delivered', 'Review'], ['approved', 'Completed'], ['completed', 'Completed']]) {
-    state = buildWorkspaceState(state, [{ ...submission, status }])
+  for (const [status, expected] of [['work_started', 'In Progress'], ['delivered', 'Review'], ['approved', 'Approved'], ['completed', 'Completed']]) {
+    state = buildWorkspaceState(state, [{ ...submission, status, taskTitle: 'API delivery', completedAt: '2026-09-15T10:30:00.000Z' }])
     assert.equal(state.projects[0].status, expected)
-    assert.equal(state.projects[0].milestones.length, 1)
+    assert.equal(state.projects[0].milestones.length, expected === 'Completed' ? 2 : 1)
   }
+  assert.deepEqual(state.projects[0].milestones[1], {
+    id: 'task-completed-one',
+    title: 'API delivery completed',
+    dueDate: '2026-09-15',
+    status: 'Completed',
+    createdAt: '2026-09-15T10:30:00.000Z',
+  })
   assert.equal(buildWorkspaceState(state, [{ ...submission, status: 'needs_revision', revisionReturnStatus: 'submitted' }]).projects.length, 0)
   assert.equal(buildWorkspaceState(state, [{ ...submission, status: 'needs_revision', revisionReturnStatus: 'delivered' }]).projects[0].status, 'In Progress')
 })
@@ -64,6 +73,19 @@ test('workspace uses the current GIG title when an accepted invitation was renam
 
   assert.equal(state.projects[0].title, 'Frontend Development Intern')
   assert.equal(state.projects[0].status, 'Completed')
+})
+
+test('one GIG selected for multiple students creates independent GIG Work records', () => {
+  const sharedGig = { companyGigId: 7, companyGigPublicId: 'shared-gig', gigTitle: 'Accessibility audit', status: 'selected' }
+  const state = buildWorkspaceState({}, [
+    { ...sharedGig, id: 'submission-a', studentId: 'student-a', studentName: 'Aarav Sen' },
+    { ...sharedGig, id: 'submission-b', studentId: 'student-b', studentName: 'Meera Das' },
+  ], [{ id: 7, publicId: 'shared-gig', title: 'Accessibility audit' }])
+
+  assert.equal(state.projects.length, 2)
+  assert.deepEqual(state.projects.map(project => project.id), ['submission-submission-a', 'submission-submission-b'])
+  assert.deepEqual(state.projects.map(project => project.studentId), ['student-a', 'student-b'])
+  assert.deepEqual(state.projects.map(project => project.team[0]), ['Aarav Sen', 'Meera Das'])
 })
 
 test('workspace mutations authenticate, scope projects and reject concurrent changes', async t => {

@@ -7,6 +7,9 @@ const schema = new mongoose.Schema({
   targetStage: { type: String, default: '' },
   challengeId: { type: Number, default: null },
   attemptKey: { type: String, required: true },
+  // A daily practice/challenge submission reserves its mode for that student
+  // and IST day while it is awaiting review. Non-daily assessments omit it.
+  dailySubmissionKey: { type: String, default: undefined },
   earnedDay: { type: String, default: '' },
   brief: { type: String, default: '' },
   rewardPoints: { type: Number, default: 0 },
@@ -35,6 +38,7 @@ const schema = new mongoose.Schema({
 }, { timestamps: true, optimisticConcurrency: true })
 schema.index({ studentId: 1, attemptKey: 1 }, { unique: true, partialFilterExpression: { status: 'pending' } })
 schema.index({ studentId: 1, attemptKey: 1, open: 1 }, { unique: true, partialFilterExpression: { open: true }, name: 'one_open_skill_assessment' })
+schema.index({ studentId: 1, dailySubmissionKey: 1 }, { unique: true, partialFilterExpression: { open: true, dailySubmissionKey: { $exists: true } }, name: 'one_open_daily_submission' })
 schema.index({ status: 1, assignedReviewerId: 1, createdAt: 1 })
 schema.index({ studentId: 1, status: 1, createdAt: -1 })
 module.exports = mongoose.models.SkillAssessment || mongoose.model('SkillAssessment', schema)

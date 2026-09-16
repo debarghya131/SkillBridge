@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   buildDefaultCompanyDashboardState,
@@ -11,7 +11,10 @@ import {
   createCompanyGig,
   deleteCompanyGig,
   fetchCompanyDashboard,
+  fetchCompanyGigManagement,
+  fetchCompanyTaskLibrary,
   fetchCompanyTaskSubmissions,
+  fetchCompanyWorkspace,
   fetchCurrentCompany,
   getCompanySessionToken,
   fetchCompanyTalent,
@@ -37,6 +40,7 @@ import BusinessOverview from './BusinessOverview'
 import DashboardSkeleton from '../ui/DashboardSkeleton'
 import './CompanyViewport.css'
 import SetupBusinessProfile from './SetupBusinessProfile'
+import { deleteCompanyAccount } from './companyApi'
 import ProjectWorkspace from './ProjectWorkspace'
 import TaskCenter from './TaskCenter'
 import { toast } from '../ui/toast'
@@ -514,7 +518,7 @@ export default function CompanyDashboard() {
   const [projectWorkspaceState, setProjectWorkspaceState] = useState(() => mergeCompanyWorkspaceState(initialCompany.projectWorkspaceState || buildDefaultCompanyWorkspaceState()))
   const [taskLibraryState, setTaskLibraryState] = useState(() => mergeCompanyTaskLibraryState(initialCompany.taskLibraryState || buildDefaultCompanyTaskLibraryState()))
   const [talentProfiles, setTalentProfiles] = useState([])
-  const [talentSearchMeta, setTalentSearchMeta] = useState({ availableLocations: [], availableSkills: [], total: 0, page: 1, pageSize: TALENT_PAGE_SIZE })
+  const [talentSearchMeta, setTalentSearchMeta] = useState({ availableLocations: [], availableSkills: [], total: 0, realTotal: 0, demoTotal: 0, page: 1, pageSize: TALENT_PAGE_SIZE })
   const [talentPage, setTalentPage] = useState(1)
   const [isTalentLoading, setIsTalentLoading] = useState(false)
   const [talentError, setTalentError] = useState('')
@@ -530,6 +534,20 @@ export default function CompanyDashboard() {
     setActive(section)
     setSidebarOpen(false)
     navigate(`/company/dashboard?section=${encodeURIComponent(section)}`)
+  }
+
+  const openStudentProfile = async student => {
+    const studentId = student?.studentId || student?.id
+    if (!studentId) return toast.error('This student profile is unavailable.')
+    const request = ++talentProfileRequest.current
+    setSelectedTalent({ ...student, id: studentId, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true })
+    try {
+      const result = await fetchCompanyStudentProfile(sessionTokenRef.current, studentId)
+      if (request === talentProfileRequest.current) setSelectedTalent({ ...result.profile, loading: false })
+    } catch (error) {
+      if (request === talentProfileRequest.current) setSelectedTalent(null)
+      toast.error(error.message || 'Could not load this profile.')
+    }
   }
 
   useEffect(() => {
@@ -634,9 +652,12 @@ export default function CompanyDashboard() {
     setLoadError('')
     async function load() {
       try {
-        const [result, overview, submissions, payments] = await Promise.all([
+        const [result, overview, gigs, taskLibrary, workspace, submissions, payments] = await Promise.all([
           initialLoad && !cachedCompany ? fetchCurrentCompany(token) : null,
           active === 'business' ? fetchCompanyDashboard(token) : null,
+          ['gig', 'tasks'].includes(active) ? fetchCompanyGigManagement(token) : null,
+          active === 'tasks' ? fetchCompanyTaskLibrary(token) : null,
+          active === 'workspace' ? fetchCompanyWorkspace(token) : null,
           needsSubmissions && !cachedSubmissions ? fetchCompanyTaskSubmissions(token) : null,
           active === 'payment' && !cachedPayment ? fetchCompanyPayment(token) : null,
         ])
@@ -652,6 +673,15 @@ export default function CompanyDashboard() {
           setTaskLibraryState(mergeCompanyTaskLibraryState(companySnapshot.taskLibraryState))
           if (result?.company) writeCompanySectionCache('shell', token, result.company)
           didLoadCompanyRef.current = true
+        }
+        if (gigs?.gigManagementState) {
+          setGigManagementState(mergeCompanyGigManagementState(gigs.gigManagementState))
+        }
+        if (taskLibrary?.taskLibraryState) {
+          setTaskLibraryState(mergeCompanyTaskLibraryState(taskLibrary.taskLibraryState))
+        }
+        if (workspace?.projectWorkspaceState) {
+          setProjectWorkspaceState(mergeCompanyWorkspaceState(workspace.projectWorkspaceState))
         }
         const submissionSnapshot = submissions?.taskSubmissions || cachedSubmissions
         if (submissionSnapshot) {
@@ -701,6 +731,8 @@ export default function CompanyDashboard() {
           availableLocations: talent.availableLocations || [],
           availableSkills: talent.availableSkills || [],
           total: talent.total || 0,
+          realTotal: talent.realTotal ?? talent.total ?? 0,
+          demoTotal: talent.demoTotal || 0,
           page: talent.page || talentPage,
           pageSize: talent.pageSize || TALENT_PAGE_SIZE,
         })
@@ -731,8 +763,16 @@ export default function CompanyDashboard() {
 
   const handleSaveTaskLibrary = async nextState => {
     const result = await saveCompanyTaskLibrary(sessionTokenRef.current, { taskLibraryState: nextState, revision: taskLibraryState.revision || 0 })
-    setTaskLibraryState(mergeCompanyTaskLibraryState(result.taskLibraryState))
-    return result.taskLibraryState
+    let displayedState = result.taskLibraryState
+    try {
+      const refreshed = await fetchCompanyTaskLibrary(sessionTokenRef.current)
+      displayedState = refreshed.taskLibraryState
+    } catch {
+      // The real mutation has already succeeded; the next section refresh can
+      // restore read-only examples without reporting a false save failure.
+    }
+    setTaskLibraryState(mergeCompanyTaskLibraryState(displayedState))
+    return displayedState
   }
 
   const handleLogout = async () => {
@@ -779,7 +819,13 @@ export default function CompanyDashboard() {
       setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
     }
 
-    toast.success('Task review saved successfully.', { title: 'GIG Review Updated' })
+    if (payload.status === 'selected') {
+      toast.success('Student selected. Open Project Workspace to define and start the actual GIG Work.', { title: 'Ready for GIG Work' })
+    } else if (payload.status === 'work_started') {
+      toast.success('GIG Work started. The student can now open it from Active GIG.', { title: 'GIG Work Started' })
+    } else {
+      toast.success('Task review saved successfully.', { title: 'GIG Review Updated' })
+    }
     return reviewedSubmission
   }
 
@@ -1062,7 +1108,16 @@ export default function CompanyDashboard() {
         <main key={active} className={`dashboard-main company-viewport section-${active}${active === 'business' ? ' business-main' : ''}`} style={{ flex: 1, padding: '28px 32px', overflowY: 'auto' }}>
 
           {isLoading && <DashboardSkeleton section={active} />}
-          {loadError && <div role="alert" className="work-error">{loadError} <button className="btn-secondary" onClick={() => setRefreshVersion(value => value + 1)}>Retry</button></div>}
+          {loadError && (
+            <section role="alert" className="company-load-error">
+              <span className="company-load-error__icon" aria-hidden="true">!</span>
+              <div>
+                <h2>We couldn’t load this workspace</h2>
+                <p>{loadError}</p>
+              </div>
+              <button type="button" className="btn-primary" onClick={() => setRefreshVersion(value => value + 1)}>Try again</button>
+            </section>
+          )}
           {!isLoading && !loadError && <>
           {active === 'business' && (
             <BusinessOverview profile={businessProfile} stats={displayedOverviewStats}
@@ -1076,7 +1131,7 @@ export default function CompanyDashboard() {
             <div className="talent-search-page">
               <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 16 }}>
                 <span style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--accent-light)', fontSize: 16 }}>🔍</span>
-                Top Talent Matches <span aria-live="polite" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>({isTalentLoading && talentProfiles.length === 0 ? 'Loading...' : `${talentSearchMeta.total} found`})</span>
+                Top Talent Matches <span aria-live="polite" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>({isTalentLoading && talentProfiles.length === 0 ? 'Loading...' : `${talentSearchMeta.realTotal} real · ${talentSearchMeta.demoTotal} demo examples`})</span>
               </h3>
 
               <div className="talent-search-filters" style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
@@ -1194,6 +1249,13 @@ export default function CompanyDashboard() {
                   </div>
                 )}
                 {talentProfiles.map((p, i) => (
+                  <Fragment key={p.id}>
+                  {p.demoData && !talentProfiles[i - 1]?.demoData && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 4, padding: '4px 2px', color: 'var(--muted)', fontSize: 12 }}>
+                      <strong style={{ color: 'var(--dark)' }}>Demo talent previews</strong>
+                      <span>Read-only examples — real profiles and actions remain database-backed</span>
+                    </div>
+                  )}
                   <div className="responsive-hero talent-search-card" key={p.id} style={{
                     background: 'var(--white)', borderRadius: 12,
                     padding: '18px 22px', border: '1px solid var(--border)',
@@ -1214,7 +1276,10 @@ export default function CompanyDashboard() {
                         {p.avatar && <img src={p.avatar} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={event => { event.currentTarget.remove() }} />}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--dark)', marginBottom: 2 }}>{p.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 15, color: 'var(--dark)', marginBottom: 2 }}>
+                          {p.name}
+                          {p.demoData && <span style={{ padding: '2px 7px', border: '1px solid #fb923c', borderRadius: 100, color: '#c2410c', fontSize: 9, fontWeight: 800 }}>DEMO</span>}
+                        </div>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 7 }}>{p.location} · {p.projects} projects</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {p.skills.slice(0, 7).map(s => (
@@ -1259,13 +1324,16 @@ export default function CompanyDashboard() {
                       <button
                         type="button"
                         className="btn-primary"
-                        onClick={() => setDirectOpportunityTalent(p)}
-                        style={{ padding: '8px 14px', fontSize: 13 }}
+                        disabled={p.demoData}
+                        onClick={() => !p.demoData && setDirectOpportunityTalent(p)}
+                        title={p.demoData ? 'Demo profiles are read-only' : 'Send an opportunity'}
+                        style={{ padding: '8px 14px', fontSize: 13, opacity: p.demoData ? 0.55 : 1, cursor: p.demoData ? 'not-allowed' : 'pointer' }}
                       >
-                        Send opportunity
+                        {p.demoData ? 'Demo preview' : 'Send opportunity'}
                       </button>
                     </div>
                   </div>
+                  </Fragment>
                 ))}
                 {!isTalentLoading && !talentError && talentProfiles.length === 0 && (
                   <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '24px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>
@@ -1275,7 +1343,7 @@ export default function CompanyDashboard() {
               </div>
               {talentSearchMeta.total > 0 && (
                 <div className="responsive-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16, color: 'var(--muted)', fontSize: 12, fontWeight: 600 }}>
-                  <span>Showing {((talentPage - 1) * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)) + 1}-{Math.min(talentPage * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE), talentSearchMeta.total)} of {talentSearchMeta.total}</span>
+                  <span>Showing real students {((talentPage - 1) * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)) + 1}-{Math.min(talentPage * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE), talentSearchMeta.total)} of {talentSearchMeta.total}{talentPage === 1 && talentSearchMeta.demoTotal > 0 ? ` · ${talentSearchMeta.demoTotal} filtered demo examples` : ''}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button type="button" title="Previous page" aria-label="Previous page" disabled={talentPage === 1 || isTalentLoading} onClick={() => setTalentPage(page => Math.max(1, page - 1))} style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', cursor: talentPage === 1 ? 'not-allowed' : 'pointer', opacity: talentPage === 1 ? 0.45 : 1 }}>←</button>
                     <span>Page {talentPage} of {talentTotalPages}</span>
@@ -1287,7 +1355,13 @@ export default function CompanyDashboard() {
           )}
 
           {active === 'profile' && (
-            <SetupBusinessProfile profile={businessProfile} onSave={handleSaveBusinessProfile} />
+            <SetupBusinessProfile profile={businessProfile} onSave={handleSaveBusinessProfile} onDeleteAccount={async payload => {
+              await deleteCompanyAccount(sessionTokenRef.current, payload)
+              clearCompanySessionToken()
+              sessionTokenRef.current = ''
+              toast.success('Your company account and associated records were permanently deleted.')
+              navigate('/', { replace: true })
+            }} />
           )}
 
           {active === 'gig'       && (
@@ -1299,6 +1373,7 @@ export default function CompanyDashboard() {
               onReviewTaskSubmission={handleReviewTaskSubmission}
               onSendInterviewTask={handleSendInterviewTask}
               onOpenTaskCenter={() => selectSection('tasks')}
+              onOpenWorkspace={() => selectSection('workspace')}
               onCreateGig={handleCreateCompanyGig}
               onUpdateGig={handleUpdateCompanyGig}
               onDeleteGig={handleDeleteCompanyGig}
@@ -1312,6 +1387,7 @@ export default function CompanyDashboard() {
               taskSubmissions={taskSubmissions}
               onSendInterviewTask={handleSendInterviewTask}
               onReviewTaskSubmission={handleReviewTaskSubmission}
+              onOpenWorkspace={() => selectSection('workspace')}
             />
           )}
           {active === 'workspace' && (
@@ -1322,6 +1398,7 @@ export default function CompanyDashboard() {
               onPayment={() => selectSection('payment')}
               onShareUpdate={handleShareWorkspaceUpdate}
               onSetMilestone={handleSetWorkspaceMilestone}
+              onViewStudent={openStudentProfile}
             />
           )}
           {active === 'payment'   && (
@@ -1340,7 +1417,7 @@ export default function CompanyDashboard() {
         profile={selectedTalent}
         loading={selectedTalent.loading}
         onClose={() => { talentProfileRequest.current += 1; setSelectedTalent(null) }}
-        action={!selectedTalent.loading && <button onClick={() => {
+        action={!selectedTalent.loading && !selectedTalent.demoData && selectedTalent.opportunityProfile && <button onClick={() => {
           const profile = selectedTalent.opportunityProfile
           setSelectedTalent(null)
           setDirectOpportunityTalent(profile)

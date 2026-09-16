@@ -3,6 +3,8 @@ const Company = require('../models/Company')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { reconcileTrustScore, recordTrustScoreEvent } = require('./trustScoreController')
 const { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, isArchivedSkill, isDiscoverableVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
+const { DEMO_CHALLENGE_STATES, DEMO_DAILY_PRACTICE, DEMO_SKILL_ACTIVITY, DEMO_SKILL_GAP_REPORT, DEMO_SKILLS, DEMO_STREAK_DAYS, clone } = require('../config/showcaseFixtures')
+const { demoReadOnlyError } = require('../utils/demoProtection')
 
 const SKILL_HUB_STUDENT_FIELDS = '_id sessions skills skillHubSkills skillHubState trustScore trustScoreState'
 const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), SKILL_HUB_STUDENT_FIELDS)
@@ -206,7 +208,9 @@ function buildSkillHubResponse(student) {
   return { skills, trustScore: student.trustScore, rewards: REWARDS, challenges: CHALLENGES,
     skillHubState: { skillLog: log, daily: { date: today, completedChallenges: dailyEvents.filter(item => item.eventType === 'challenge_completed').map(item => item.challengeId),
       completedRetention: dailyEvents.filter(item => item.eventType === 'retention_completed').map(item => item.skillName.toLowerCase()), points: dailyPoints },
-      streaks: buildStreakSummary(skills, log, today), activityDays: buildActivityDays(log) } }
+      streaks: buildStreakSummary(skills, log, today), activityDays: buildActivityDays(log),
+      demoDailyPractice: clone(DEMO_DAILY_PRACTICE), demoChallengeStates: clone(DEMO_CHALLENGE_STATES), demoStreakDays: clone(DEMO_STREAK_DAYS),
+      demoSkillGapReport: clone(DEMO_SKILL_GAP_REPORT) } }
 }
 
 async function getStudentSkillHub(token) {
@@ -228,6 +232,9 @@ async function getStudentSkillHub(token) {
     } },
   ])
   response.skillHubState.skillGapReport = buildSkillGapReport(response.skills, activeGigs)
+  const realNames = new Set(response.skills.map(item => item.name.toLowerCase()))
+  response.skills = [...clone(DEMO_SKILLS).filter(item => !realNames.has(item.name.toLowerCase())), ...response.skills]
+  response.skillHubState.skillLog = [...clone(DEMO_SKILL_ACTIVITY), ...response.skillHubState.skillLog]
   return response
 }
 
@@ -235,6 +242,7 @@ async function updateStudentSkillHub(token, payload) {
   const student = await findStudentByToken(token)
   await reconcileSkillExpiry(student)
   if (!Array.isArray(payload?.skills) || payload.skills.length > 100) throw buildAuthError('Provide up to 100 skills')
+  payload = { ...payload, skills: payload.skills.filter(item => item?.demoData !== true) }
   const skills = buildStudentSkillHubSkills(student)
   const seen = new Set()
   for (const input of payload.skills) {
@@ -268,6 +276,7 @@ async function setStudentSkillArchived(token, payload) {
   if (typeof payload?.archived !== 'boolean') throw buildAuthError('Choose whether to archive or restore this skill')
   const skills = buildStudentSkillHubSkills(student)
   const skill = skills.find(item => item.name.toLowerCase() === name.toLowerCase())
+  if (!skill && DEMO_SKILLS.some(item => item.name.toLowerCase() === name.toLowerCase())) throw demoReadOnlyError()
   if (!skill) throw buildAuthError('Skill not found', 404)
   if (skill.archived === payload.archived) return buildSkillHubResponse(student)
   skill.archived = payload.archived

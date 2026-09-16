@@ -110,7 +110,7 @@ export default function ReviewerDashboard() {
         </aside>
         <section className="reviewer-detail">
           {!selected ? <div className="reviewer-empty">Select an assessment to inspect its evidence.</div> : <>
-            <header><div><span>{MODES[selected.mode] || selected.mode}</span><h2>{selected.skillName}{selected.targetStage ? ` · ${selected.targetStage}` : ''}</h2><p>Submitted {formatDate(selected.createdAt)}</p></div><strong className={`reviewer-status reviewer-status-${selected.status}`}>{selected.status.replace('_', ' ')}</strong></header>
+            <header><div><span>{MODES[selected.mode] || selected.mode}{selected.demoData ? ' · Read-only demo' : ''}</span><h2>{selected.skillName}{selected.targetStage ? ` · ${selected.targetStage}` : ''}</h2><p>Submitted {formatDate(selected.createdAt)}</p></div><strong className={`reviewer-status reviewer-status-${selected.status}`}>{selected.status.replace('_', ' ')}</strong></header>
             <section><h3>Assigned requirements</h3><p>{selected.brief || 'Use the standard assessment requirements.'}</p></section>
             <section><h3>Student response</h3><p className="reviewer-response">{selected.response}</p>{safeExternalUrl(selected.evidenceLink) && <a href={safeExternalUrl(selected.evidenceLink)} target="_blank" rel="noreferrer"><ExternalLink size={15}/>Open submitted evidence</a>}</section>
             {queue === 'available' && <div className="reviewer-actions"><button className="btn-primary" disabled={busy} onClick={() => run(() => claimReview(token, selected.id))}>Claim assessment</button></div>}

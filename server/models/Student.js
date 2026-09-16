@@ -120,6 +120,9 @@ const studentSchema = new mongoose.Schema({
   trustScore: { type: Number, default: 0 },
   trustScoreState: { type: mongoose.Schema.Types.Mixed, default: undefined },
   avatar: { type: String, default: null },
+  about: { type: String, default: '', maxlength: 700 },
+  collaborationFocus: { type: [String], default: () => [] },
+  workStyle: { type: String, default: '', maxlength: 300 },
   skills: { type: [String], default: () => buildDefaultStudentProfile().skills },
   githubLink: { type: [profileLinkSchema], default: () => buildDefaultStudentProfile().githubLink },
   contactInfo: { type: [contactInfoSchema], default: () => buildDefaultStudentProfile().contactInfo },
@@ -136,7 +139,7 @@ const studentSchema = new mongoose.Schema({
   sessions: { type: [sessionSchema], default: [], select: false },
 }, {
   timestamps: true,
-  optimisticConcurrency: ['trustScoreState', 'trustScore', 'skillHubSkills'],
+  optimisticConcurrency: ['trustScoreState', 'trustScore', 'skillHubSkills', 'gigState', 'sessions'],
 })
 
 studentSchema.post('save', function(error, doc, next) {

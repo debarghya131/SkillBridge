@@ -1,10 +1,12 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const Student = require('../models/Student')
+const { DEMO_TRUST_ACTIVITY, DEMO_TRUST_PENALTIES } = require('../config/showcaseFixtures')
 const {
   buildTrustScoreSnapshot,
   calculateTrustScore,
   getStudentTrustScore,
+  recordNetworkAchievementMilestones,
   reconcileTrustScore,
   recordTrustScoreEvent,
 } = require('../controllers/trustScoreController')
@@ -65,6 +67,11 @@ test('TrustScore reads persist a reconciled ledger balance', async t => {
   assert.equal(snapshot.trustScore, 100)
   assert.equal(student.trustScore, 100)
   assert.equal(saves, 1)
+  assert.equal(snapshot.activity.length, 2)
+  assert.equal(snapshot.activity.some(event => event.demoData === true), false)
+  assert.equal(snapshot.factors.some(factor => factor.demoData === true), false)
+  assert.deepEqual(snapshot.demoActivity, DEMO_TRUST_ACTIVITY)
+  assert.deepEqual(snapshot.demoPenalties, DEMO_TRUST_PENALTIES)
 })
 
 test('TrustScore snapshot reports lifetime approved actions while limiting the recent ledger', () => {
@@ -114,4 +121,20 @@ test('TrustScore activity tolerates malformed legacy dates', () => {
 
   assert.equal(snapshot.activity[0].occurredAt, null)
   assert.equal(snapshot.summary.penalties, -30)
+})
+
+test('network and Team-Up achievements use real thresholds and are idempotent', () => {
+  const student = { trustScore: 0, skillHubSkills: [] }
+
+  assert.equal(recordNetworkAchievementMilestones(student, { connections: 99, teamUps: 9 }), false)
+  assert.equal(student.trustScoreState, undefined)
+
+  assert.equal(recordNetworkAchievementMilestones(student, { connections: 500, teamUps: 50 }), true)
+  assert.deepEqual(student.trustScoreState.events.map(event => event.type).sort(), [
+    'network_connections_100', 'network_connections_500', 'team_up_10', 'team_up_50',
+  ])
+  assert.equal(student.trustScore, 200)
+
+  assert.equal(recordNetworkAchievementMilestones(student, { connections: 500, teamUps: 50 }), false)
+  assert.equal(student.trustScoreState.events.length, 4)
 })

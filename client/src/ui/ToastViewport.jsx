@@ -1,35 +1,12 @@
 import { useEffect, useState } from 'react'
+import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react'
 import { subscribeToToasts } from './toast'
 
 const TONE_MAP = {
-  success: {
-    background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)',
-    border: '#86EFAC',
-    title: '#065F46',
-    text: '#166534',
-    icon: '✓',
-  },
-  error: {
-    background: 'linear-gradient(135deg, #FEF2F2, #FEE2E2)',
-    border: '#FCA5A5',
-    title: '#991B1B',
-    text: '#B91C1C',
-    icon: '!',
-  },
-  warning: {
-    background: 'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
-    border: '#FCD34D',
-    title: '#92400E',
-    text: '#B45309',
-    icon: '!',
-  },
-  info: {
-    background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-    border: '#93C5FD',
-    title: '#1D4ED8',
-    text: '#1E40AF',
-    icon: 'i',
-  },
+  success: CheckCircle2,
+  error: AlertCircle,
+  warning: TriangleAlert,
+  info: Info,
 }
 
 export default function ToastViewport() {
@@ -50,79 +27,37 @@ export default function ToastViewport() {
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 18,
-      right: 18,
-      zIndex: 3000,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 10,
-      width: 'min(92vw, 360px)',
-      pointerEvents: 'none',
-    }}>
+    <div className="app-toast-viewport" aria-live="polite" aria-atomic="true">
       {toasts.map(item => {
-        const tone = TONE_MAP[item.type] || TONE_MAP.info
+        const type = TONE_MAP[item.type] ? item.type : 'info'
+        const Icon = TONE_MAP[type]
 
         return (
           <div
             key={item.id}
-            style={{
-              pointerEvents: 'auto',
-              background: tone.background,
-              border: `1px solid ${tone.border}`,
-              borderRadius: 16,
-              boxShadow: '0 18px 50px rgba(15, 23, 42, 0.12)',
-              padding: '14px 14px 14px 12px',
-              display: 'flex',
-              gap: 12,
-              alignItems: 'flex-start',
-            }}
+            className={`app-toast app-toast--${type}`}
+            role={type === 'error' ? 'alert' : 'status'}
           >
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(255,255,255,0.75)',
-              color: tone.title,
-              fontSize: 14,
-              fontWeight: 900,
-            }}>
-              {tone.icon}
+            <div className="app-toast__icon" aria-hidden="true">
+              <Icon size={19} strokeWidth={2.4} />
             </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="app-toast__content">
               {item.title ? (
-                <div style={{ fontSize: 13, fontWeight: 800, color: tone.title, marginBottom: 4 }}>
-                  {item.title}
-                </div>
+                <div className="app-toast__title">{item.title}</div>
               ) : null}
-              <div style={{ fontSize: 13, lineHeight: 1.55, color: tone.text }}>
-                {item.message}
-              </div>
+              <div className="app-toast__message">{item.message}</div>
             </div>
 
             <button
               type="button"
               onClick={() => dismissToast(item.id)}
               aria-label="Dismiss notification"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: tone.text,
-                cursor: 'pointer',
-                fontSize: 16,
-                lineHeight: 1,
-                padding: 2,
-                flexShrink: 0,
-              }}
+              className="app-toast__dismiss"
             >
-              ×
+              <X size={16} strokeWidth={2.5} />
             </button>
+            <span className="app-toast__progress" style={{ animationDuration: `${item.duration}ms` }} />
           </div>
         )
       })}

@@ -30,8 +30,13 @@ test('pending daily practice does not block the next IST day; same-day duplicate
     skillHubSkills: [{ name: 'React', verified: true, renewalDue: '2027-09-01', stage: 'Beginner' }] })
   t.mock.method(Student, 'findOne', async () => student)
   const records = []
-  t.mock.method(SkillAssessment, 'exists', async query => records.some(record => query.status.$in.includes(record.status)
-    && query.$or.some(option => record.attemptKey === option.attemptKey && (!option.earnedDay || record.earnedDay === option.earnedDay))))
+  t.mock.method(SkillAssessment, 'exists', async query => {
+    if (query.open === true && query.mode && query.earnedDay) {
+      return records.some(record => record.open === true && record.mode === query.mode && record.earnedDay === query.earnedDay)
+    }
+    return records.some(record => query.status.$in.includes(record.status)
+      && query.$or.some(option => record.attemptKey === option.attemptKey && (!option.earnedDay || record.earnedDay === option.earnedDay)))
+  })
   t.mock.method(SkillAssessment, 'create', async values => { const record = new SkillAssessment(values); records.push(record); return record })
   const payload = { skillName: 'React', mode: 'retain', response: 'I implemented and tested the feature, including edge cases and an explanation of the results.' }
   const first = await submitSkillAssessment('s', payload)

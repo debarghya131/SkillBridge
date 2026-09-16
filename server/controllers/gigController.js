@@ -7,6 +7,8 @@ const { consumeSectionOperation } = require('../utils/sectionUsage')
 const { mergeTemplateState, reduceTemplateState } = require('../utils/templateState')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { publishedSkillNames } = require('../utils/skillPolicy')
+const { demoStudentGigState } = require('../config/showcaseFixtures')
+const { saveDocumentsAtomically } = require('../utils/transaction')
 
 const GIG_STUDENT_FIELDS = '_id sessions name location trustScore skills skillHubSkills projects.name gigState'
 
@@ -382,12 +384,24 @@ function persistGigState(student, gigState) {
 
 async function getStudentGigState(token) {
   const student = await findStudentByToken(token)
-  return buildGigState(student)
+  const real = await buildGigState(student)
+  const demo = demoStudentGigState()
+  return {
+    ...real,
+    opportunities: [...real.opportunities, ...demo.opportunities],
+    browseGigs: mergeUniqueGigs([...real.browseGigs, ...demo.browseGigs]),
+    savedGigIds: [...new Set([...real.savedGigIds, ...demo.savedGigIds])],
+    appliedGigIds: [...new Set([...real.appliedGigIds, ...demo.appliedGigIds])],
+    appliedGigs: mergeUniqueGigs([...real.appliedGigs, ...demo.appliedGigs]),
+    activeGigBase: mergeUniqueGigs([...real.activeGigBase, ...demo.activeGigBase]),
+    completedGigs: mergeUniqueGigs([...real.completedGigs, ...demo.completedGigs]),
+  }
 }
 
 async function applyToGig(token, gigId) {
   const student = await findStudentByToken(token)
   const gigState = await buildGigState(student)
+  let applicantCompany = null
 
   const numericGigId = Number(gigId)
   const gigExists = gigState.browseGigs.some(gig => gig.id === numericGigId)
@@ -442,14 +456,14 @@ async function applyToGig(token, gigId) {
             companyState.pipeline = incrementLabeledValue(companyState.pipeline, 'New Applications', 1)
           }
           company.gigManagementState = companyState
-          await company.save()
+          applicantCompany = company
         }
       }
     }
   }
 
   persistGigState(student, gigState)
-  await student.save()
+  await saveDocumentsAtomically([applicantCompany, student])
   return gigState
 }
 
@@ -564,6 +578,7 @@ async function declineOpportunity(token, opportunityId) {
 }
 
 module.exports = {
+  buildManagedGigId,
   buildGigState,
   acceptOpportunity,
   applyToGig,

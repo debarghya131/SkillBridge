@@ -73,6 +73,14 @@ export async function logoutStudent(token) {
   })
 }
 
+export async function deleteStudentAccount(token, payload) {
+  return apiRequest('/api/student/account', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function fetchStudentTrustScore(token) {
   return apiRequest('/api/student/trustscore', {
     method: 'GET',
@@ -172,6 +180,7 @@ export const updateNetworkTeamPost = (token, postId, payload) => networkRequest(
 export const deleteNetworkTeamPost = (token, postId) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}`, 'DELETE')
 export const joinNetworkTeamPost = (token, postId, message) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/join`, 'POST', { message })
 export const withdrawNetworkTeamRequest = (token, postId) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/join`, 'DELETE')
+export const leaveNetworkTeamPost = (token, postId) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/membership`, 'DELETE')
 export const decideNetworkTeamRequest = (token, postId, requestId, decision) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/requests/${encodeURIComponent(requestId)}`, 'PATCH', { decision })
 export const inviteNetworkStudentToTeam = (token, postId, studentId, message) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/invitations/${encodeURIComponent(studentId)}`, 'POST', { message })
 export const decideNetworkTeamInvitation = (token, postId, requestId, decision) => networkRequest(token, `/team-posts/${encodeURIComponent(postId)}/invitations/${encodeURIComponent(requestId)}`, 'PATCH', { decision })

@@ -8,8 +8,8 @@ import DashboardSkeleton from '../ui/DashboardSkeleton'
 import './StudentViewport.css'
 import { TrustScoreCriteriaContent } from './TrustScoreCriteria'
 import StudentTrustOverview from './TrustScoreOverview.jsx'
-import { clearStudentSessionToken, fetchCurrentStudent, fetchStudentActivityHeatmap, fetchStudentGigs, fetchStudentNetwork, fetchStudentProfileMedia, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
-import { readStudentSectionCache, writeStudentSectionCache } from './sectionCache'
+import { clearStudentSessionToken, deleteStudentAccount, fetchCurrentStudent, fetchStudentActivityHeatmap, fetchStudentGigs, fetchStudentNetwork, fetchStudentProfileMedia, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
+import { clearAllStudentSectionCache, readStudentSectionCache, writeStudentSectionCache } from './sectionCache'
 import { isBundledStudentIntroVideoUrl, mergeStudentProfile } from './studentProfileDefaults'
 import { toast } from '../ui/toast'
 import { safeExternalUrl } from '../lib/safeExternalUrl'
@@ -157,7 +157,7 @@ function VerifiedBadge({ contactMethod, verificationMethod }) {
   return (
     <span className="student-verified-badge" style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
       onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <button type="button" aria-label="Show account verification" aria-expanded={show} onClick={() => setShow(current => !current)} style={{
+      <button className="student-verification-button" type="button" aria-label="Show account verification" aria-expanded={show} onClick={() => setShow(current => !current)} style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 20, height: 20, borderRadius: '50%',
         background: 'linear-gradient(135deg, #10B981, #059669)',
@@ -211,9 +211,13 @@ function ModalVerifiedBadge({ contactMethod, verificationMethod }) {
 
 function ProfileSkills({ skills, records = [] }) {
   const [level, setLevel] = useState('All')
-  const visibleSkills = skills.filter(name => {
+  // Skill Hub may include read-only showcase cards. Profiles must only ever
+  // display skills saved on this student's account.
+  const persistedRecords = records.filter(item => item?.demoData !== true)
+  const profileSkills = skills.filter(name => !records.some(item => item?.demoData === true && item.name?.toLowerCase() === name.toLowerCase()))
+  const visibleSkills = profileSkills.filter(name => {
     if (level === 'All') return true
-    const skill = records.find(item => item.name.toLowerCase() === name.toLowerCase())
+    const skill = persistedRecords.find(item => item.name.toLowerCase() === name.toLowerCase())
     return skill?.verified && ['valid', 'due'].includes(skill.renewalStatus) && skill.stage === level
   })
   return <section className="profile-skills">
@@ -227,7 +231,7 @@ function ProfileSkills({ skills, records = [] }) {
     </header>
     <div className="profile-skill-list">
     {visibleSkills.map(name => {
-      const skill = records.find(item => item.name.toLowerCase() === name.toLowerCase())
+      const skill = persistedRecords.find(item => item.name.toLowerCase() === name.toLowerCase())
       const verified = skill?.verified && ['valid', 'due'].includes(skill.renewalStatus)
       return <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', maxWidth: '100%', overflowWrap: 'anywhere',
         background: 'var(--primary-light)', color: 'var(--primary)', padding: '6px 10px', borderRadius: 6, fontSize: 13 }}>
@@ -237,7 +241,7 @@ function ProfileSkills({ skills, records = [] }) {
       </span>
     })}
     </div>
-    {!visibleSkills.length && <p className="work-muted" role="status">{skills.length ? `No actively verified ${level} skills.` : 'No skills added yet.'}</p>}
+    {!visibleSkills.length && <p className="work-muted" role="status">{profileSkills.length ? `No actively verified ${level} skills.` : 'No skills added yet.'}</p>}
   </section>
 }
 
@@ -318,7 +322,7 @@ function ProfileActivityHeatmap({ activityDays = [] }) {
   </section>
 }
 
-function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills, skillHubSkills, githubLink, projects, videoUrl, contactInfo, practiceStats, activityDays, contactMethod, verificationMethod, profileActivity }) {
+function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills, skillHubSkills, about = '', collaborationFocus = [], workStyle = '', githubLink, projects, videoUrl, contactInfo, practiceStats, activityDays, contactMethod, verificationMethod, profileActivity }) {
   const videoRef = useRef(null)
   const closeButtonRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -473,6 +477,18 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
             <ProfileSkills skills={skills} records={skillHubSkills} />
           </div>
 
+          {/* About & Collaboration */}
+          <section aria-labelledby="profile-about-collaboration-title">
+            <div id="profile-about-collaboration-title" style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>About &amp; Collaboration</div>
+            {about || collaborationFocus.length > 0 || workStyle ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 14, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12 }}>
+                {about && <div><div style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 700, marginBottom: 5 }}>ABOUT</div><p style={{ margin: 0, color: 'var(--dark)', fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{about}</p></div>}
+                {collaborationFocus.length > 0 && <div><div style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 700, marginBottom: 7 }}>OPEN TO COLLABORATE ON</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>{collaborationFocus.map(item => <span key={item} style={{ padding: '5px 8px', borderRadius: 999, background: 'var(--primary-light)', color: 'var(--primary)', fontSize: 11, fontWeight: 700 }}>{item}</span>)}</div></div>}
+                {workStyle && <div><div style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 700, marginBottom: 5 }}>WORKING STYLE</div><p style={{ margin: 0, color: 'var(--dark)', fontSize: 13, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{workStyle}</p></div>}
+              </div>
+            ) : <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>No collaboration details added yet.</p>}
+          </section>
+
           <ProfileActivityHeatmap activityDays={activityDays} />
 
           {/* Intro Video */}
@@ -610,11 +626,17 @@ function ProjectEditorModal({ project, isEditing, onChange, onSave, onClose }) {
   </div>, document.body)
 }
 
-function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, saveState, contactMethod, verificationMethod }) {
+function ProfileSection({ name, trustScore, avatar, setAvatar, about, setAbout, collaborationFocus, setCollaborationFocus, workStyle, setWorkStyle, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, onDeleteAccount, saveState, contactMethod, verificationMethod }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [githubInput, setGithubInput] = useState({})
   const [contactInput, setContactInput] = useState({ label: 'Phone', value: '' })
+  const [collaborationInput, setCollaborationInput] = useState('')
   const [projectEditor, setProjectEditor] = useState(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmationReady, setDeleteConfirmationReady] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const videoRef = useRef(null)
   const hasStarterVideo = isBundledStudentIntroVideoUrl(videoUrl)
 
@@ -665,14 +687,31 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
     setGithubInput({})
   }
 
+  const addCollaborationFocus = () => {
+    const value = collaborationInput.trim().slice(0, 60)
+    if (!value) return
+    if (collaborationFocus.some(item => item.toLowerCase() === value.toLowerCase())) {
+      toast.info('This collaboration focus is already listed.', { title: 'Duplicate Focus' })
+      return
+    }
+    if (collaborationFocus.length >= 10) {
+      toast.warning('You can list up to 10 collaboration areas.', { title: 'Focus Limit' })
+      return
+    }
+    setCollaborationFocus(current => [...current, value])
+    setCollaborationInput('')
+  }
+
   const card = { background: 'var(--white)', borderRadius: 14, padding: '20px 24px', border: '1px solid var(--border)', marginBottom: 16 }
   const sectionTitle = { fontSize: 15, fontWeight: 700, color: 'var(--dark)', marginBottom: 14 }
+  const dangerButton = { border: '1px solid #FCA5A5', borderRadius: 7, background: '#fff', color: '#DC2626', minHeight: 36, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }
+  const dangerInput = { width: '100%', minHeight: 38, padding: '8px 10px', border: '1px solid #FCA5A5', borderRadius: 7, background: '#fff', color: 'var(--dark)', fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box' }
 
   return (
     <div className="student-profile-editor">
       {/* 1. Profile Header */}
       <div className="responsive-hero student-profile-hero" style={{ ...card, background: 'linear-gradient(135deg, var(--dark) 0%, #1E1B4B 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div className="student-profile-identity" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}
             title="Change profile picture">
             <div style={{
@@ -700,12 +739,13 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
                 e.target.value = ''
               }} />
           </label>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div className="student-profile-identity-copy">
+            <div className="student-profile-name-row" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ color: 'white', fontSize: 20, fontWeight: 800 }}>{name}</span>
               <VerifiedBadge contactMethod={contactMethod} verificationMethod={verificationMethod} />
               <button
                 onClick={onViewProfile}
+                className="student-profile-view-button"
                 style={{
                   background: 'rgba(255,255,255,0.12)',
                   color: 'white',
@@ -725,7 +765,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Student · Profile Active{saveState !== 'idle' && <span style={{ marginLeft: 8, color: saveState === 'error' ? '#fca5a5' : '#a5b4fc' }}>· {saveState === 'saving' ? 'Saving...' : saveState === 'saved' ? 'Saved' : 'Save failed'}</span>}</div>
           </div>
         </div>
-        <div style={{ textAlign: 'center' }}>
+        <div className="student-profile-score" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>TrustScore™</div>
           <div style={{ fontSize: 48, fontWeight: 900, background: 'linear-gradient(135deg, #A5B4FC, #60A5FA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{trustScore}</div>
         </div>
@@ -736,7 +776,21 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
         <ProfileSkills skills={skills} records={skillHubSkills} />
       </div>
 
-      {/* 3. Intro Video */}
+      {/* 3. About & collaboration */}
+      <div style={card}>
+        <div style={sectionTitle}>About & Collaboration</div>
+        <label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>About you</label>
+        <textarea value={about} maxLength={700} rows={4} onChange={event => setAbout(event.target.value)} placeholder="Describe your strengths, the work you enjoy, and what teammates can expect from you."
+          style={{ width: '100%', resize: 'vertical', padding: '10px 12px', border: '1.5px solid var(--border)', borderRadius: 8, font: 'inherit', fontSize: 13, lineHeight: 1.55, outline: 'none' }} />
+        <div style={{ color: 'var(--muted)', fontSize: 11, textAlign: 'right', marginTop: 4 }}>{about.length}/700</div>
+        <div style={{ marginTop: 14 }}><label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 7 }}>Open to collaborate on</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 9 }}>{collaborationFocus.map(item => <span key={item} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 999, background: 'var(--primary-light)', color: 'var(--primary)', fontSize: 11, fontWeight: 700 }}>{item}<button type="button" aria-label={`Remove ${item}`} onClick={() => setCollaborationFocus(current => current.filter(value => value !== item))} style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button></span>)}</div>
+          <div className="responsive-stack student-profile-input-row" style={{ display: 'flex', gap: 8 }}><input value={collaborationInput} maxLength={60} onChange={event => setCollaborationInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCollaborationFocus() } }} placeholder="e.g. React product builds" style={{ flex: 1, padding: '8px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit' }} /><button type="button" className="btn-primary" onClick={addCollaborationFocus} style={{ padding: '8px 16px', fontSize: 13 }}>+ Add</button></div>
+        </div>
+        <div style={{ marginTop: 14 }}><label style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Working style</label><textarea value={workStyle} maxLength={300} rows={2} onChange={event => setWorkStyle(event.target.value)} placeholder="How do you prefer to plan, communicate, and deliver work?" style={{ width: '100%', resize: 'vertical', padding: '10px 12px', border: '1.5px solid var(--border)', borderRadius: 8, font: 'inherit', fontSize: 13, lineHeight: 1.55, outline: 'none' }} /><div style={{ color: 'var(--muted)', fontSize: 11, textAlign: 'right', marginTop: 4 }}>{workStyle.length}/300</div></div>
+      </div>
+
+      {/* 4. Intro Video */}
       <div className="student-profile-intro-card" style={card}>
         <div className="student-profile-card-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={sectionTitle}>Intro Video</div>
@@ -876,6 +930,11 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, skills, skillHubS
         )})}
       </div>
       {projectEditor && <ProjectEditorModal project={projectEditor.project} isEditing={projectEditor.index !== null} onChange={updateProjectDraft} onSave={saveProject} onClose={closeProjectEditor} />}
+      <section style={{ marginTop: 26, padding: '18px 20px', border: '1px solid #FECACA', borderRadius: 12, background: '#FFF7F7' }}>
+        <h3 style={{ margin: 0, color: '#991B1B', fontSize: 15 }}>Delete account</h3>
+        <p style={{ margin: '7px 0 14px', color: '#7F1D1D', fontSize: 12 }}>This permanently deletes your profile, assessments, projects, applications, network records, team-up participation, and external-payment records. This cannot be undone.</p>
+        {!deleteOpen ? <button type="button" style={dangerButton} onClick={() => setDeleteOpen(true)}>Delete my account</button> : <div style={{ display: 'grid', gap: 10, maxWidth: 520 }}><label style={{ display: 'grid', gap: 5, color: '#7F1D1D', fontSize: 12, fontWeight: 700 }}>Type DELETE to confirm<input name="delete-account-confirmation" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} autoComplete="one-time-code" readOnly={!deleteConfirmationReady} onFocus={() => setDeleteConfirmationReady(true)} style={dangerInput} /></label><label style={{ display: 'grid', gap: 5, color: '#7F1D1D', fontSize: 12, fontWeight: 700 }}>Current password<input name="delete-account-password" type="password" value={deletePassword} onChange={event => setDeletePassword(event.target.value)} autoComplete="current-password" style={dangerInput} /></label><div style={{ display: 'flex', gap: 8 }}><button type="button" className="btn-secondary" disabled={deleting} onClick={() => { setDeleteOpen(false); setDeleteConfirmationReady(false); setDeleteConfirmation(''); setDeletePassword('') }}>Cancel</button><button type="button" style={{ ...dangerButton, background: deleting || deleteConfirmation !== 'DELETE' || !deletePassword ? '#FEE2E2' : '#DC2626', color: deleting || deleteConfirmation !== 'DELETE' || !deletePassword ? '#B91C1C' : '#fff', borderColor: '#DC2626', cursor: deleting || deleteConfirmation !== 'DELETE' || !deletePassword ? 'not-allowed' : 'pointer' }} disabled={deleting || deleteConfirmation !== 'DELETE' || !deletePassword} onClick={async () => { setDeleting(true); try { await onDeleteAccount({ confirmation: deleteConfirmation, password: deletePassword }) } catch (error) { toast.error(error.message || 'Could not delete your account.', { title: 'Account Deletion Failed' }); setDeleting(false) } }}>{deleting ? 'Deleting...' : 'Permanently delete account'}</button></div></div>}
+      </section>
     </div>
   )
 }
@@ -950,7 +1009,9 @@ function TrustScoreSection({ trustScore }) {
   const earnedPoints = trustScoreData?.summary?.earnedPoints ?? factors.filter(f => f.earned && f.points > 0).reduce((a, f) => a + f.points, 0)
   const penalties = trustScoreData?.summary?.penalties ?? factors.filter(f => f.earned && f.points < 0).reduce((a, f) => a + f.points, 0)
   const displayedTrustScore = trustScoreData?.trustScore ?? trustScore
-  const positiveEvents = activity.filter(item => item.points > 0)
+  // Static showcase rows explain the workflow but never count as evidence for
+  // the signed-in student's actual reputation summary.
+  const positiveEvents = activity.filter(item => !item.demoData && item.points > 0)
   const approvedActions = trustScoreData?.summary?.approvedActions ?? positiveEvents.length
   const formatActivityDate = value => {
     const date = value ? new Date(value) : null
@@ -999,6 +1060,7 @@ function TrustScoreSection({ trustScore }) {
 
       <StudentTrustOverview score={displayedTrustScore} policy={trustScoreData?.policy} earnedPoints={earnedPoints}
         penalties={penalties} approvedActions={approvedActions} activity={activity} factors={factors}
+        demoActivity={trustScoreData?.demoActivity || []} demoPenalties={trustScoreData?.demoPenalties || []}
         onCriteria={() => setShowCriteria(true)} formatDate={formatActivityDate}/>
     </div>
   )
@@ -1038,14 +1100,18 @@ export default function StudentDashboard() {
   const [contactMethod, setContactMethod] = useState(initialStudent.contactMethod || 'email')
   const [verificationMethod, setVerificationMethod] = useState(initialStudent.verificationMethod || 'aadhaar')
   const [avatar, setAvatar] = useState(initialStudent.avatar)
+  const [about, setAbout] = useState(initialStudent.about)
+  const [collaborationFocus, setCollaborationFocus] = useState(initialStudent.collaborationFocus)
+  const [workStyle, setWorkStyle] = useState(initialStudent.workStyle)
   const [skills, setSkills] = useState(initialStudent.skills)
   const [skillHubSkills, setSkillHubSkills] = useState([])
   const [practiceStats, setPracticeStats] = useState(() => getPracticeStats(initialStudent))
   const [activityDays, setActivityDays] = useState(() => getActivityDays(initialStudent))
   const [profileActivity, setProfileActivity] = useState({ completedGigs: null, teamUps: null })
   const handleSkillProfileChange = useCallback(hub => {
-    setSkillHubSkills(hub.skills)
-    setSkills(hub.skills.map(skill => skill.name))
+    const persistedSkills = (hub.skills || []).filter(skill => skill?.demoData !== true)
+    setSkillHubSkills(persistedSkills)
+    setSkills(persistedSkills.map(skill => skill.name))
     setTrustScore(hub.trustScore)
     setPracticeStats(getPracticeStats(hub))
     setActivityDays(getActivityDays(hub))
@@ -1121,7 +1187,11 @@ export default function StudentDashboard() {
     fetchStudentGigs(token)
       .then(result => {
         if (cancelled) return
-        const completedGigs = Array.isArray(result?.gigState?.completedGigs) ? result.gigState.completedGigs.length : 0
+        // Showcase GIGs are available to explore, but never represent the
+        // signed-in student's own completed work or reputation.
+        const completedGigs = Array.isArray(result?.gigState?.completedGigs)
+          ? result.gigState.completedGigs.filter(gig => !gig?.demoData).length
+          : 0
         setProfileActivity(current => ({ ...current, completedGigs }))
       })
       .catch(() => {
@@ -1131,11 +1201,10 @@ export default function StudentDashboard() {
     fetchStudentNetwork(token)
       .then(({ networkState }) => {
         if (cancelled) return
-        const teamUpIds = new Set([
-          ...(networkState?.myTeamPosts || []),
-          ...(networkState?.memberships || []),
-        ].map(post => post?.id).filter(Boolean))
-        setProfileActivity(current => ({ ...current, teamUps: teamUpIds.size }))
+        // This server value excludes showcase fixtures and only counts an
+        // accepted collaboration, including historical accepted memberships.
+        const teamUps = Math.max(0, Number(networkState?.achievementProgress?.teamUps) || 0)
+        setProfileActivity(current => ({ ...current, teamUps }))
       })
       .catch(() => {
         if (!cancelled) setProfileActivity(current => ({ ...current, teamUps: 0 }))
@@ -1196,6 +1265,9 @@ export default function StudentDashboard() {
         setContactMethod(student.contactMethod || 'email')
         setVerificationMethod(student.verificationMethod || 'aadhaar')
         setAvatar(student.avatar)
+        setAbout(student.about)
+        setCollaborationFocus(student.collaborationFocus)
+        setWorkStyle(student.workStyle)
         setSkills(student.skills)
         setSkillHubSkills(result.student.skillHubSkills || [])
         setPracticeStats(getPracticeStats(result.student))
@@ -1210,6 +1282,9 @@ export default function StudentDashboard() {
         persistedProfileRef.current = {
           name: student.name,
           avatar: student.avatar,
+          about: student.about,
+          collaborationFocus: student.collaborationFocus,
+          workStyle: student.workStyle,
           githubLink: student.githubLink,
           contactInfo: student.contactInfo,
           projects: student.projects,
@@ -1249,6 +1324,9 @@ export default function StudentDashboard() {
       const payload = {
         name,
         avatar,
+        about,
+        collaborationFocus,
+        workStyle,
         githubLink,
         contactInfo,
         projects,
@@ -1280,7 +1358,7 @@ export default function StudentDashboard() {
     }, 350)
 
     return () => window.clearTimeout(timeoutId)
-  }, [avatar, contactInfo, githubLink, name, profileMediaLoaded, projects, videoUrl])
+  }, [about, avatar, collaborationFocus, contactInfo, githubLink, name, profileMediaLoaded, projects, videoUrl, workStyle])
 
   const handleLogout = async () => {
     const token = sessionTokenRef.current
@@ -1301,6 +1379,21 @@ export default function StudentDashboard() {
     navigate('/')
   }
 
+  const handleDeleteAccount = async payload => {
+    const token = sessionTokenRef.current
+    if (!token) throw new Error('Your session has expired. Please sign in again.')
+    // Prevent a queued profile autosave from racing with deletion.
+    profileSaveVersionRef.current += 1
+    await profileSaveQueueRef.current.catch(() => {})
+    await deleteStudentAccount(token, payload)
+    clearAllStudentSectionCache(token)
+    clearStudentSessionToken()
+    window.sessionStorage.removeItem(STUDENT_ACTIVE_SECTION_KEY)
+    sessionTokenRef.current = ''
+    toast.success('Your account and associated data have been deleted.')
+    navigate('/student', { replace: true })
+  }
+
   return (
     <div className="dashboard-shell student-dashboard" style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
 
@@ -1309,6 +1402,7 @@ export default function StudentDashboard() {
           onClose={() => setShowProfile(false)}
           name={name} trustScore={trustScore} avatar={avatar} setAvatar={setAvatar}
           skills={skills} skillHubSkills={skillHubSkills} githubLink={githubLink} contactInfo={contactInfo} projects={projects} videoUrl={videoUrl} practiceStats={practiceStats} activityDays={activityDays}
+          about={about} collaborationFocus={collaborationFocus} workStyle={workStyle}
           profileActivity={profileActivity}
           contactMethod={contactMethod} verificationMethod={verificationMethod}
         />
@@ -1345,12 +1439,16 @@ export default function StudentDashboard() {
             isLoadingStudent ? <DashboardSkeleton section="profile" /> : <ProfileSection
               name={name} trustScore={trustScore}
               avatar={avatar} setAvatar={setAvatar}
+              about={about} setAbout={setAbout}
+              collaborationFocus={collaborationFocus} setCollaborationFocus={setCollaborationFocus}
+              workStyle={workStyle} setWorkStyle={setWorkStyle}
               skills={skills} skillHubSkills={skillHubSkills}
               githubLink={githubLink} setGithubLink={setGithubLink}
               contactInfo={contactInfo} setContactInfo={setContactInfo}
               projects={projects} setProjects={setProjects}
               videoUrl={videoUrl} setVideoUrl={setVideoUrl}
               onViewProfile={() => setShowProfile(true)}
+              onDeleteAccount={handleDeleteAccount}
               saveState={profileSaveState}
               contactMethod={contactMethod} verificationMethod={verificationMethod}
             />

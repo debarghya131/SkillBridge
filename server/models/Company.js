@@ -50,6 +50,25 @@ const companySchema = new mongoose.Schema({
   sessions: { type: [sessionSchema], default: [], select: false },
 }, {
   timestamps: true,
+  optimisticConcurrency: [
+    'businessProfile',
+    'dashboardState',
+    'gigManagementState',
+    'projectWorkspaceState',
+    'taskLibraryState',
+    'taskReviewGuides',
+    'paymentState',
+    'dailySectionUsage',
+    'sessions',
+  ],
+})
+
+companySchema.post('save', function(error, doc, next) {
+  if (error.name === 'VersionError') {
+    error.statusCode = 409
+    error.message = 'The company account changed during this update. Refresh and retry.'
+  }
+  next(error)
 })
 
 module.exports = mongoose.models.Company || mongoose.model('Company', companySchema)

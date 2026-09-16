@@ -1,12 +1,12 @@
 export default function NetworkNav({ items, active, onChange }) {
   return (
-    <div className="responsive-pill-nav network-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
+    <div className="responsive-pill-nav network-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 0, flexWrap: 'wrap' }}>
       {items.map(item => (
         <button
           key={item.key}
           type="button"
           aria-pressed={active === item.key}
-          onClick={() => onChange(item.key)}
+          onClick={event => { onChange(item.key); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 16px', borderRadius: 8, border: 'none',

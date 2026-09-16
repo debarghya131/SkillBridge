@@ -2,6 +2,7 @@ const Company = require('../models/Company')
 const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
 const { randomUUID } = require('node:crypto')
+const { DEMO_COMPANY_PROFILES, DEMO_NETWORK_PEOPLE, DEMO_TALENT, demoCompanyGigState, demoNetworkProfile, demoTaskLibraryState, demoWorkspaceState } = require('../config/showcaseFixtures')
 const {
   buildDefaultCompanyDashboardState,
   buildDefaultCompanyGigManagementState,
@@ -9,6 +10,10 @@ const {
   buildDefaultCompanyProfile,
   buildDefaultCompanyWorkspaceState,
 } = require('../config/companyDefaults')
+
+// Reuse the complete Network showcase catalogue in company talent discovery so
+// every demo identity has one consistent card, photo, and public profile.
+const COMPANY_DEMO_TALENT = [...DEMO_TALENT, ...DEMO_NETWORK_PEOPLE]
 const { buildDefaultCompanyTaskLibraryState } = require('../config/companyTaskDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
 const { hashVerificationReference } = require('../utils/verification')
@@ -25,6 +30,7 @@ const { buildWorkspaceState } = require('../utils/companyWorkspace')
 const { synchronizeCompanyGigMetrics } = require('../utils/companyGigMetrics')
 const { validateAssignment } = require('../utils/taskValidation')
 const { isDiscoverableVerifiedSkill, publishedSkillNames, activeStreak } = require('../utils/skillPolicy')
+const { demoReadOnlyError } = require('../utils/demoProtection')
 
 function normalizeEmail(email) {
   return email?.trim().toLowerCase() || ''
@@ -146,8 +152,9 @@ function sanitizeDashboardState(state) {
   }
 }
 
-function buildCompanyDashboardOverview(company, { talentCount = 0, submissions = [] } = {}) {
-  const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
+function buildCompanyDashboardOverview(company, { talentCount = 0, submissions = [], includeDemo = false } = {}) {
+  const realGigManagementState = sanitizeGigManagementState(company.gigManagementState)
+  const gigManagementState = realGigManagementState
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, buildDefaultCompanyProfile({
     businessName: company.businessName,
     location: company.location,
@@ -173,7 +180,10 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
       color: submission.status === 'ready_to_hire' ? '#065F46' : submission.status === 'needs_revision' ? '#92400E' : '#1D4ED8',
       bg: submission.status === 'ready_to_hire' ? '#D1FAE5' : submission.status === 'needs_revision' ? '#FEF3C7' : '#DBEAFE',
     }))
-    : []
+    : includeDemo ? [
+      { name: 'Aarav Sen', status: 'delivered work for Retail Inventory Dashboard', when: '2026-09-10T10:30:00.000Z', color: '#1D4ED8', bg: '#DBEAFE', demoData: true },
+      { name: 'Meera Das', status: 'completed Delivery Performance Analysis', when: '2026-09-12T10:30:00.000Z', color: '#065F46', bg: '#D1FAE5', demoData: true },
+    ] : []
   const checklist = [
     { label: 'Business name and location', done: Boolean(businessProfile.businessName && businessProfile.location) },
     { label: 'Industry, website, and team size', done: Boolean(businessProfile.industry && businessProfile.website && businessProfile.teamSize) },
@@ -376,7 +386,7 @@ function sanitizeProjectWorkspaceState(state) {
       ? mergedState.projects.map((project, index) => sanitizeWorkspaceProject(project, index))
       : fallback.projects.map((project, index) => sanitizeWorkspaceProject(project, index)),
     selectedProjectId: typeof mergedState?.selectedProjectId === 'string' ? mergedState.selectedProjectId : fallback.selectedProjectId,
-    statusFilter: ['All', 'Planning', 'In Progress', 'Review', 'Completed'].includes(mergedState?.statusFilter)
+    statusFilter: ['All', 'Planning', 'In Progress', 'Review', 'Approved', 'Completed'].includes(mergedState?.statusFilter)
       ? mergedState.statusFilter
       : fallback.statusFilter,
   }
@@ -391,7 +401,7 @@ async function syncWorkspaceWithSelectedSubmissions(company) {
   return company
 }
 
-const WORKSPACE_PROJECT_STATUSES = new Set(['Planning', 'In Progress', 'Review', 'Completed'])
+const WORKSPACE_PROJECT_STATUSES = new Set(['Planning', 'In Progress', 'Review', 'Approved', 'Completed'])
 const WORKSPACE_TASK_STATES = new Set(['Todo', 'In Review', 'Done'])
 
 function sanitizeWorkspaceProject(project, index = 0) {
@@ -423,6 +433,8 @@ function sanitizeWorkspaceProject(project, index = 0) {
   return {
     id: typeof source.id === 'string' && source.id.trim() ? source.id.trim().slice(0, 80) : `p${index + 1}`,
     submissionId: typeof source.submissionId === 'string' ? source.submissionId : '',
+    studentId: typeof source.studentId === 'string' ? source.studentId.trim().slice(0, 80) : '',
+    studentAvatar: typeof source.studentAvatar === 'string' ? source.studentAvatar.trim().slice(0, 2000) : '',
     submissionStatus: source.submissionStatus || '',
     submissionLink: source.submissionLink || '',
     submissionContent: source.submissionContent || '',
@@ -746,6 +758,29 @@ function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function withDemoGigState(realState) {
+  const demo = demoCompanyGigState()
+  return {
+    ...realState,
+    // Company totals always describe MongoDB-backed company activity. The
+    // read-only examples below must never inflate a fresh company's metrics.
+    stats: realState.stats,
+    gigs: [...realState.gigs, ...demo.gigs],
+    pipeline: realState.pipeline,
+    recentActivity: [...realState.recentActivity, ...demo.recentActivity].slice(0, 8),
+    applicantsByGig: { ...demo.applicantsByGig, ...realState.applicantsByGig },
+  }
+}
+
+function withDemoWorkspace(realState) {
+  const demo = demoWorkspaceState()
+  return {
+    ...realState,
+    projects: [...realState.projects, ...demo.projects],
+    selectedProjectId: realState.selectedProjectId || demo.selectedProjectId,
+  }
+}
+
 function sanitizeTaskLibraryState(state) {
   const fallback = buildDefaultCompanyTaskLibraryState()
   const tasks = Array.isArray(state?.tasks)
@@ -862,15 +897,26 @@ async function getCurrentCompany(token) {
 
 async function getCurrentCompanyTaskLibraryState(token) {
   const company = await findCompanyByToken(token)
-  return sanitizeTaskLibraryState(company.taskLibraryState)
+  const real = sanitizeTaskLibraryState(company.taskLibraryState)
+  return { ...real, tasks: [...real.tasks, ...demoTaskLibraryState().tasks] }
 }
 
 async function updateCurrentCompanyTaskLibraryState(token, payload) {
   const company = await findCompanyByToken(token)
   const currentState = sanitizeTaskLibraryState(company.taskLibraryState)
-  const nextState = sanitizeTaskLibraryState(payload?.taskLibraryState)
+  const requestedAllTasks = payload?.taskLibraryState?.tasks
+  const demoTasks = demoTaskLibraryState().tasks
+  if (Array.isArray(requestedAllTasks)) {
+    const demoChanged = demoTasks.some(demo => {
+      const requested = requestedAllTasks.find(item => String(item?.id) === demo.id)
+      return requested && !sameJson(sanitizeTaskLibraryState({ tasks: [requested] }).tasks[0], sanitizeTaskLibraryState({ tasks: [demo] }).tasks[0])
+    })
+    if (demoChanged) throw demoReadOnlyError()
+  }
+  const realPayload = { ...payload?.taskLibraryState, tasks: Array.isArray(requestedAllTasks) ? requestedAllTasks.filter(item => item?.demoData !== true && !String(item?.id || '').startsWith('demo-')) : requestedAllTasks }
+  const nextState = sanitizeTaskLibraryState(realPayload)
 
-  const requestedTasks = payload?.taskLibraryState?.tasks
+  const requestedTasks = realPayload.tasks
   if (!Array.isArray(requestedTasks) || requestedTasks.length > 100 || requestedTasks.length !== nextState.tasks.length
     || new Set(nextState.tasks.map(task => task.id)).size !== nextState.tasks.length) throw buildAuthError('Provide up to 100 complete tasks with unique IDs')
   for (const task of requestedTasks) {
@@ -902,7 +948,7 @@ async function getCurrentCompanyDashboard(token) {
       : Promise.resolve([]),
   ])
 
-  return buildCompanyDashboardOverview(company, { talentCount, submissions })
+  return buildCompanyDashboardOverview(company, { talentCount, submissions, includeDemo: true })
 }
 
 async function updateCurrentCompany(token, payload) {
@@ -947,15 +993,16 @@ async function logoutCurrentCompany(token) {
 
 async function getCurrentCompanyGigManagementState(token) {
   const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
-  return sanitizeGigManagementState(company.gigManagementState)
+  return withDemoGigState(sanitizeGigManagementState(company.gigManagementState))
 }
 
 async function getCompanyGigApplicants(token, gigId) {
   const company = await findCompanyByToken(token)
-  const state = sanitizeGigManagementState(company.gigManagementState)
+  const state = withDemoGigState(sanitizeGigManagementState(company.gigManagementState))
   const gigIndex = state.gigs.findIndex(item => Number(item.id) === Number(gigId))
   const gig = gigIndex === -1 ? null : state.gigs[gigIndex]
   if (!gig) throw buildAuthError('GIG not found', 404)
+  if (gig.demoData) return state.applicantsByGig[gig.id] || []
 
   if (!gig.publicId && typeof company.save === 'function') {
     gig.publicId = randomUUID()
@@ -1082,7 +1129,7 @@ async function deleteCompanyGig(token, gigId) {
 
 async function getCurrentCompanyProjectWorkspaceState(token) {
   const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
-  return sanitizeProjectWorkspaceState(company.projectWorkspaceState)
+  return withDemoWorkspace(sanitizeProjectWorkspaceState(company.projectWorkspaceState))
 }
 
 async function shareCompanyWorkspaceUpdate(token, projectId, payload) {
@@ -1144,6 +1191,16 @@ async function getCompanyTalentProfiles(token, filters = {}) {
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
   const availableLocations = await Student.distinct('location')
   const requiredSkills = parseRequiredSkills(businessProfile.requiredSkills)
+  const demoCandidates = COMPANY_DEMO_TALENT
+    .map(person => ({
+      ...person,
+      avatar: demoNetworkProfile(person).avatar,
+      score: Math.max(0, Number(person.trustScore) || 0),
+      projects: Array.isArray(person.projects) ? person.projects.length : Math.max(0, Number(person.projects) || 0),
+    }))
+    .filter(profile => matchesTalentProfile(profile, normalizedFilters))
+    .map(profile => enrichTalentProfile(profile, requiredSkills))
+    .sort(compareTalentProfiles)
   const start = (normalizedFilters.page - 1) * normalizedFilters.pageSize
   const end = start + normalizedFilters.pageSize
   const topCandidates = []
@@ -1174,12 +1231,24 @@ async function getCompanyTalentProfiles(token, filters = {}) {
   }
 
   return {
-    talentProfiles: topCandidates.slice(start, end),
+    talentProfiles: normalizedFilters.page === 1
+      ? [...topCandidates.slice(start, end), ...demoCandidates].slice(0, normalizedFilters.pageSize)
+      : topCandidates.slice(start, end),
+    // Pagination and production counts are based only on persisted students.
+    // Demo previews are reported separately and never inflate database totals.
     total,
+    realTotal: total,
+    demoTotal: demoCandidates.length,
     page: normalizedFilters.page,
     pageSize: normalizedFilters.pageSize,
-    availableLocations: [...new Set(availableLocations.filter(location => typeof location === 'string' && location.trim()))].sort(),
-    availableSkills: [...availableSkillNames].sort(),
+    availableLocations: [...new Set([
+      ...availableLocations.filter(location => typeof location === 'string' && location.trim()),
+      ...COMPANY_DEMO_TALENT.map(person => person.location).filter(Boolean),
+    ])].sort(),
+    availableSkills: [...new Set([
+      ...availableSkillNames,
+      ...COMPANY_DEMO_TALENT.flatMap(person => person.skills || []),
+    ])].sort(),
   }
 }
 
@@ -1188,6 +1257,9 @@ async function getPublicCompanyProfile(companyName) {
   if (!normalizedName) {
     throw buildAuthError('Company name is required')
   }
+
+  const demoProfile = DEMO_COMPANY_PROFILES.find(profile => profile.businessName.toLowerCase() === normalizedName.toLowerCase())
+  if (demoProfile) return clone(demoProfile)
 
   const company = await Company.findOne(/^[a-f0-9]{24}$/i.test(normalizedName)
     ? { _id: normalizedName }
@@ -1226,6 +1298,8 @@ async function getPublicCompanyProfile(companyName) {
 module.exports = {
   async getCompanyStudentProfile(token, studentId) {
     await findCompanyByToken(token)
+    const demoProfile = COMPANY_DEMO_TALENT.find(item => item.id === studentId)
+    if (demoProfile) return clone(demoNetworkProfile({ ...demoProfile, relationship: { status: 'connected' } }))
     if (!/^[a-f0-9]{24}$/i.test(studentId)) throw buildAuthError('Invalid student ID', 400)
     const student = await Student.findById(studentId).lean()
     if (!student) throw buildAuthError('Student profile not found', 404)

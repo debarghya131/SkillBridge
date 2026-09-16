@@ -19,6 +19,12 @@ function buildTrustScoreFactors(student) {
     { label: 'Intro Video Uploaded', icon: '🎥', desc: 'No credit without an assessment', points: 0, earned: has('intro_video_uploaded'), category: 'Profile' },
     { label: 'High-quality assessment', icon: '✅', desc: 'Assigned reviewer approves with a complete rubric score of at least 90%', points: 25, earned: has('assessment_quality'), category: 'Quality' },
     { label: 'Practice milestone', icon: '📈', desc: 'Every 30 distinct approved practice days, up to 240 days', points: 25, earned: has('practice_milestone'), category: 'Consistency' },
+    { label: 'Network milestone — 100', icon: '🤝', desc: '100 accepted real connections', points: 25, earned: has('network_connections_100'), category: 'Network' },
+    { label: 'Network milestone — 500', icon: '🤝', desc: '500 accepted real connections', points: 75, earned: has('network_connections_500'), category: 'Network' },
+    { label: 'Network milestone — 1,000', icon: '🤝', desc: '1,000 accepted real connections', points: 150, earned: has('network_connections_1000'), category: 'Network' },
+    { label: 'Team-Up milestone — 10', icon: '👥', desc: 'Participated in 10 accepted real Team-Ups', points: 25, earned: has('team_up_10'), category: 'Team-Up' },
+    { label: 'Team-Up milestone — 50', icon: '👥', desc: 'Participated in 50 accepted real Team-Ups', points: 75, earned: has('team_up_50'), category: 'Team-Up' },
+    { label: 'Team-Up milestone — 100', icon: '👥', desc: 'Participated in 100 accepted real Team-Ups', points: 150, earned: has('team_up_100'), category: 'Team-Up' },
     { label: 'Assessment below standard', icon: '⚠️', desc: 'Assigned reviewer rejects with a rubric below 40%; at most once per submission day', points: -10, earned: has('assessment_below_standard'), category: 'Penalty' },
   ]
   for (const type of ['skill_expired', 'retention_task_missed', 'retention_answer_wrong']) {

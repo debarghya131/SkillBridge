@@ -13,6 +13,10 @@ services:
         value: production
       - key: MONGO_URL
         sync: false
+      - key: MONGO_DB_NAME
+        value: skillbridge
+      - key: VERIFICATION_HASH_SECRET
+        generateValue: true
       - key: CORS_ORIGIN
         value: https://skillbridge.debarghya.org
       - key: SESSION_TTL_DAYS

@@ -9,6 +9,7 @@ const { getCurrentStudent, getCurrentStudentProfileMedia, updateCurrentStudent }
 const { validateAssessment } = require('../controllers/skillAssessmentController')
 const { recordStudentTrustScoreEvent, recordTrustScoreEvent, buildTrustScoreSnapshot } = require('../controllers/trustScoreController')
 const { dayKey, skillStatus, isVerifiedSkill, activeStreak, publishedSkillNames, DAY_MS } = require('../utils/skillPolicy')
+const { DEMO_SKILL_ACTIVITY, DEMO_SKILL_GAP_REPORT, DEMO_SKILLS } = require('../config/showcaseFixtures')
 
 const response = 'I built the original implementation and included reproducible tests, results, and limitations.'
 const dayOffset = offset => new Date(Date.parse(dayKey()) + offset * DAY_MS).toISOString().slice(0, 10)
@@ -62,10 +63,13 @@ test('profile autosaves cannot remove reviewed skills or grant skill credit', as
   const student = studentWith([{ name: 'Python', verified: true, stage: 'Intermediate', renewalDue: dayOffset(100) }])
   student.skills = ['Python']
   t.mock.method(Student, 'findOne', async () => student)
-  const profile = await updateCurrentStudent('s', { skills: ['Forged'], trustScore: 1000 })
+  const profile = await updateCurrentStudent('s', { skills: ['Forged'], trustScore: 1000, about: 'I build tested APIs.', collaborationFocus: ['API design', 'Code review', 'API design'], workStyle: 'Short written updates.' })
   assert.deepEqual(profile.skills, ['Python'])
   assert.equal(profile.skillHubSkills[0].verified, true)
   assert.equal(profile.trustScore, 0)
+  assert.equal(profile.about, 'I build tested APIs.')
+  assert.deepEqual(profile.collaborationFocus, ['API design', 'Code review'])
+  assert.equal(profile.workStyle, 'Short written updates.')
 })
 
 test('student profile includes the server-derived practice summary for dashboard headers', async t => {
@@ -303,9 +307,18 @@ test('Skill Hub response uses saved activity and an empty marketplace remains em
   t.mock.method(Student, 'findOne', async () => student)
   t.mock.method(Company, 'aggregate', async () => [])
   const hub = await getStudentSkillHub('s')
-  assert.deepEqual(hub.skills, [])
+  assert.equal(hub.skills.filter(item => item.demoData).length, DEMO_SKILLS.length)
+  assert.deepEqual(hub.skills.filter(item => !item.demoData), [])
+  assert.equal(hub.skillHubState.skillLog.filter(item => item.demoData).length, DEMO_SKILL_ACTIVITY.length)
+  assert.equal(hub.skillHubState.demoDailyPractice.every(item => item.demoData), true)
+  assert.equal(hub.skillHubState.demoChallengeStates.every(item => item.demoData), true)
+  assert.equal(hub.skillHubState.demoStreakDays.every(item => item.demoData), true)
+  assert.deepEqual(hub.skillHubState.demoSkillGapReport, DEMO_SKILL_GAP_REPORT)
+  assert.deepEqual(student.skillHubState.skillLog, [])
   assert.deepEqual(hub.skillHubState.daily.completedChallenges, [])
-  assert.deepEqual(hub.skillHubState.skillGapReport.gapData, [])
+  assert.deepEqual(hub.skillHubState.skillGapReport, {
+    activeGigs: 0, totalRequirements: 0, overallMatch: 0, gapData: [], strengths: [],
+  })
   assert.equal(hub.challenges.length, 8)
 })
 

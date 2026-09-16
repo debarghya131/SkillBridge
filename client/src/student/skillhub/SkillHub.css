@@ -42,7 +42,7 @@
 .sh-section-heading { flex-wrap: wrap; flex-shrink: 0; min-height: 36px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
 .sh-skills-heading { align-items: flex-end; }
 .sh-skills-heading .sh-status-summary { flex: 1 1 320px; justify-content: flex-end; }
-.sh-skills-heading > .btn-primary { flex: 0 0 auto; }
+.sh-skills-heading > .btn-primary { flex: 0 0 auto; min-height: 36px; padding: 7px 16px; font-size: 13px; }
 .skillhub-page h2 { font-size: 16px; margin: 0; }
 .sh-section-kicker { display: block; margin-bottom: 3px; color: #4f46e5; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .sh-section-heading > span, .sh-meta, .skillhub-page small, .skillhub-page time { font-size: 12px; color: var(--muted); }
@@ -56,6 +56,7 @@
 .sh-skill:has(.sh-status-archived)::before { background: #64748b; }
 .sh-skill { flex-wrap: wrap; }
 .sh-skill-main { min-width: 0; flex: 1 1 180px; }
+.sh-skill > .btn-secondary { min-width: 0; min-height: 36px; padding: 7px 12px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
 .sh-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
 .sh-status { padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; }
 .sh-status-valid { color: #065f46; background: #d1fae5; }
@@ -64,7 +65,8 @@
 .sh-status-unverified { color: #475569; background: #f1f5f9; }
 .sh-status-archived { color: #475569; background: #e2e8f0; }
 .sh-skill-actions { display: inline-flex; align-items: center; gap: 8px; }
-.sh-skill-actions .btn-secondary { white-space: nowrap; }
+.sh-verified-icon { color: #059669; }
+.sh-skill-actions .btn-secondary { min-height: 36px; padding: 7px 14px; font-size: 12px; white-space: nowrap; }
 .sh-positive { color: #047857; font-weight: 600; font-size: 12px; }
 .sh-negative { color: #b91c1c; font-weight: 600; font-size: 12px; }
 .sh-activity p, .sh-assessment p { margin: 5px 0; font-size: 13px; }
@@ -81,7 +83,8 @@
 .sh-assessment-feedback { max-width: 100%; color: #334155; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
 .sh-assessment footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 14px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
 .sh-assessment footer small { min-width: 0; flex: 1 1 130px; }
-.sh-assessment footer button { width: auto; min-width: 154px; min-height: 38px; flex: 0 0 auto; margin: 0; padding: 8px 14px; }
+.sh-assessment footer button { width: auto; min-width: 140px; min-height: 36px; flex: 0 0 auto; margin: 0; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
+.sh-assessment > .btn-secondary { width: auto; min-width: 140px; min-height: 36px; padding: 7px 12px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
 .sh-empty { padding: 28px 0; color: var(--muted); font-size: 14px; }
 .sh-policy { margin: 0; padding: 9px 11px; border-left: 3px solid #93c5fd; background: #eff6ff; color: #475569; font-size: 12px; line-height: 1.55; }
 .sh-inline-streak { display: flex; align-items: center; gap: 4px; width: fit-content; margin: 0 0 7px; color: #64748b; font-size: 11px; font-weight: 700; }
@@ -143,8 +146,8 @@
 .sh-habit-stats span:nth-child(3) svg { color: #d97706; }
 .sh-habit-stats span:nth-child(4) svg { color: #059669; }
 .sh-habit-stats strong { color: #172033; font-size: 13px; }
-.sh-metric-tooltip, .dashboard-metric-tooltip { position: relative; cursor: help; outline: none; }
-.sh-metric-tooltip::after, .dashboard-metric-tooltip::after {
+.sh-metric-tooltip { position: relative; cursor: help; outline: none; }
+.sh-metric-tooltip::after {
   position: absolute;
   z-index: 200;
   top: calc(100% + 8px);
@@ -167,7 +170,7 @@
   transform: translate(-50%, -4px);
   transition: opacity .16s ease, transform .16s ease;
 }
-.sh-metric-tooltip::before, .dashboard-metric-tooltip::before {
+.sh-metric-tooltip::before {
   position: absolute;
   z-index: 201;
   top: calc(100% + 3px);
@@ -181,52 +184,38 @@
   transition: opacity .16s ease, transform .16s ease;
 }
 .sh-metric-tooltip:hover::after, .sh-metric-tooltip:hover::before,
-.sh-metric-tooltip:focus-visible::after, .sh-metric-tooltip:focus-visible::before,
-.dashboard-metric-tooltip:hover::after, .dashboard-metric-tooltip:hover::before,
-.dashboard-metric-tooltip:focus-visible::after, .dashboard-metric-tooltip:focus-visible::before {
+.sh-metric-tooltip:focus-visible::after, .sh-metric-tooltip:focus-visible::before {
   opacity: 1;
   transform: translate(-50%, 0);
 }
-.sh-habit-stats .sh-metric-tooltip:first-child::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child::after {
+.sh-habit-stats .sh-metric-tooltip:first-child::after {
   left: 0;
   transform: translateY(-4px);
 }
-.sh-habit-stats .sh-metric-tooltip:first-child::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child::before {
+.sh-habit-stats .sh-metric-tooltip:first-child::before {
   left: 18px;
   transform: translateY(-4px);
 }
-.sh-habit-stats .sh-metric-tooltip:last-child::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child::after {
+.sh-habit-stats .sh-metric-tooltip:last-child::after {
   right: 0;
   left: auto;
   transform: translateY(-4px);
 }
-.sh-habit-stats .sh-metric-tooltip:last-child::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child::before {
+.sh-habit-stats .sh-metric-tooltip:last-child::before {
   right: 18px;
   left: auto;
   transform: translateY(-4px);
 }
 .sh-habit-stats .sh-metric-tooltip:first-child:hover::after,
 .sh-habit-stats .sh-metric-tooltip:first-child:focus-visible::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:hover::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:focus-visible::after,
 .sh-habit-stats .sh-metric-tooltip:last-child:hover::after,
-.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:hover::after,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:focus-visible::after {
+.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::after {
   transform: translateY(0);
 }
 .sh-habit-stats .sh-metric-tooltip:first-child:hover::before,
 .sh-habit-stats .sh-metric-tooltip:first-child:focus-visible::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:hover::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:first-child:focus-visible::before,
 .sh-habit-stats .sh-metric-tooltip:last-child:hover::before,
-.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:hover::before,
-.dashboard-activity-metrics .dashboard-metric-tooltip:last-child:focus-visible::before {
+.sh-habit-stats .sh-metric-tooltip:last-child:focus-visible::before {
   transform: translateY(0);
 }
 .sh-habit-controls { display: grid; grid-template-columns: auto minmax(510px, 1fr) auto; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #dbe3ee; background: #f8fafc; }
@@ -272,6 +261,8 @@
 .sh-add-form fieldset { border: 0; padding: 12px 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 180px); gap: 10px; }
 .sh-add-form label { display: grid; gap: 6px; min-width: 0; font-size: 12px; }
 .sh-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.sh-actions > .btn-primary { min-height: 36px; padding: 7px 18px; font-size: 13px; }
+.sh-actions > .btn-secondary { width: 38px; min-height: 36px; padding: 0; font-size: 13px; }
 .skillhub-page .btn-primary, .skillhub-page .btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; white-space: normal; }
 @media (max-width: 1150px) {
   .sh-streak-overview { grid-template-columns: minmax(210px, .7fr) minmax(360px, 1.3fr); gap: 10px 18px; }
@@ -334,7 +325,7 @@
   .sh-columns { gap: 16px; }
   .sh-panel { gap: 12px; }
   .sh-section-heading { align-items: flex-start; gap: 10px; }
-  .sh-skills-heading > .btn-primary { width: 100%; min-height: 42px; order: 4; }
+  .sh-skills-heading > .btn-primary { width: auto; min-height: 36px; padding: 7px 16px; font-size: 13px; order: 4; }
   .sh-skills-heading .sh-status-summary { display: flex; flex-wrap: nowrap; width: 100%; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
   .sh-skills-heading .sh-status-summary::-webkit-scrollbar { display: none; }
   .sh-status-summary span { flex: 0 0 auto; }
@@ -342,9 +333,10 @@
   .sh-filters input, .sh-filters select { min-height: 42px; }
   .sh-add-form fieldset { gap: 10px; }
   .sh-actions { display: grid; grid-template-columns: 1fr 44px; }
-  .sh-actions button { min-height: 42px; }
+  .sh-actions button { min-height: 36px; }
   .sh-skill { align-items: stretch; gap: 10px; padding: 13px; }
   .sh-skill > .btn-secondary { width: 100%; min-height: 42px; }
+  .sh-assessment > .btn-secondary { width: 100%; min-height: 42px; }
   .sh-activity { align-items: flex-start; }
   .sh-activity > span { white-space: nowrap; }
   .sh-summary { grid-template-columns: 1fr; }
@@ -397,9 +389,10 @@
   .skillhub-page .sh-add-form fieldset { display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 0; overflow: visible; }
   .skillhub-page .sh-add-form label,
   .skillhub-page .sh-status-picker { width: 100%; max-width: 100%; min-width: 0; }
-  .skillhub-page .sh-actions { display: grid; grid-template-columns: minmax(0, 1fr) 42px; width: 100%; max-width: 100%; min-width: 0; gap: 6px; }
-  .skillhub-page .sh-actions > button { width: 100%; min-width: 0; max-width: 100%; margin: 0; padding-inline: 8px; box-sizing: border-box; }
-  .skillhub-page .sh-actions > .btn-secondary { width: 42px; padding: 0; }
+  .skillhub-page .sh-actions { display: grid; grid-template-columns: max-content 38px; width: 100%; max-width: 100%; min-width: 0; justify-content: start; gap: 6px; }
+  .skillhub-page .sh-actions > button { width: auto; min-width: 0; max-width: 100%; margin: 0; box-sizing: border-box; }
+  .skillhub-page .sh-actions > .btn-primary { min-height: 36px; padding-inline: 14px; }
+  .skillhub-page .sh-actions > .btn-secondary { width: 38px; min-height: 36px; padding: 0; }
 
   .skillhub-page .sh-filters { grid-template-columns: minmax(0, 1fr); }
   .skillhub-page .sh-filters > *,

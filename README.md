@@ -15,7 +15,7 @@ Capable students often lack access to credible work, while local businesses stru
 1. Students build a portfolio and submit evidence to verify their skills.
 2. Platform reviewers assess the evidence with a structured rubric.
 3. Companies discover candidates through verified skills, TrustScore, and practical interview tasks.
-4. Selected students complete work in a shared project pipeline.
+4. Selected students receive independent GIG Work records grouped under the source GIG in Project Workspace.
 5. Companies approve delivery and record the payment made outside SkillBridge.
 
 ## ✨ Product Capabilities
@@ -190,7 +190,7 @@ flowchart TB
         SkillResult[Verified skill, activity log and TrustScore update]
         GigFlow[GIG published, discovered and applied to]
         InterviewFlow[Interview assignment, review and student selection]
-        WorkFlow[Project work, milestones, delivery and approval]
+        WorkFlow[Grouped GIG Work records, milestones, delivery and approval]
         PayFlow[External payment recorded, GIG completed and TrustScore updated]
 
         SkillFlow --> BlindReview --> SkillResult
@@ -292,22 +292,29 @@ flowchart TD
 
     Accepted --> OpenTask
 
-    subgraph Delivery[Active Work and Delivery]
-        Kickoff[Company starts work and records work brief]
+    subgraph Delivery[Project Workspace, Active Work and Delivery]
+        WorkspaceGroup[GIG group in Project Workspace]
+        Workspace[Independent GIG Work record for each selected student]
+        SelectedActive[Student Active GIG: selected; final delivery locked]
+        Kickoff[Company submits the paid work brief and starts the GIG]
+        BriefSent[Lifecycle checkpoint: brief sent]
         WorkStarted[Status: work started]
-        Workspace[Project Workspace generated from selected submission]
         Updates[Company shares project updates]
         Milestones[Company creates, completes or reopens milestones]
-        StudentWork[Student views workspace and completes real work]
+        StudentWork[Student opens Active GIG, reads the brief and completes real work]
         Deliver[Student submits final delivery]
         DeliveryReview{Company reviews delivery}
         DeliveryRevision[Needs revision with delivery-stage return state]
-        Approved[Status: approved]
+        Approved[Status: approved; payment pending]
 
-        Selected --> Kickoff --> WorkStarted --> Workspace
+        Selected -->|Group by source GIG| WorkspaceGroup
+        WorkspaceGroup -->|One independent record per selected student| Workspace
+        Workspace --> SelectedActive
+        Workspace --> Kickoff
+        Kickoff -->|Same atomic company action| BriefSent --> WorkStarted
         Workspace --> Updates
         Workspace --> Milestones
-        Workspace --> StudentWork --> Deliver
+        WorkStarted --> StudentWork --> Deliver
         Deliver -->|Status: delivered| DeliveryReview
         DeliveryReview -->|Needs revision| DeliveryRevision --> StudentWork
         DeliveryReview -->|Approve| Approved
@@ -317,7 +324,7 @@ flowchart TD
         Pending[Approved work appears as awaiting payment]
         PayOutside[Company pays student outside SkillBridge]
         Confirm[Company confirms payment was already made]
-        ValidatePayment[Validate ownership, amount, INR date, method and unique reference]
+        ValidatePayment[Validate ownership, amount, payment date, method and unique reference]
         PaymentTransaction[Atomic payment and reputation transaction]
         Completed[Status: completed]
         PaymentRecord[(TaskSubmission externalPayment record)]
@@ -331,9 +338,9 @@ flowchart TD
         StudentCompleted[Student Completed GIGs]
         CompanyHistory[Company payment history and project history]
         StudentEarnings[Student read-only earnings history]
-        TrustEvent[(TrustScore event: gig completed)]
-        TrustScore[Recalculate TrustScore with +150 base GIG credit]
-        Profile[Updated student profile and company talent view]
+        TrustEvent[(TrustScore event: gig completed with +150 base credit)]
+        TrustScore[Recalculate TrustScore under policy caps and evidence gates]
+        Profile[Completed GIG count and refreshed student and company talent views]
 
         Completed --> StudentCompleted
         Completed --> CompanyHistory
@@ -345,7 +352,7 @@ flowchart TD
     Completed -.->|Removed from Active GIGs| StudentCompleted
 ```
 
-> ⚡ **Quick flow:** Company publishes GIG → student applies and completes interview → company selects → student delivers work → company approves and records external payment → GIG completes and TrustScore updates.
+> ⚡ **Quick flow:** Company publishes GIG → student applies or receives a direct opportunity → student completes the interview task → company reviews and selects one or more students → each student receives an independent GIG Work record → company sends the paid brief and starts work → student delivers and may revise → company approves → external payment is recorded → that student's GIG Work completes, earnings update, and TrustScore is recalculated.
 
 ### 4. 🎓 Full Skill Hub Pipeline
 
@@ -489,6 +496,204 @@ flowchart TD
 ```
 
 > ⚡ **Quick flow:** Student submits skill evidence → reviewer claims and scores it → approved result updates skill status, activity, and TrustScore → verified evidence appears across the profile and platform. Students can archive a skill to remove it from public matching while retaining its reviewed history.
+
+### 5. 🤝 Full Network and Team-Up Pipeline
+
+```mermaid
+flowchart TD
+    subgraph Entry[Authenticated Student Network]
+        Open[Open Network workspace]
+        Session[Validate active student session]
+        Load[Load Network state]
+        Discover[Discover students]
+        MyNetwork[My Network]
+        TeamUp[Team Up]
+
+        Open --> Session --> Load
+        Load --> Discover
+        Load --> MyNetwork
+        Load --> TeamUp
+    end
+
+    subgraph ReadModel[Network Read Model]
+        Relationships[(NetworkConnection records involving the student)]
+        RelatedPosts[(Owned TeamPosts and posts containing the student)]
+        BrowsePosts[(Newest open TeamPosts owned by other students)]
+        Candidates[(Bounded student discovery results)]
+        RelationshipMap[Build connected, incoming, outgoing and available relationship states]
+        NetworkResponse[Return suggestions, connections, requests, team posts, invitations, memberships and achievement progress]
+
+        Relationships --> RelationshipMap
+        Candidates --> RelationshipMap
+        RelatedPosts --> NetworkResponse
+        BrowsePosts --> NetworkResponse
+        RelationshipMap --> NetworkResponse
+    end
+
+    Session --> Relationships
+    Session --> RelatedPosts
+    Session --> BrowsePosts
+    Session --> Candidates
+    NetworkResponse --> Discover
+    NetworkResponse --> MyNetwork
+    NetworkResponse --> TeamUp
+
+    subgraph ProfilePrivacy[Student Profile and Privacy]
+        Card[Compact discovery card: name, location, verified skills, streak and TrustScore]
+        ViewProfile[Open full public student profile]
+        ConnectionCheck{Viewer and student are connected?}
+        PublicEvidence[Return public portfolio, verified skills, activity, work style and collaboration evidence]
+        Contact[Include saved contact details]
+        Private[Keep contact details hidden]
+
+        Discover --> Card --> ViewProfile --> ConnectionCheck
+        ConnectionCheck -->|Yes| PublicEvidence --> Contact
+        ConnectionCheck -->|No| PublicEvidence --> Private
+    end
+
+    subgraph ConnectionLifecycle[Connection Lifecycle]
+        SendRequest[Send connection request]
+        ValidatePair[Validate target, prevent self-request and build normalized pair key]
+        Existing{Relationship already exists?}
+        Pending[(One pending NetworkConnection per student pair)]
+        Recipient[Recipient sees incoming request]
+        Decision{Recipient decision}
+        Accepted[Status: accepted]
+        Declined[Status: declined]
+        Cancel[Sender cancels pending request]
+        Remove[Either connected student removes connection]
+        Revoke[Contact visibility is revoked]
+
+        Discover --> SendRequest --> ValidatePair --> Existing
+        Existing -->|Pending or accepted| Conflict[Return conflict]
+        Existing -->|None or previously declined| Pending --> Recipient --> Decision
+        Decision -->|Accept| Accepted
+        Decision -->|Decline| Declined
+        Pending -->|Sender action| Cancel
+        Accepted -->|Either participant| Remove --> Revoke
+        Accepted --> Contact
+    end
+
+    subgraph TeamPostLifecycle[Team-Up Post Lifecycle]
+        CreatePost[Create Team-Up]
+        ValidatePost[Validate title, description, type, required skills and team size]
+        TeamPost[(TeamPost owned by the creator)]
+        Publish[Publish as open]
+        Edit[Owner edits details or status]
+        Capacity[Prevent team size below accepted membership]
+        DeleteRule{Any accepted membership history?}
+        DeletePost[Owner deletes post]
+        ClosePost[Owner closes post and preserves collaboration history]
+
+        TeamUp --> CreatePost --> ValidatePost --> TeamPost --> Publish
+        TeamPost --> Edit --> Capacity --> TeamPost
+        TeamPost --> DeleteRule
+        DeleteRule -->|No| DeletePost
+        DeleteRule -->|Yes| ClosePost
+    end
+
+    subgraph ApplicationFlow[Student Application Flow]
+        Explore[Explore and filter open Team-Ups]
+        JoinMessage[Submit contribution message]
+        JoinChecks[Check post is open, not owned by applicant, not full and has no active request]
+        Application[(Embedded application with pending status)]
+        OwnerReview[Owner reviews applicant profile and message]
+        ApplicationDecision{Owner decision}
+        ApplicationAccepted[Application accepted]
+        ApplicationDeclined[Application declined]
+        Withdraw[Applicant withdraws pending request]
+
+        Publish --> Explore --> JoinMessage --> JoinChecks --> Application --> OwnerReview --> ApplicationDecision
+        ApplicationDecision -->|Accept| ApplicationAccepted
+        ApplicationDecision -->|Decline| ApplicationDeclined
+        Application -->|Applicant action| Withdraw
+    end
+
+    subgraph InvitationFlow[Direct Invitation Flow]
+        SelectPost[Owner selects an open Team-Up]
+        SelectStudent[Select student and write invitation message]
+        InviteChecks[Validate owner, student, capacity and existing request state]
+        Invitation[(Embedded invitation with pending status)]
+        InviteeDecision{Invited student decision}
+        InvitationAccepted[Invitation accepted]
+        InvitationDeclined[Invitation declined]
+
+        TeamPost --> SelectPost --> SelectStudent --> InviteChecks --> Invitation --> InviteeDecision
+        InviteeDecision -->|Accept| InvitationAccepted
+        InviteeDecision -->|Decline| InvitationDeclined
+    end
+
+    subgraph Membership[Membership and Capacity]
+        MembershipRecord[Accepted request becomes active membership]
+        AcceptedAt[Store acceptedAt for auditable collaboration history]
+        Full{Accepted members reached available slots?}
+        AutoClose[Automatically close full Team-Up]
+        JoinedView[Show owner and other accepted members]
+        Leave[Member leaves Team-Up]
+        PreserveHistory[Mark membership withdrawn and retain acceptedAt]
+        Reopen[Owner may reopen when capacity becomes available]
+
+        ApplicationAccepted --> MembershipRecord
+        InvitationAccepted --> MembershipRecord
+        MembershipRecord --> AcceptedAt --> Full
+        Full -->|Yes| AutoClose
+        Full -->|No| JoinedView
+        AutoClose --> JoinedView
+        JoinedView --> Leave --> PreserveHistory --> Reopen
+    end
+
+    subgraph TrustScore[Network TrustScore Integration]
+        CountConnections[Count accepted NetworkConnections]
+        CountTeamUps[Count current or historical accepted Team-Up participation]
+        ConnectionMilestones{100, 500 or 1,000 connections reached?}
+        TeamMilestones{10, 50 or 100 Team-Ups reached?}
+        TrustLedger[(Idempotent TrustScore event ledger)]
+        Recalculate[Recalculate TrustScore under category caps]
+
+        Accepted --> CountConnections --> ConnectionMilestones
+        AcceptedAt --> CountTeamUps --> TeamMilestones
+        ConnectionMilestones -->|Threshold reached| TrustLedger
+        TeamMilestones -->|Threshold reached| TrustLedger
+        TrustLedger --> Recalculate
+    end
+
+    subgraph Persistence[MongoDB Persistence and Safety]
+        ConnectionUnique[Unique normalized pairKey prevents duplicate relationships]
+        ConnectionIndexes[Requester and recipient status indexes support network reads]
+        TeamIndexes[Owner, status, participant and acceptance indexes support Team-Up reads]
+        OptimisticLock[Optimistic concurrency rejects conflicting TeamPost updates]
+        Authorization[Every write checks session, ownership, participant role and current status]
+        Cleanup[Account deletion removes connections, owned posts and participation references]
+
+        Pending --> ConnectionUnique --> ConnectionIndexes
+        TeamPost --> TeamIndexes
+        Application --> OptimisticLock
+        Invitation --> OptimisticLock
+        Session --> Authorization
+        Authorization --> Cleanup
+    end
+```
+
+> ⚡ **Quick flow:** Student opens Network → backend builds relationship and Team-Up state from MongoDB → students connect or collaborate through validated requests and invitations → accepted relationships control contact visibility and contribute to idempotent TrustScore milestones.
+
+#### Network API Surface
+
+| Method and route | Authorized behavior |
+| --- | --- |
+| `GET /api/student/network` | Load discovery suggestions, connection state, Team-Ups, memberships, invitations, requests, and real achievement progress. |
+| `GET /api/student/network/profiles/:studentId` | Load a current public student profile and reveal saved contact information only to the profile owner or an accepted connection. |
+| `POST /api/student/network/connections/:studentId` | Create a pending connection request using the normalized student-pair key. |
+| `PATCH /api/student/network/connection-requests/:connectionId` | Allow only the recipient to accept or decline a pending connection request. |
+| `DELETE /api/student/network/connections/:connectionId` | Allow the sender to cancel a pending request or either participant to remove an accepted connection. |
+| `POST /api/student/network/team-posts` | Create a validated Team-Up owned by the authenticated student. |
+| `PATCH /api/student/network/team-posts/:postId` | Allow only the owner to edit details, capacity, or open/closed state. |
+| `DELETE /api/student/network/team-posts/:postId` | Allow only the owner to delete a post that has no accepted membership history. |
+| `POST /api/student/network/team-posts/:postId/join` | Submit a validated application to an open Team-Up. |
+| `DELETE /api/student/network/team-posts/:postId/join` | Withdraw the authenticated student's pending application. |
+| `PATCH /api/student/network/team-posts/:postId/requests/:requestId` | Allow only the owner to accept or decline a pending application. |
+| `POST /api/student/network/team-posts/:postId/invitations/:studentId` | Allow only the owner to invite a student to an open Team-Up with capacity. |
+| `PATCH /api/student/network/team-posts/:postId/invitations/:requestId` | Allow only the invited student to accept or decline the invitation. |
+| `DELETE /api/student/network/team-posts/:postId/membership` | Allow an accepted member to leave while preserving accepted collaboration history. |
 
 ## 📁 Folder Structure
 
@@ -645,6 +850,7 @@ erDiagram
         string gigTitle
         string taskTitle
         object taskDetails
+        string workBrief
         object interviewSubmission
         array matchedSkills
         string submissionLink
@@ -814,6 +1020,8 @@ npm run dev
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Runtime mode |
 | `MONGO_URL` | required | MongoDB connection string |
+| `MONGO_DB_NAME` | required in production when the URI has no database path | Explicit application database name; use `skillbridge` for a new deployment |
+| `MONGO_URL` (production) | replica set or mongos required | Reviewed assessments and completed-payment TrustScore updates commit through MongoDB transactions |
 | `DB_MAX_POOL_SIZE` | `20` | Maximum MongoDB connections per API instance |
 | `DB_MIN_POOL_SIZE` | `0` | Warm MongoDB connections retained per API instance |
 | `DB_MAX_IDLE_TIME_MS` | `30000` | Idle MongoDB connection lifetime |
@@ -832,6 +1040,8 @@ npm run dev
 | `DAILY_SECTION_OPERATION_LIMIT` | `2` | Limited writes per section per day |
 | `RATE_LIMITING_ENABLED` | `true` | Set to `false` only for controlled local testing |
 | `LOG_LEVEL` | `info` | Server log threshold |
+
+Always select the database explicitly. A MongoDB URI with no path and no `MONGO_DB_NAME` falls back to the database named `test`; production startup now rejects that ambiguous configuration. Adding `MONGO_DB_NAME` does not migrate existing collections, so back up and migrate any existing `test` data before changing a deployed service.
 
 ### 🌐 Client: `client/.env`
 
@@ -862,6 +1072,21 @@ npm run db:indexes -- --apply --drop-redundant
 npm run db:migrate-verification
 npm run db:migrate-verification -- --apply
 ```
+
+### Read-only showcase data
+
+Every authenticated student, company, and reviewer receives realistic showcase records alongside genuine records. Showcase records are generated from the version-controlled fixtures in `server/config/showcaseFixtures.js`; they are never inserted into MongoDB and never contribute to real earnings or reputation totals.
+
+Fixture records carry reserved `demo-*` identifiers (or reserved numeric GIG identifiers) and `demoData: true`. Any write aimed at one is rejected with HTTP `403` and the message `Demo data is read-only and cannot be modified or deleted.` Genuine accounts and user-created records remain editable, and students can apply normally to GIGs created by genuine companies.
+
+The following one-time migration removes the earlier database-backed showcase seed and resets only the four accounts explicitly marked by that seed:
+
+```bash
+cd server
+npm run demo:cleanup -- --confirm
+```
+
+The cleanup deletes only documents tagged `demoData: true` and resets `debarghya@gmail.com` and `rahul@gmail.com` student/company documents only when they still carry the legacy `demoMode: true` marker. Passwords, sessions, account identities, and the reviewer account are preserved.
 
 The migration never prints raw identity or registration values. Keep existing inline images/videos until they are moved to object storage; the audit reports every affected document so that migration can be planned without deleting user content.
 

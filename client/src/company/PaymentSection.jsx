@@ -14,6 +14,8 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
   const recording = useRef(false)
   const pending = paymentState?.pending || []
   const transactions = paymentState?.transactions || []
+  const demoPending = paymentState?.demoPending || []
+  const demoTransactions = paymentState?.demoTransactions || []
   const totalRecorded = transactions.reduce((total, row) => total + Math.round(Number(row.amount || 0) * 100), 0) / 100
   const pages = Math.max(1, Math.ceil(transactions.length / 10))
   const currentPage = Math.min(page, pages - 1)
@@ -57,18 +59,12 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
 
   return (
     <section className="company-work-section payment-section">
-      <header className="payment-header">
+      <header className="payment-header payment-compact-header">
         <div>
           <p className="payment-eyebrow">External payment ledger</p>
           <h2>Payment</h2>
           <p className="work-muted">Record payments your company has already sent to selected students.</p>
         </div>
-        <div className="payment-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {onRefresh && <button className="btn-secondary" disabled={busy} onClick={onRefresh} title="Refresh payment records" aria-label="Refresh payment records"><RefreshCw size={16}/></button>}
-          <button className="btn-secondary payment-export" disabled={!transactions.length} onClick={exportRecords} title="Export payment records"><Download size={16}/> Export CSV</button>
-        </div>
-      </header>
-
       <div className="payment-summary" aria-label="Payment summary">
         <div className="payment-stat">
           <span className="payment-stat-icon payment-stat-pending" aria-hidden="true"><Clock3 /></span>
@@ -83,6 +79,12 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
           <div><strong>{money(totalRecorded)}</strong><span>Total recorded</span></div>
         </div>
       </div>
+
+        <div className="payment-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {onRefresh && <button className="btn-secondary" disabled={busy} onClick={onRefresh} title="Refresh payment records" aria-label="Refresh payment records"><RefreshCw size={16}/></button>}
+          <button className="btn-secondary payment-export" disabled={!transactions.length} onClick={exportRecords} title="Export payment records"><Download size={16}/> Export CSV</button>
+        </div>
+      </header>
 
       <SectionTabs label="Payment views" options={['Record payment', 'History']} value={view} onChange={setView} />
       <section hidden={view !== 'Record payment'} className="payment-panel">
@@ -123,6 +125,12 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
             </div>
           </div>
         )}
+        {demoPending.length > 0 && <section className="payment-demo-preview" aria-label="Demo pending payments" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div className="payment-panel-heading"><div><span className="demo-data-badge">Read-only demo</span><h3 style={{ marginTop: 7 }}>Approved work awaiting payment</h3><p className="work-muted">These examples show what appears here after work is approved. Real payment records remain separate.</p></div><span className="payment-count">{demoPending.length} examples</span></div>
+          <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Budget</th><th>Approved</th><th>State</th></tr></thead><tbody>
+            {demoPending.map(row => <tr key={row.id}><td data-label="GIG / student"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Budget">{row.budget}</td><td data-label="Approved">{row.approvedAt}</td><td data-label="State"><span className="payment-count">Awaiting payment</span></td></tr>)}
+          </tbody></table></div>
+        </section>}
       </section>
 
       <section hidden={view !== 'History'} className="payment-panel payment-history-panel">
@@ -139,8 +147,14 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
             {transactions.slice(currentPage * 10, currentPage * 10 + 10).map(row => <tr key={row.id}><td data-label="GIG / student" className="payment-history-title"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Amount">{money(row.amount)}</td><td data-label="Reference">{row.reference}</td><td data-label="Paid on">{row.paidOn}</td><td data-label="Record"><span className="payment-recorded-badge">Recorded</span></td></tr>)}
           </tbody></table></div>
         ) : (
-          <div className="payment-history-empty"><span aria-hidden="true">▤</span><p>No payment records yet.</p></div>
+          <div className="payment-history-empty"><span aria-hidden="true">▤</span><p>No real payment records yet.</p></div>
         )}
+        {demoTransactions.length > 0 && <section className="payment-demo-preview" aria-label="Demo payment history" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div className="payment-panel-heading"><div><span className="demo-data-badge">Read-only demo</span><h3 style={{ marginTop: 7 }}>Example payment history</h3><p className="work-muted">Company-reported payment examples. They are excluded from live totals and CSV exports.</p></div><span className="payment-count">{demoTransactions.length} examples</span></div>
+          <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Amount</th><th>Reference</th><th>Paid on</th><th>Record</th></tr></thead><tbody>
+            {demoTransactions.map(row => <tr key={row.id}><td data-label="GIG / student" className="payment-history-title"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Amount">{money(row.amount)}</td><td data-label="Reference">{row.reference}</td><td data-label="Paid on">{row.paidOn}</td><td data-label="Record"><span className="payment-recorded-badge is-demo">Demo recorded</span></td></tr>)}
+          </tbody></table></div>
+        </section>}
         {transactions.length > 10 && <nav className="payment-history-pagination" aria-label="Payment history pages" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'flex-end', padding: 12 }}>
           <button className="btn-secondary" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button><span>{currentPage + 1} / {pages}</span><button className="btn-secondary" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Next</button>
         </nav>}

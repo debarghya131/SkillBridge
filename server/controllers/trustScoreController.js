@@ -2,11 +2,22 @@ const Student = require('../models/Student')
 const { normalizeTrustEvents, validDailyReference } = require('../utils/trustLedger')
 const { evaluateTrust, UNREVIEWED } = require('../utils/trustPolicy')
 const { buildTrustScoreFactors, buildTrustScoreSummary } = require('../config/trustScoreDefaults')
+const { DEMO_TRUST_ACTIVITY, DEMO_TRUST_PENALTIES, clone } = require('../config/showcaseFixtures')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 
 const { TRUST_EVENT_DEFINITIONS } = require('../config/trustEventDefinitions')
 
 const TRUST_SCORE_STUDENT_FIELDS = '_id sessions skills skillHubSkills trustScore trustScoreState'
+const NETWORK_MILESTONES = Object.freeze([
+  { threshold: 100, eventType: 'network_connections_100' },
+  { threshold: 500, eventType: 'network_connections_500' },
+  { threshold: 1000, eventType: 'network_connections_1000' },
+])
+const TEAM_UP_MILESTONES = Object.freeze([
+  { threshold: 10, eventType: 'team_up_10' },
+  { threshold: 50, eventType: 'team_up_50' },
+  { threshold: 100, eventType: 'team_up_100' },
+])
 
 function findStudentByToken(token) {
   return findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), TRUST_SCORE_STUDENT_FIELDS)
@@ -103,6 +114,16 @@ function recordTrustScoreEvents(student, events) {
   return results.some(result => result.recorded)
 }
 
+// This helper is deliberately driven only by counts from persisted accepted
+// records. Demo cards, pending requests, and cancelled connections never reach it.
+function recordNetworkAchievementMilestones(student, { connections = 0, teamUps = 0 } = {}) {
+  const record = (milestones, count) => milestones
+    .filter(milestone => Number(count) >= milestone.threshold)
+    .map(milestone => recordTrustScoreEvent(student, milestone.eventType, String(milestone.threshold)))
+  const results = [...record(NETWORK_MILESTONES, connections), ...record(TEAM_UP_MILESTONES, teamUps)]
+  return results.some(result => result.recorded)
+}
+
 function buildTrustScoreSnapshot(student) {
   const factors = buildTrustScoreFactors(student)
   const events = normalizeTrustEvents(readTrustScoreEvents(student))
@@ -125,6 +146,8 @@ function buildTrustScoreSnapshot(student) {
       ? { ...eventSummary, maxPoints: factorSummary.maxPoints }
       : factorSummary,
     activity: buildTrustScoreActivity(student),
+    demoActivity: clone(DEMO_TRUST_ACTIVITY),
+    demoPenalties: clone(DEMO_TRUST_PENALTIES),
     policy: evaluateTrust(student, events),
   }
 }
@@ -133,7 +156,10 @@ async function getStudentTrustScore(token) {
   const student = await findStudentByToken(token)
   await require('./skillHubController').reconcileSkillExpiry(student)
   if (reconcileTrustScore(student)) await student.save()
-  return buildTrustScoreSnapshot(student)
+  const snapshot = buildTrustScoreSnapshot(student)
+  // TrustScore is a ledger, not a showcase: every displayed event must be
+  // attributable to this account's persisted, server-recorded evidence.
+  return snapshot
 }
 
 async function recordStudentTrustScoreEvent(token, payload) {
@@ -149,4 +175,5 @@ module.exports = {
   recordStudentTrustScoreEvent,
   recordTrustScoreEvent,
   recordTrustScoreEvents,
+  recordNetworkAchievementMilestones,
 }

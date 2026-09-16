@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { buildDefaultCompanyGigManagementState, mergeCompanyGigManagementState } from './companyGigDemoData'
 import { safeExternalUrl } from '../lib/safeExternalUrl'
 import { fetchCompanyGigApplicants, fetchCompanyStudentProfile, getCompanySessionToken } from './companyApi'
@@ -360,7 +361,7 @@ function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, on
       }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="responsive-modal-card" style={{
+      <div className="responsive-modal-card applicants-modal-card" style={{
         width: '100%',
         maxWidth: 760,
         maxHeight: '88vh',
@@ -378,11 +379,11 @@ function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, on
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--muted)', fontSize: 18, cursor: 'pointer' }}>×</button>
         </div>
 
-        <div className="responsive-modal-body" style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="responsive-modal-body applicants-modal-body" style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {error && <div role="alert">{error} <button onClick={onRetry} className="btn-accent">Retry</button></div>}
           {!loading && !error && applicants.length === 0 && <div>No applicants or direct invitees yet.</div>}
           {applicants.map(applicant => (
-            <div key={applicant.id} className="responsive-stack" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'stretch' }}>
+            <div key={applicant.id} className="responsive-stack applicant-card" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'stretch' }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
                 <div style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: '#E0E7FF', color: '#4338CA', display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 900 }}>
                   {applicant.avatar
@@ -438,7 +439,7 @@ function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, on
   )
 }
 
-function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSubmission, onReviewSaved, onSendInterviewTask, onOpenTaskCenter }) {
+function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSubmission, onReviewSaved, onSendInterviewTask, onOpenTaskCenter, onOpenWorkspace }) {
   const applicantId = applicant?.studentId || applicant?.id
   const videoRef = useRef(null)
   const modalRef = useRef(null)
@@ -850,8 +851,8 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
                   />
                 </label>
               </div> : applicant.taskSubmission.status === 'selected' ? <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
-                <span>Student selected. Add the GIG work brief and start work in Task Center.</span>
-                <button type="button" className="btn-secondary" onClick={onOpenTaskCenter} style={{ justifySelf: 'start', padding: '8px 12px', fontSize: 12 }}>Open Task Center</button>
+                <span>Student selected. Add the paid work requirements and start the actual GIG Work in Project Workspace.</span>
+                <button type="button" className="btn-secondary" onClick={onOpenWorkspace} style={{ justifySelf: 'start', padding: '8px 12px', fontSize: 12 }}>Open Project Workspace</button>
               </div> : <div style={{ fontSize: 13 }}>{applicant.taskSubmission.feedback || 'No review action available at this stage.'}</div>}
 
               {reviewError && (
@@ -968,7 +969,7 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
   )
 }
 
-export default function GigManagement({ gigManagementState, taskLibraryState, taskSubmissions = [], onReviewTaskSubmission, onSendInterviewTask, onOpenTaskCenter, onCreateGig, onUpdateGig, onDeleteGig }) {
+export default function GigManagement({ gigManagementState, taskLibraryState, taskSubmissions = [], onReviewTaskSubmission, onSendInterviewTask, onOpenTaskCenter, onOpenWorkspace, onCreateGig, onUpdateGig, onDeleteGig }) {
   const [localState, setLocalState] = useState(() => mergeCompanyGigManagementState(gigManagementState || buildDefaultCompanyGigManagementState()))
   const [isCreateGigOpen, setIsCreateGigOpen] = useState(false)
   const [editingGig, setEditingGig] = useState(null)
@@ -1013,6 +1014,8 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
       )),
     }))
   }, [applicantResponse, selectedGigId, taskSubmissions])
+  const realGigs = useMemo(() => localState.gigs.filter(gig => !gig.demoData), [localState.gigs])
+  const demoGigs = useMemo(() => localState.gigs.filter(gig => gig.demoData), [localState.gigs])
 
   const createGig = async data => {
     const persistedState = await onCreateGig(data)
@@ -1024,6 +1027,11 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
   }
 
   const updateGig = async gig => {
+    if (gig.demoData) {
+      toast.info('Demo GIGs are read-only and cannot be edited.', { title: 'Demo GIG' })
+      setEditingGig(null)
+      return
+    }
     const persistedState = await onUpdateGig(gig)
     if (!persistedState) return
     setLocalState(mergeCompanyGigManagementState(persistedState))
@@ -1031,6 +1039,11 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
   }
 
   const deleteGig = async gig => {
+    if (gig.demoData) {
+      toast.info('Demo GIGs are read-only and cannot be deleted.', { title: 'Demo GIG' })
+      setEditingGig(null)
+      return
+    }
     const persistedState = await onDeleteGig(gig.id)
     if (!persistedState) return
     setLocalState(mergeCompanyGigManagementState(persistedState))
@@ -1039,6 +1052,9 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
   }
 
   const sendInterviewTaskForApplicant = async (applicant, taskPayload) => {
+    if (selectedGig?.demoData || applicant?.demoData) {
+      throw new Error('Demo applicants and GIGs are read-only. Create a real GIG to send an interview task.')
+    }
     const opportunity = await onSendInterviewTask(applicant, selectedGig?.title, {
       ...taskPayload,
       companyGigId: selectedGig?.id,
@@ -1068,66 +1084,29 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
 
   return (
     <div>
-      <div className="responsive-hero" style={{
-        background: 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)',
-        borderRadius: 16,
-        padding: '24px 28px',
-        border: '1px solid #FED7AA',
-        boxShadow: '0 8px 24px rgba(249,115,22,0.08)',
-        position: 'relative',
-        overflow: 'hidden',
-        marginBottom: 20,
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: 16,
-        flexWrap: 'wrap',
-      }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 5, background: 'var(--accent)' }} />
-        <div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 800, color: '#C2410C', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 9 }}>
-            <span style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(249,115,22,0.14)', fontSize: 14 }}>📋</span>
-            GIG Management
-          </div>
-          <div style={{ fontSize: 25, fontWeight: 850, color: 'var(--dark)', marginBottom: 8, letterSpacing: '-0.02em' }}>
-            Manage hiring, interview tasks, and student pipeline
-          </div>
-          <div style={{ fontSize: 13, color: '#9A3412', maxWidth: 700, lineHeight: 1.6 }}>
-            Track every posted GIG, review incoming talent, send interview tasks, and monitor who is ready for selection.
-          </div>
+      <header className="gig-compact-header">
+        <h2>GIG Management</h2>
+        <div className="gig-inline-stats" aria-label="GIG Management summary">
+          {localState.stats.map(item => (
+            <div key={item.label} style={{ borderTopColor: item.tone }}>
+              <span aria-hidden="true">{item.icon}</span>
+              <strong>{item.value}</strong>
+              <small>{item.label}</small>
+            </div>
+          ))}
         </div>
-
-        <button
-          className="btn-accent"
-          onClick={() => setIsCreateGigOpen(true)}
-          style={{ padding: '11px 18px', fontSize: 13, alignSelf: 'flex-start', boxShadow: '0 6px 14px rgba(249,115,22,0.2)' }}
-        >
-          + Create New GIG
-        </button>
-      </div>
-
-      <div className="responsive-card-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-        {localState.stats.map(item => (
-          <div key={item.label} style={{ background: 'var(--white)', borderRadius: 12, padding: '17px 18px 15px', border: '1px solid var(--border)', borderTop: `3px solid ${item.tone}`, boxShadow: '0 2px 8px rgba(15,23,42,0.03)', transition: 'transform 0.15s, box-shadow 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(15,23,42,0.03)' }}
-          >
-            <div style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: item.bg, borderRadius: 9, fontSize: 18, marginBottom: 10 }}>{item.icon}</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--dark)', marginBottom: 4 }}>{item.value}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginBottom: 10 }}>{item.label}</div>
-            <span style={{ fontSize: 11, fontWeight: 700, background: item.bg, color: item.tone, padding: '4px 10px', borderRadius: 100 }}>
-              Live snapshot
-            </span>
-          </div>
-        ))}
-      </div>
+        <button className="btn-accent" onClick={() => setIsCreateGigOpen(true)}>+ Create New GIG</button>
+      </header>
 
       <div className="responsive-split-main" style={{ display: 'grid', gridTemplateColumns: '1.55fr 0.95fr', gap: 16 }}>
-          <div style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
+          <div className="gig-posted-panel" style={{ background: 'var(--white)', borderRadius: 14, border: '1px solid var(--border)', padding: '22px 24px', boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
             <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)' }}>Posted GIGs</div>
-            <span style={{ background: 'var(--accent-light)', color: '#C2410C', borderRadius: 100, padding: '4px 10px', fontSize: 11, fontWeight: 800 }}>{localState.gigs.length} roles</span>
+            <span style={{ background: 'var(--accent-light)', color: '#C2410C', borderRadius: 100, padding: '4px 10px', fontSize: 11, fontWeight: 800 }}>
+              {realGigs.length} real {realGigs.length === 1 ? 'role' : 'roles'}{demoGigs.length ? ` · ${demoGigs.length} demo examples` : ''}
+            </span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="gig-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {localState.gigs.map(gig => {
               const meta = statusMeta[gig.status]
               const gigSubmissions = taskSubmissions.filter(submission => (
@@ -1139,19 +1118,21 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                 Number(gig.shortlisted) || 0,
                 gigSubmissions.filter(submission => ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(submission.status)).length,
               )
-              const pendingReview = gigSubmissions.filter(submission => (
-                ['submitted', 'reviewed', 'delivered'].includes(submission.status)
-                || (submission.status === 'needs_revision' && submission.revisionReturnStatus !== 'delivered')
-              )).length
+              const pendingReview = gig.demoData
+                ? Math.max(0, Number(gig.pendingReview) || 0)
+                : gigSubmissions.filter(submission => (
+                  ['submitted', 'reviewed', 'delivered'].includes(submission.status)
+                  || (submission.status === 'needs_revision' && submission.revisionReturnStatus !== 'delivered')
+                )).length
               return (
-                <div key={gig.id} style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, var(--bg) 100%)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', boxShadow: '0 2px 7px rgba(15,23,42,0.025)', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                <div key={gig.id} className="gig-posted-card" style={{ background: 'linear-gradient(180deg, #FFFFFF 0%, var(--bg) 100%)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', boxShadow: '0 2px 7px rgba(15,23,42,0.025)', transition: 'border-color 0.15s, box-shadow 0.15s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#FDBA74'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(249,115,22,0.08)' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = '0 2px 7px rgba(15,23,42,0.025)' }}
                 >
-                  <div className="responsive-stack" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10, flexWrap: 'wrap' }}>
+                  <div className="gig-card-head">
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)' }}>{gig.title}</span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--dark)' }}>{gig.title}{gig.demoData && <span className="demo-data-badge">Demo</span>}</span>
                         <span style={{ fontSize: 11, fontWeight: 700, background: meta.bg, color: meta.color, padding: '3px 9px', borderRadius: 100 }}>
                           {gig.status}
                         </span>
@@ -1161,9 +1142,9 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{gig.budget} · {gig.postedOn}</div>
                     </div>
-                    <div className="responsive-company-gig-side" style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 3 }}>Interview Tasks Sent</div>
-                      <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--dark)' }}>{gig.interviewTasks}</div>
+                    <div className="gig-card-metric">
+                      <div className="gig-card-metric-label">Interview Tasks Sent</div>
+                      <div className="gig-card-metric-value">{gig.interviewTasks}</div>
                     </div>
                   </div>
 
@@ -1201,9 +1182,11 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                     </button>
                     <button
                       onClick={() => setEditingGig(gig)}
-                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--muted)', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
+                      disabled={gig.demoData}
+                      title={gig.demoData ? 'Demo GIGs are read-only' : 'Edit GIG'}
+                      style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--muted)', fontWeight: 700, cursor: gig.demoData ? 'not-allowed' : 'pointer', opacity: gig.demoData ? 0.7 : 1, fontSize: 12 }}
                     >
-                      Edit GIG
+                      {gig.demoData ? 'Read-only Demo' : 'Edit GIG'}
                     </button>
                   </div>
                 </div>
@@ -1244,6 +1227,8 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
         </div>
       </div>
 
+      {/* Keep fixed dialogs outside the animated, scrolling dashboard container. */}
+      {createPortal(<>
       <ApplicantsModal
         gig={selectedGig}
         applicants={selectedGigApplicants}
@@ -1291,6 +1276,11 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
       setSelectedGigId(null)
       onOpenTaskCenter?.()
     }}
+    onOpenWorkspace={() => {
+      setSelectedApplicant(null)
+      setSelectedGigId(null)
+      onOpenWorkspace?.()
+    }}
         onReviewSaved={(reviewedSubmission) => {
           setSelectedApplicant(current => (
             current ? { ...current, taskSubmission: reviewedSubmission } : current
@@ -1309,6 +1299,7 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
         onUpdate={updateGig}
         onDelete={deleteGig}
       />
+      </>, document.body)}
     </div>
   )
 }

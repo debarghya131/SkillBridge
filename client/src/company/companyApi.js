@@ -1,6 +1,9 @@
 import { apiRequest } from '../lib/apiRequest'
 
 const COMPANY_SESSION_KEY = 'skillbridge.company.session'
+export function deleteCompanyAccount(token, payload) {
+  return apiRequest('/api/company/account', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(payload) })
+}
 
 export function getCompanySessionToken() {
   return window.localStorage.getItem(COMPANY_SESSION_KEY) || ''

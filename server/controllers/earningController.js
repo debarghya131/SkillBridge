@@ -1,6 +1,7 @@
 const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
+const { demoPaymentState } = require('../config/showcaseFixtures')
 
 const EARNING_STUDENT_FIELDS = '_id sessions'
 
@@ -33,7 +34,16 @@ async function getStudentEarningState(token) {
     : query
   const submissions = await compactQuery
     .sort({ updatedAt: -1 }).lean()
-  return buildExternalEarningState(submissions)
+  const real = buildExternalEarningState(submissions)
+  const demo = demoPaymentState()
+  const transactions = demo.transactions.map(item => ({ ...item, company: 'GreenRoute Analytics' }))
+  // Showcase rows are returned separately so they never inflate a student's
+  // real payment counters, total, CSV export, or production earnings history.
+  return {
+    ...real,
+    demoPending: demo.pending.map(item => ({ ...item, company: 'Northstar Retail Labs' })),
+    demoTransactions: transactions,
+  }
 }
 
 async function updateStudentEarningState(token) {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Handshake, House, Rocket } from 'lucide-react'
+import { Award, Handshake, House, Rocket } from 'lucide-react'
 import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import NetworkNav from './NetworkNav'
 import { NetworkProvider } from './NetworkContext'
@@ -15,6 +15,7 @@ const NETWORK_NAV_ITEMS = [
   { key: 'my-network', icon: Handshake, label: 'My Network' },
   { key: 'team-up', icon: Rocket, label: 'Team Up' },
 ]
+const nextMilestone = (value, thresholds) => thresholds.find(threshold => value < threshold) || thresholds.at(-1)
 
 export default function Network() {
   const cachedState = readStudentSectionCache('network', getStudentSessionToken())
@@ -50,10 +51,15 @@ export default function Network() {
   useEffect(() => { reload({ useCache: true }).catch(() => {}) }, [reload])
 
   if (isLoading && !networkState) return <DashboardSkeleton section="network" />
+  const progress = networkState?.achievementProgress || { connections: 0, teamUps: 0 }
+  const nextConnections = nextMilestone(progress.connections, [100, 500, 1000])
+  const nextTeamUps = nextMilestone(progress.teamUps, [10, 50, 100])
 
   return <NetworkProvider value={{ networkState, reload, token, setActiveTab }}>
     <div className="network-workspace">
-      <NetworkNav items={NETWORK_NAV_ITEMS} active={activeTab} onChange={setActiveTab} />
+      <div className="network-topbar"><NetworkNav items={NETWORK_NAV_ITEMS} active={activeTab} onChange={setActiveTab} />
+        <section className="network-trust-progress" aria-label="Network TrustScore achievements"><div><Award size={17}/><strong>Network TrustScore achievements</strong><p>Only accepted, real connections and Team-Ups count. Demo records never earn points.</p></div><div className="network-trust-milestone"><span>Connections</span><strong>{progress.connections}/{nextConnections}</strong><small>+{nextConnections === 100 ? 25 : nextConnections === 500 ? 75 : 150} at {nextConnections}</small></div><div className="network-trust-milestone"><span>Team-Ups</span><strong>{progress.teamUps}/{nextTeamUps}</strong><small>+{nextTeamUps === 10 ? 25 : nextTeamUps === 50 ? 75 : 150} at {nextTeamUps}</small></div></section>
+      </div>
       {error && !networkState ? <div className="network-error" role="alert"><span>{error}</span><button type="button" onClick={() => reload().catch(() => {})}>Retry</button></div> :
         <div key={activeTab} className="student-tab-content network-tab-content">
           {activeTab === 'home' && <NetworkHome />}

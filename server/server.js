@@ -1,4 +1,5 @@
 const http = require('http')
+const { deleteCompanyAccount } = require('./controllers/companyDeletionController')
 const { connectToDatabase, disconnectFromDatabase, getDatabaseStatus } = require('./config/db')
 const { getEnvConfig } = require('./config/env')
 const {
@@ -25,6 +26,7 @@ const {
 const {
   getCurrentStudent,
   getCurrentStudentProfileMedia,
+  deleteCurrentStudentAccount,
   logoutCurrentStudent,
   signInStudent,
   signUpStudent,
@@ -43,7 +45,7 @@ const { getStudentEarningState, requestStudentWithdrawal, updateStudentEarningSt
 const {
   createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile,
   getStudentNetworkState, inviteStudentToTeam, removeConnection, requestToJoinTeam, sendConnectionRequest,
-  updateTeamPost, withdrawTeamRequest,
+  updateTeamPost, withdrawTeamRequest, leaveTeam,
 } = require('./controllers/networkController')
 const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub } = require('./controllers/skillHubController')
 const { listStudentAssessments, submitSkillAssessment } = require('./controllers/skillAssessmentController')
@@ -62,6 +64,7 @@ const { createRequestId, serializeError, writeLog } = require('./utils/logger')
 const { getBearerToken, readJsonBody } = require('./utils/request')
 const { getSessionTtlMs, resolveSessionSubject } = require('./utils/session')
 const { getCompanyPayments, recordExternalPayment } = require('./controllers/companyPaymentController')
+const { DEMO_READ_ONLY_MESSAGE, isProtectedDemoWrite } = require('./utils/demoProtection')
 const Student = require('./models/Student')
 const Company = require('./models/Company')
 const Reviewer = require('./models/Reviewer')
@@ -149,9 +152,9 @@ async function handlePublicApi(req, res, pathname) {
 
 async function handleCompanyApi(req, res, pathname) {
   try {
-    const studentProfileMatch = pathname.match(/^\/api\/company\/students\/([a-f0-9]+)\/profile$/i)
+    const studentProfileMatch = pathname.match(/^\/api\/company\/students\/([^/]+)\/profile$/)
     if (req.method === 'GET' && studentProfileMatch) {
-      const profile = await getCompanyStudentProfile(getBearerToken(req), studentProfileMatch[1])
+      const profile = await getCompanyStudentProfile(getBearerToken(req), decodeURIComponent(studentProfileMatch[1]))
       sendJson(res, 200, { profile })
       return true
     }
@@ -181,6 +184,11 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'DELETE' && pathname === '/api/company/account') {
+      const result = await deleteCompanyAccount(getBearerToken(req), await readJsonBody(req))
+      sendJson(res, 200, result)
+      return true
+    }
     if (req.method === 'PATCH' && pathname === '/api/company/profile') {
       const payload = await readJsonBody(req)
       const company = await updateCurrentCompany(getBearerToken(req), payload)
@@ -401,6 +409,12 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'DELETE' && pathname === '/api/student/account') {
+      await deleteCurrentStudentAccount(getBearerToken(req), await readJsonBody(req))
+      sendJson(res, 200, { deleted: true })
+      return true
+    }
+
     if (req.method === 'POST' && pathname === '/api/student/logout') {
       await logoutCurrentStudent(getBearerToken(req))
       sendJson(res, 200, { status: 'ok' })
@@ -489,6 +503,12 @@ async function handleStudentApi(req, res, pathname) {
     }
     if (req.method === 'DELETE' && teamJoinMatch) {
       sendJson(res, 200, await withdrawTeamRequest(getBearerToken(req), decodeURIComponent(teamJoinMatch[1])))
+      return true
+    }
+
+    const teamMembershipMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/membership$/)
+    if (req.method === 'DELETE' && teamMembershipMatch) {
+      sendJson(res, 200, await leaveTeam(getBearerToken(req), decodeURIComponent(teamMembershipMatch[1])))
       return true
     }
 
@@ -685,6 +705,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (isProtectedDemoWrite({ method: req.method, pathname })) {
+    sendJson(res, 403, {
+      status: 'error',
+      message: DEMO_READ_ONLY_MESSAGE,
+      requestId: req.requestId,
+    })
+    return
+  }
+
   if (await handleStudentApi(req, res, pathname)) {
     return
   }
@@ -787,7 +816,7 @@ async function startServer() {
 
 let shutdownPromise = null
 
-async function shutdown(signal) {
+async function shutdown(signal, exitCode = 0) {
   if (shutdownPromise) return shutdownPromise
 
   shutdownPromise = new Promise(resolve => {
@@ -805,7 +834,7 @@ async function shutdown(signal) {
         await disconnectFromDatabase()
         writeLog('info', 'server.shutdown_complete', { signal })
         resolve()
-        process.exit(0)
+        process.exit(exitCode)
       } catch (error) {
         writeLog('error', 'server.shutdown_db_disconnect_failed', {
           signal,
@@ -829,11 +858,13 @@ process.on('uncaughtException', error => {
   writeLog('error', 'process.uncaught_exception', {
     error: serializeError(error),
   })
+  void shutdown('uncaughtException', 1)
 })
 process.on('unhandledRejection', error => {
   writeLog('error', 'process.unhandled_rejection', {
     error: serializeError(error),
   })
+  void shutdown('unhandledRejection', 1)
 })
 
 startServer()

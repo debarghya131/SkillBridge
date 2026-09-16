@@ -18,7 +18,7 @@ import CompanyProfileModal from '../../ui/CompanyProfileModal'
 import { readStudentSectionCache, writeStudentSectionCache } from '../sectionCache'
 
 const GIG_SUBNAV = [
-  { key: 'opportunity', label: 'Opportunity', icon: '🎯' },
+  { key: 'opportunity', label: 'Invitations', icon: '📩' },
   { key: 'browse', label: 'Browse GIGs', icon: '🔍' },
   { key: 'active', label: 'Active GIG', icon: '⚡' },
   { key: 'applied', label: 'Applied GIGs', icon: '📤' },
@@ -89,7 +89,7 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
         <div className="student-gig-card-company" style={{ display: 'flex', gap: 11, minWidth: 0 }}>
           <CompanyLogo logo={gig.companyLogo} name={gig.company} size={40} />
           <div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--dark)', marginBottom: 3 }}>{gig.title}</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--dark)', marginBottom: 3 }}>{gig.title}{gig.demoData && <span className="demo-data-badge">Demo</span>}</div>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
             🏢 {gig.company} · 📍 {gig.location}
             {gig.workMode ? ` · ${gig.workMode}` : ''}
@@ -134,7 +134,7 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
             className="btn-primary"
             style={{ padding: '7px 14px', fontSize: 13 }}
           >
-            Open Work Task
+            {status === 'completed' ? 'View GIG Work' : 'Open GIG Work'}
           </button>
         ) : null}
         {showApply ? (
@@ -270,8 +270,11 @@ export default function GigCenter() {
   )
 
   const activeGigs = useMemo(() => activeGigBase, [activeGigBase])
+  const findGig = gigId => browseGigs.find(item => String(item.id) === String(gigId))
   const opportunityCount = useMemo(
-    () => opportunities.filter(item => item.status !== 'declined' && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)).length,
+    () => opportunities.filter(item => item.status !== 'declined'
+      && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)
+      && !(item.taskSubmissionStatus === 'needs_revision' && item.revisionReturnStatus === 'delivered')).length,
     [opportunities],
   )
   const activeSubnav = GIG_SUBNAV.find(item => item.key === sub) || GIG_SUBNAV[0]
@@ -293,6 +296,10 @@ export default function GigCenter() {
   }
 
   const handleApply = async (gigId) => {
+    if (findGig(gigId)?.demoData) {
+      toast.info('Demo GIGs are read-only and cannot be applied to.', { title: 'Demo GIG' })
+      return false
+    }
     const didSucceed = await syncGigState(
       current => current.appliedGigIds.includes(gigId)
         ? current
@@ -306,6 +313,10 @@ export default function GigCenter() {
   }
 
   const handleToggleSave = async (gigId) => {
+    if (findGig(gigId)?.demoData) {
+      toast.info('Demo GIGs are read-only and cannot be saved.', { title: 'Demo GIG' })
+      return false
+    }
     const isSaved = savedGigIds.includes(gigId)
 
     const didSucceed = await syncGigState(
@@ -326,6 +337,11 @@ export default function GigCenter() {
   }
 
   const handleAcceptOpportunity = async (opportunity) => {
+    if (opportunity?.demoData) {
+      toast.info('Opening a read-only demo task. Demo work cannot be submitted.', { title: 'Demo Task Preview' })
+      return true
+    }
+
     const didSucceed = await syncGigState(
       current => ({
         ...current,
@@ -336,7 +352,7 @@ export default function GigCenter() {
       () => acceptStudentOpportunity(sessionToken, opportunity.id),
     )
 
-    if (didSucceed) {
+    if (didSucceed && !opportunity?.demoData) {
       toast.success('Company invite accepted.', { title: 'Interview Task Unlocked' })
     }
 
@@ -344,6 +360,10 @@ export default function GigCenter() {
   }
 
   const handleDeclineOpportunity = async (opportunity) => {
+    if (opportunity?.demoData) {
+      toast.info('Demo opportunities are read-only.', { title: 'Demo Opportunity' })
+      return
+    }
     const didSucceed = await syncGigState(
       current => ({
         ...current,
@@ -360,7 +380,9 @@ export default function GigCenter() {
   }
 
   const handleOpenActiveTask = gig => {
-    const opportunity = opportunities.find(item => String(item.id) === String(gig.opportunityId))
+    const opportunity = gig.demoData && gig.demoWork
+      ? gig
+      : opportunities.find(item => String(item.id) === String(gig.opportunityId))
     if (!opportunity) {
       toast.error('The accepted GIG task could not be found. Refresh your GIG Center.', { title: 'Task Unavailable' })
       return
@@ -562,6 +584,7 @@ export default function GigCenter() {
           opportunities={opportunities}
           onAcceptOpportunity={handleAcceptOpportunity}
           onDeclineOpportunity={handleDeclineOpportunity}
+          onViewCompany={setSelectedCompanyGig}
         />
       ) : null}
 

@@ -53,6 +53,7 @@ function getOpportunityIdentity(opportunity) {
 }
 
 export default function CompanyTaskPage({ opportunity }) {
+  const isDemoTask = opportunity?.demoData === true
   const [retry, setRetry] = useState(0)
   const [reviewData, setReviewData] = useState(null)
   const [stage, setStage] = useState('brief')
@@ -101,6 +102,34 @@ export default function CompanyTaskPage({ opportunity }) {
 
     if (!opportunity || !token) {
       setAssignmentError('Sign in and reopen an accepted company invitation.')
+      setIsLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (opportunity.demoData) {
+      const demoSubmission = opportunity.demoTaskSubmission || null
+      setServerAssignment({
+        taskTitle: opportunity.taskTitle,
+        taskType: opportunity.taskType || 'mixed',
+        taskDeadline: opportunity.taskDeadline || opportunity.deadline,
+        taskPoints: opportunity.taskPoints || 0,
+        taskInstructions: opportunity.taskInstructions || 'Review the task brief and expected deliverables.',
+        taskDetails: opportunity.taskDetails || {},
+      })
+      if (demoSubmission) {
+        const hasDelivery = Boolean(demoSubmission.submissionLink || demoSubmission.submissionContent)
+        setReviewData(demoSubmission)
+        setSubmissionStatus(demoSubmission.status || opportunity.bridgeStatus || 'work_started')
+        setSubmissionLink(demoSubmission.submissionLink || '')
+        setSubmissionContent(demoSubmission.submissionContent || '')
+        setNote(demoSubmission.note || '')
+        setFeedback(demoSubmission.feedback || '')
+        setSubmitted(hasDelivery)
+      } else {
+        setSubmissionStatus('demo')
+      }
       setIsLoading(false)
       return () => {
         cancelled = true
@@ -167,7 +196,7 @@ export default function CompanyTaskPage({ opportunity }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: 14 }}>
         <div style={{ fontSize: 40 }}>📋</div>
-        <div style={{ fontSize: 15, color: 'var(--muted)', fontWeight: 500 }}>No task assigned yet. Accept an invite from Opportunity tab.</div>
+        <div style={{ fontSize: 15, color: 'var(--muted)', fontWeight: 500 }}>No task assigned yet. Accept an invite from the Invitations tab.</div>
       </div>
     )
   }
@@ -182,17 +211,21 @@ export default function CompanyTaskPage({ opportunity }) {
   }
 
   const task = { ...opportunity, ...serverAssignment }
+  const isGigWork = ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(submissionStatus)
+    || (submissionStatus === 'needs_revision' && reviewData?.revisionReturnStatus === 'delivered')
   const isWorkDelivery = ['work_started', 'delivered', 'approved', 'completed'].includes(submissionStatus)
     || (submissionStatus === 'needs_revision' && reviewData?.revisionReturnStatus === 'delivered')
   if (isWorkDelivery) task.taskType = 'mixed'
-  const taskTitle = isWorkDelivery ? 'GIG work delivery' : task.taskTitle || 'Interview task'
+  const taskTitle = isWorkDelivery ? 'GIG work delivery' : isGigWork ? 'GIG Work setup pending' : task.taskTitle || 'Interview task'
   const taskInstructions = isWorkDelivery
     ? reviewData?.workBrief || 'No separate GIG work brief has been added. Confirm delivery requirements with the company.'
-    : task.taskInstructions || 'The company has not added task instructions yet. Contact the company before submitting your work.'
-  const taskDeadline = isWorkDelivery ? reviewData?.workspace?.deadline || 'Not set' : task.taskDeadline || task.deadline || 'Not set'
+    : isGigWork
+      ? 'You have been selected. The company must add the paid GIG work brief and start the project before final delivery opens.'
+      : task.taskInstructions || 'The company has not added task instructions yet. Contact the company before submitting your work.'
+  const taskDeadline = isGigWork ? reviewData?.workspace?.deadline || 'Waiting for company' : task.taskDeadline || task.deadline || 'Not set'
   const taskPoints = Number(task.taskPoints) || 0
-  const taskTypeLabel = TASK_TYPE_LABELS[task.taskType] || 'Mixed'
-  const taskDetails = !isWorkDelivery && task.taskDetails && typeof task.taskDetails === 'object' ? task.taskDetails : {}
+  const taskTypeLabel = isGigWork ? 'GIG Work' : TASK_TYPE_LABELS[task.taskType] || 'Mixed'
+  const taskDetails = !isGigWork && task.taskDetails && typeof task.taskDetails === 'object' ? task.taskDetails : {}
   const needsLink = ['live_project', 'code'].includes(task.taskType)
   const needsWrittenResponse = ['mcq', 'written'].includes(task.taskType)
   const allowsWrittenResponse = ['mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'].includes(task.taskType)
@@ -346,6 +379,10 @@ export default function CompanyTaskPage({ opportunity }) {
     }
   }
 
+  const handleDemoSubmit = () => {
+    toast.error('Demo data is read-only and cannot be modified or deleted.', { title: 'Demo Task' })
+  }
+
   return (
     <div className="company-task-page">
       <button type="button" className="btn-secondary" title="Refresh task status" aria-label="Refresh task status" disabled={isLoading} onClick={() => setRetry(value => value + 1)}><RefreshCw size={16} /></button>
@@ -363,12 +400,12 @@ export default function CompanyTaskPage({ opportunity }) {
           </div>
         </div>
         <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 100, padding: '5px 16px', color: 'white', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>
-          🗓 Deadline: {task.deadline}
+          🗓 Deadline: {taskDeadline}
         </div>
       </div>
 
       {/* Stage tabs */}
-      <div className="company-task-stages" role="tablist" aria-label="Interview task stages" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 10, padding: 5, border: '1px solid var(--border)', marginBottom: 20, width: 'fit-content' }}>
+      <div className="company-task-stages" role="tablist" aria-label={isGigWork ? 'GIG Work stages' : 'Interview task stages'} style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 10, padding: 5, border: '1px solid var(--border)', marginBottom: 20, width: 'fit-content' }}>
         {TASK_STAGES.map(s => (
           <button
             key={s.key}
@@ -402,7 +439,15 @@ export default function CompanyTaskPage({ opportunity }) {
       {stage === 'brief' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 12, padding: '14px 18px', fontSize: 13, color: '#166534' }}>
-            <strong>✓ You accepted this interview task.</strong> Complete the assignment below and submit the requested evidence. {task.company} will review your result.
+            {isDemoTask
+              ? isGigWork
+                ? <><strong>Demo GIG Work preview.</strong> Review the company brief, milestones, updates, delivery, and feedback. This example is read-only.</>
+                : <><strong>Demo task preview.</strong> Review this example interview task and its submission flow. Demo work is read-only and cannot be submitted.</>
+              : isGigWork
+                ? submissionStatus === 'selected'
+                  ? <><strong>You were selected for this GIG.</strong> The company is preparing the paid work brief. Final delivery opens after the company starts the GIG.</>
+                  : <><strong>GIG Work.</strong> Follow the company brief and milestones below. Submit the final delivery when the work is ready.</>
+                : <><strong>✓ You accepted this interview task.</strong> Complete the assessment below and submit the requested evidence. {task.company} will review your result.</>}
           </div>
 
           <div className="company-task-card" style={{ background: 'var(--white)', borderRadius: 12, padding: '20px', border: '1px solid var(--border)' }}>
@@ -499,7 +544,7 @@ export default function CompanyTaskPage({ opportunity }) {
                       maxLength={500}
                       required={needsLink}
                       aria-label={needsLink ? 'Submission link' : 'Reference link'}
-                      disabled={isLoading}
+                      disabled={isLoading || isDemoTask}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                       onFocus={e => e.target.style.borderColor = 'var(--primary)'}
                       onBlur={e => e.target.style.borderColor = 'var(--border)'}
@@ -513,7 +558,7 @@ export default function CompanyTaskPage({ opportunity }) {
                       onChange={e => setSubmissionContent(e.target.value)}
                       maxLength={10000}
                       aria-label="Task response"
-                      disabled={isLoading}
+                      disabled={isLoading || isDemoTask}
                       rows={7}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
                       onFocus={e => e.target.style.borderColor = 'var(--primary)'}
@@ -528,7 +573,7 @@ export default function CompanyTaskPage({ opportunity }) {
                       onChange={e => setNote(e.target.value)}
                       maxLength={2000}
                       aria-label="Additional note"
-                      disabled={isLoading}
+                      disabled={isLoading || isDemoTask}
                       rows={4}
                       style={{ width: '100%', padding: '9px 12px', border: '1.5px solid var(--border)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box' }}
                       onFocus={e => e.target.style.borderColor = 'var(--primary)'}
@@ -537,12 +582,12 @@ export default function CompanyTaskPage({ opportunity }) {
                   </div>
                   <button
                     type="button"
-                    onClick={handleSubmit}
+                    onClick={isDemoTask ? handleDemoSubmit : handleSubmit}
                     className="btn-primary"
-                    disabled={(!submissionLink.trim() && !submissionContent.trim()) || isLoading || Boolean(assignmentError)}
-                    style={{ padding: '10px 24px', fontSize: 14, alignSelf: 'flex-start', opacity: (submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError ? 1 : 0.5, cursor: (submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError ? 'pointer' : 'not-allowed' }}
+                    disabled={isDemoTask ? false : (!submissionLink.trim() && !submissionContent.trim()) || isLoading || Boolean(assignmentError)}
+                    style={{ padding: '10px 24px', fontSize: 14, alignSelf: 'flex-start', opacity: isDemoTask || ((submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError) ? 1 : 0.5, cursor: isDemoTask || ((submissionLink.trim() || submissionContent.trim()) && !isLoading && !assignmentError) ? 'pointer' : 'not-allowed' }}
                   >
-                    {isLoading ? 'Submitting...' : 'Submit Work →'}
+                    {isLoading ? 'Submitting...' : isDemoTask ? (isGigWork ? 'Demo GIG Work is read-only' : 'Demo task is read-only') : 'Submit Work →'}
                   </button>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: -4 }}>
                     {submissionLink.length}/500 link characters · {submissionContent.length}/10,000 response characters · {note.length}/2,000 note characters

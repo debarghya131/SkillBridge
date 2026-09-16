@@ -4,6 +4,7 @@ const SkillAssessment = require('../models/SkillAssessment')
 const { appendSession, buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { createSessionToken, verifyPassword } = require('../utils/auth')
 const { reviewSkillAssessment, serializeBlindAssessment } = require('./skillAssessmentController')
+const { DEMO_ASSESSMENTS, clone } = require('../config/showcaseFixtures')
 
 const findReviewer = token => findModelByActiveToken(Reviewer, token, 'Reviewer', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
 const claimLeaseMs = () => Math.max(15, Math.min(Number(process.env.REVIEW_CLAIM_TTL_MINUTES) || 240, 1440)) * 60 * 1000
@@ -58,7 +59,12 @@ async function listReviewQueue(token, filters) {
     SkillAssessment.find(query).sort(values.queue === 'available' ? { createdAt: 1 } : { updatedAt: -1 }).skip((values.page - 1) * values.pageSize).limit(values.pageSize),
     SkillAssessment.countDocuments(query),
   ])
-  return { assessments: records.map(serializeBlindAssessment), total, page: values.page, pageSize: values.pageSize }
+  const demo = DEMO_ASSESSMENTS.filter(item => (
+    values.queue === 'available' ? item.id === 'demo-assessment-available'
+      : values.queue === 'mine' ? item.id === 'demo-assessment-mine'
+        : item.id === 'demo-assessment-completed'
+  )).filter(item => !values.mode || item.mode === values.mode)
+  return { assessments: [...records.map(serializeBlindAssessment), ...clone(demo)], total: total + demo.length, page: values.page, pageSize: values.pageSize }
 }
 
 async function claimAssessment(token, id) {

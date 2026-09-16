@@ -46,6 +46,24 @@ function parseCorsOrigins(value) {
     .filter(Boolean)
 }
 
+function databaseNameFromMongoUrl(value) {
+  if (!value) return ''
+
+  try {
+    const pathname = new URL(value).pathname.replace(/^\/+/, '')
+    return decodeURIComponent(pathname.split('/')[0] || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function isValidDatabaseName(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 63
+    && !/[\/\\. "$*<>:|?]/.test(value)
+}
+
 function getEnvConfig() {
   const envFilePath = path.join(__dirname, '..', '.env')
   loadEnvFile(envFilePath)
@@ -54,6 +72,7 @@ function getEnvConfig() {
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInteger(process.env.PORT, 5000),
     mongoUrl: process.env.MONGO_URL || '',
+    mongoDbName: process.env.MONGO_DB_NAME?.trim() || '',
     dbMaxPoolSize: Math.max(parseInteger(process.env.DB_MAX_POOL_SIZE, 20), 1),
     dbMinPoolSize: Math.max(parseInteger(process.env.DB_MIN_POOL_SIZE, 0), 0),
     dbMaxIdleTimeMs: Math.max(parseInteger(process.env.DB_MAX_IDLE_TIME_MS, 30_000), 1_000),
@@ -77,6 +96,16 @@ function getEnvConfig() {
     missingKeys.push('MONGO_URL')
   }
 
+  const configuredDatabaseName = config.mongoDbName || databaseNameFromMongoUrl(config.mongoUrl)
+
+  if (config.mongoDbName && !isValidDatabaseName(config.mongoDbName)) {
+    missingKeys.push('MONGO_DB_NAME (valid MongoDB database name)')
+  }
+
+  if (config.nodeEnv === 'production' && !configuredDatabaseName) {
+    missingKeys.push('MONGO_DB_NAME (or a database name in MONGO_URL)')
+  }
+
   if (config.nodeEnv === 'production' && (!config.corsOrigins.length || config.corsOrigins.includes('*'))) {
     missingKeys.push('CORS_ORIGIN')
   }
@@ -93,5 +122,7 @@ function getEnvConfig() {
 }
 
 module.exports = {
+  databaseNameFromMongoUrl,
   getEnvConfig,
+  isValidDatabaseName,
 }

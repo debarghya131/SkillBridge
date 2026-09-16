@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Check, Clock3, Rocket, Search, UserPlus, Users, X } from 'lucide-react'
+import { Check, Clock3, Rocket, Search, UserPlus, X } from 'lucide-react'
 import { fetchNetworkProfile, inviteNetworkStudentToTeam, sendNetworkConnection } from '../studentApi'
 import { toast } from '../../ui/toast'
 import { useNetworkState } from './NetworkContext'
@@ -37,6 +37,17 @@ export default function NetworkHome() {
     return matchesText && (skill === 'All skills' || person.skills?.includes(skill))
   })
   const openOwnPosts = (networkState?.myTeamPosts || []).filter(post => post.status === 'open' && post.filled < post.slots)
+  const teamRequestByStudentId = useMemo(() => {
+    const requests = new Map()
+    for (const post of networkState?.myTeamPosts || []) {
+      for (const request of post.requests || []) {
+        if (!request.student?.id || !['pending', 'accepted'].includes(request.status)) continue
+        const current = requests.get(request.student.id)
+        if (!current || request.status === 'accepted') requests.set(request.student.id, { ...request, postTitle: post.title })
+      }
+    }
+    return requests
+  }, [networkState?.myTeamPosts])
 
   async function viewProfile(person) {
     const request = ++profileRequest.current
@@ -56,6 +67,10 @@ export default function NetworkHome() {
 
   async function connect(person) {
     if (person.relationship.status === 'incoming_pending') { setActiveTab('my-network'); return }
+    if (person.demoData) {
+      toast.info('Demo profiles are read-only and cannot receive connection requests.', { title: 'Demo Profile' })
+      return
+    }
     setBusy(`connect-${person.id}`)
     try {
       await sendNetworkConnection(token, person.id)
@@ -66,6 +81,15 @@ export default function NetworkHome() {
   }
 
   function openInvite(person) {
+    const existingRequest = teamRequestByStudentId.get(person.id)
+    if (existingRequest) {
+      toast.info(existingRequest.status === 'accepted' ? `${person.name} is already a member of ${existingRequest.postTitle}.` : `${person.name} already has a pending team-up request.`, { title: 'Team-Up Status' })
+      return
+    }
+    if (person.demoData) {
+      toast.info('Demo profiles are read-only and cannot receive team invitations.', { title: 'Demo Profile' })
+      return
+    }
     if (!openOwnPosts.length) {
       toast.info('Create an open team-up before inviting students.')
       setActiveTab('team-up')
@@ -88,15 +112,22 @@ export default function NetworkHome() {
   }
 
   return <div className="network-page">
-    <header className="network-page-header"><div><span>Peer discovery</span><h1>Find students by proven skills</h1><p>Profiles come from active SkillBridge accounts and update with their verified work.</p></div><div className="network-header-stat"><Users size={18}/><strong>{people.length}</strong><small>available peers</small></div></header>
     <div className="network-toolbar"><label><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search name, location, or skill" /></label><NetworkSkillPicker value={skill} options={skills} onChange={setSkill} /></div>
     <div className="network-card-grid">{filtered.map(person => {
       const status = person.relationship.status
       const requestSent = status === 'outgoing_pending'
+      const teamRequest = teamRequestByStudentId.get(person.id)
+      const teamAction = teamRequest?.status === 'accepted'
+        ? <button className="network-team-invite-button" disabled><Check size={14}/>Joined your team</button>
+        : teamRequest?.source === 'application'
+          ? <button className="network-team-invite-button" disabled><Clock3 size={14}/>Applied to your team</button>
+          : teamRequest
+            ? <button className="network-team-invite-button" disabled><Clock3 size={14}/>Invitation sent</button>
+            : <button className="network-team-invite-button" disabled={Boolean(busy)} onClick={() => openInvite(person)}><Rocket size={14}/>Invite to Team-Up</button>
       return <article className="network-person-card" key={person.id}>
-        <header><div className="network-avatar">{person.avatar ? <img src={person.avatar} alt=""/> : person.name[0]}</div><div><h2>{person.name}</h2><p>{person.role}</p></div><span className="network-score">{person.trustScore}</span></header>
+        <header><div className="network-avatar">{person.avatar ? <img src={person.avatar} alt=""/> : person.name[0]}</div><div><h2>{person.name}{person.demoData && <span className="demo-data-badge">Demo</span>}</h2><p>{person.role}</p></div><span className="network-score">{person.trustScore}</span></header>
         <p className="network-location">{person.location}</p><div className="network-tags">{person.skills.slice(0, 5).map(item => <span key={item}>{item}</span>)}</div>
-        <div className="network-card-actions"><button className="btn-secondary" disabled={busy === `profile-${person.id}`} onClick={() => viewProfile(person)}>View profile</button><button className="btn-primary" disabled={requestSent || Boolean(busy)} onClick={() => connect(person)}>{status === 'outgoing_pending' ? <><Clock3 size={14}/>Sent</> : status === 'incoming_pending' ? <><Check size={14}/>Respond</> : <><UserPlus size={14}/>Connect</>}</button><button className="network-team-invite-button" disabled={Boolean(busy)} onClick={() => openInvite(person)}><Rocket size={14}/>Invite to Team-Up</button></div>
+        <div className="network-card-actions"><button className="btn-secondary" disabled={busy === `profile-${person.id}`} onClick={() => viewProfile(person)}>View profile</button><button className="btn-primary" disabled={requestSent || Boolean(busy)} onClick={() => connect(person)}>{status === 'outgoing_pending' ? <><Clock3 size={14}/>Request sent</> : status === 'incoming_pending' ? <><Check size={14}/>Respond</> : <><UserPlus size={14}/>Connect</>}</button>{teamAction}</div>
       </article>
     })}</div>
     {!filtered.length && <div className="network-empty"><Search size={22}/><strong>No matching students</strong><p>Change the search or skill filter.</p></div>}

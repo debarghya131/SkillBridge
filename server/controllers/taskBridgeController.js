@@ -11,6 +11,9 @@ const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../
 const { validateAssignment, isLateSubmission } = require('../utils/taskValidation')
 const { activeStreak, isDiscoverableVerifiedSkill, publishedSkillNames } = require('../utils/skillPolicy')
 const { synchronizeCompanyGigMetrics } = require('../utils/companyGigMetrics')
+const { DEMO_SUBMISSIONS } = require('../config/showcaseFixtures')
+const { assertNotDemo } = require('../utils/demoProtection')
+const { saveDocumentsAtomically } = require('../utils/transaction')
 
 const TASK_TYPE_VALUES = new Set(['live_project', 'code', 'mcq', 'written', 'mixed', 'design', 'data_analysis', 'case_study', 'research', 'presentation'])
 const TASK_DETAIL_KEYS = new Set([
@@ -504,6 +507,8 @@ async function sendCompanyInterviewTask(token, payload) {
   const company = await findCompanyByToken(token)
   const gigTitle = typeof payload?.gigTitle === 'string' ? payload.gigTitle.trim() : ''
   const studentId = typeof payload?.studentId === 'string' ? payload.studentId.trim() : ''
+  assertNotDemo(studentId)
+  assertNotDemo(payload?.companyGigId)
   const message = typeof payload?.message === 'string' ? payload.message.trim() : ''
   const taskTitle = typeof payload?.taskTitle === 'string' ? payload.taskTitle.trim() : ''
   const taskType = TASK_TYPE_VALUES.has(payload?.taskType) ? payload.taskType : 'mixed'
@@ -628,7 +633,6 @@ async function sendCompanyInterviewTask(token, payload) {
 
   student.gigState = student.gigState || {}
   student.gigState.opportunities = [...currentOpportunities, opportunity]
-  await student.save()
 
   company.taskReviewGuides = {
     ...company.taskReviewGuides,
@@ -652,7 +656,7 @@ async function sendCompanyInterviewTask(token, payload) {
     : item)
   gigManagementState.recentActivity = [`Interview task sent to ${student.name} for ${canonicalGigTitle}.`, ...gigManagementState.recentActivity].slice(0, 8)
   company.gigManagementState = reduceTemplateState(gigManagementState, buildDefaultCompanyGigManagementState())
-  await company.save()
+  await saveDocumentsAtomically([student, company])
 
   return { opportunity, gigManagementState: sanitizeGigManagementState(company.gigManagementState), alreadyExists: false }
 }
@@ -775,9 +779,9 @@ async function getCompanyTaskSubmissions(token) {
     companyId: company._id,
   }).sort({ submittedAt: -1, updatedAt: -1 })
 
-  return submissions.map(submission => ({ ...sanitizeTaskSubmission(submission, { includeStudentProfile: false }),
+  return [...submissions.map(submission => ({ ...sanitizeTaskSubmission(submission, { includeStudentProfile: false }),
     reviewGuide: company.taskReviewGuides?.[`${submission.studentId}:${submission.opportunityId}`] || {},
-  }))
+  })), ...DEMO_SUBMISSIONS]
 }
 
 async function syncCompanyPipelineAfterStudentSubmission(assignment, submission, recordActivity) {

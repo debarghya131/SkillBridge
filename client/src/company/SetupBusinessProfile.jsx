@@ -29,7 +29,12 @@ function calcCompletion(profile) {
   return Math.round((completed / checks.length) * 100)
 }
 
-export default function SetupBusinessProfile({ profile, onSave }) {
+export default function SetupBusinessProfile({ profile, onSave, onDeleteAccount }) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [confirmation, setConfirmation] = useState('')
+  const [password, setPassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [draft, setDraft] = useState(profile)
   const [view, setView] = useState('Business details')
   const [isSaving, setIsSaving] = useState(false)
@@ -320,6 +325,39 @@ export default function SetupBusinessProfile({ profile, onSave }) {
           <textarea value={draft.requiredSkills} onChange={e => updateField('requiredSkills', e.target.value)} rows={3} placeholder="React, Node.js, Canva, Power BI..." style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit', resize: 'none' }} />
         </label>
 
+        {onDeleteAccount && <section style={{ marginTop: 24, padding: 12, border: '1px solid #fecaca', borderRadius: 8, background: '#fff7f7' }}>
+          {!deleteOpen ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: '0 0 3px' }}>Delete company account</h3>
+              <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13 }}>Permanently delete your business profile and all associated data. This cannot be undone.</p>
+            </div>
+            <button type="button" className="btn-secondary" style={{ minHeight: 36, padding: '8px 14px', fontSize: 13, whiteSpace: 'nowrap' }} disabled={isSaving || isSavingLogo || isSavingVideo} onClick={() => setDeleteOpen(true)}>Delete company account</button>
+          </div> : <>
+          <h3 style={{ margin: '0 0 6px' }}>Delete company account</h3>
+          <p style={{ margin: '0 0 14px' }}>This permanently removes your business profile, GIGs, interview tasks, submissions, project workspace, and payment records, including linked student invitations and earnings records. This cannot be undone.</p>
+          <form style={{ display: 'grid', gap: 14, width: '100%', maxWidth: 560 }} onSubmit={async event => {
+            event.preventDefault()
+            if (deleting || confirmation !== 'DELETE' || !password) return
+            setDeleting(true)
+            setDeleteError('')
+            try { await onDeleteAccount({ confirmation, password }) }
+            catch (error) { setDeleteError(error.message || 'Could not delete the account.'); setDeleting(false) }
+          }}>
+            <label style={{ display: 'grid', gap: 6, color: '#7f1d1d', fontSize: 13, fontWeight: 700 }}>
+              Type DELETE to confirm
+              <input required type="text" name="company-delete-confirmation" value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={deleting} autoComplete="one-time-code" inputMode="text" spellCheck={false} placeholder="DELETE" style={{ boxSizing: 'border-box', width: '100%', minHeight: 40, padding: '9px 11px', border: '1px solid #fca5a5', borderRadius: 7, background: '#fff', color: 'var(--dark)', font: 'inherit' }} />
+            </label>
+            <label style={{ display: 'grid', gap: 6, color: '#7f1d1d', fontSize: 13, fontWeight: 700 }}>
+              Current password
+              <input required type="password" name="company-delete-current-password" value={password} onChange={event => setPassword(event.target.value)} disabled={deleting} autoComplete="current-password" placeholder="Enter your current password" style={{ boxSizing: 'border-box', width: '100%', minHeight: 40, padding: '9px 11px', border: '1px solid #fca5a5', borderRadius: 7, background: '#fff', color: 'var(--dark)', font: 'inherit' }} />
+            </label>
+            {deleteError && <p role="alert" style={{ margin: 0, color: '#b91c1c' }}>{deleteError}</p>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button type="button" className="btn-secondary" style={{ minHeight: 36, padding: '8px 14px', fontSize: 13 }} disabled={deleting} onClick={() => { setDeleteOpen(false); setPassword(''); setConfirmation(''); setDeleteError('') }}>Cancel</button>
+              <button type="submit" className="btn-primary" style={{ minHeight: 36, padding: '8px 14px', fontSize: 13, background: '#b91c1c' }} disabled={deleting || confirmation !== 'DELETE' || !password}>{deleting ? 'Deleting…' : 'Permanently delete account'}</button>
+            </div>
+          </form></>}
+        </section>}
         <div className="business-profile-save-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 18, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>

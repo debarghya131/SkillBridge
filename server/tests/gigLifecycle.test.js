@@ -20,7 +20,7 @@ test('student tabs follow selection and completion without persisting derived ac
   t.mock.method(TaskSubmission, 'find', () => ({ sort: async () => [submission] }))
 
   let state = await getStudentGigState('student-session')
-  assert.equal(state.activeGigBase.length, 0)
+  assert.equal(state.activeGigBase.filter(item => !item.demoData).length, 0)
   assert.equal(state.opportunities[1].taskSubmissionStatus, undefined, 'same titles across companies must not share results')
   submission.status = 'selected'
   state = await acceptOpportunity('student-session', 1)
@@ -31,16 +31,16 @@ test('student tabs follow selection and completion without persisting derived ac
   submission.status = 'needs_revision'
   submission.revisionReturnStatus = 'delivered'
   state = await getStudentGigState('student-session')
-  assert.equal(state.activeGigBase.length, 1, 'delivery revision stays in Active GIGs')
+  assert.equal(state.activeGigBase.filter(item => !item.demoData).length, 1, 'delivery revision stays in Active GIGs')
   submission.revisionReturnStatus = 'submitted'
   state = await getStudentGigState('student-session')
-  assert.equal(state.activeGigBase.length, 0, 'interview revision is not paid project work')
+  assert.equal(state.activeGigBase.filter(item => !item.demoData).length, 0, 'interview revision is not paid project work')
 
   student.gigState.activeGigBase = state.activeGigBase
   submission.status = 'completed'
   state = await getStudentGigState('student-session')
-  assert.equal(state.activeGigBase.length, 0)
-  assert.equal(state.completedGigs.length, 1)
+  assert.equal(state.activeGigBase.filter(item => !item.demoData).length, 0)
+  assert.equal(state.completedGigs.filter(item => !item.demoData).length, 1)
   assert.equal(state.opportunities[0].status, 'accepted')
   assert.equal(state.opportunities[0].taskSubmissionStatus, 'completed')
 })
@@ -53,8 +53,8 @@ test('closing one public listing does not hide its invitation or completed histo
   t.mock.method(Company, 'find', () => ({ select: () => ({ lean: async () => [{ _id: 'other-company', businessName: 'Other', gigManagementState: { gigs: [{ id: 2, title: 'Still hiring', status: 'Hiring' }] } }] }) }))
   t.mock.method(TaskSubmission, 'find', () => ({ sort: async () => [{ opportunityId: 10, companyId: 'closed-company', companyGigId: 1, gigTitle: 'Closed GIG', status: 'completed' }] }))
   const state = await getStudentGigState('s')
-  assert.equal(state.opportunities.length, 1)
-  assert.equal(state.completedGigs.length, 1)
+  assert.equal(state.opportunities.filter(item => !item.demoData).length, 1)
+  assert.equal(state.completedGigs.filter(item => !item.demoData).length, 1)
 })
 
 test('applied GIG history remains visible after the listing is no longer browseable', async t => {
@@ -72,8 +72,8 @@ test('applied GIG history remains visible after the listing is no longer browsea
 
   const state = await getStudentGigState('history-session')
 
-  assert.equal(state.browseGigs.length, 0)
-  assert.equal(state.appliedGigs.length, 1)
+  assert.equal(state.browseGigs.filter(item => !item.demoData).length, 0)
+  assert.equal(state.appliedGigs.filter(item => !item.demoData).length, 1)
   assert.equal(state.appliedGigs[0].title, 'Closed listing')
 })
 

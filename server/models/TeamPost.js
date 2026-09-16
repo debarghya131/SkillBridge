@@ -6,6 +6,9 @@ const joinRequestSchema = new mongoose.Schema({
   source: { type: String, enum: ['application', 'invitation'], default: 'application' },
   status: { type: String, enum: ['pending', 'accepted', 'declined', 'withdrawn'], default: 'pending' },
   respondedAt: { type: Date, default: null },
+  // Kept after a member leaves so accepted collaboration milestones remain
+  // auditable without treating a past team-up as an active membership.
+  acceptedAt: { type: Date, default: null },
 }, { timestamps: true })
 
 const teamPostSchema = new mongoose.Schema({
@@ -20,5 +23,9 @@ const teamPostSchema = new mongoose.Schema({
 }, { timestamps: true, optimisticConcurrency: true })
 
 teamPostSchema.index({ status: 1, createdAt: -1 })
+teamPostSchema.index({ owner: 1, createdAt: -1 })
+teamPostSchema.index({ 'requests.student': 1, 'requests.status': 1 })
+teamPostSchema.index({ 'requests.student': 1, createdAt: -1 })
+teamPostSchema.index({ 'requests.student': 1, 'requests.acceptedAt': 1 })
 
 module.exports = mongoose.models.TeamPost || mongoose.model('TeamPost', teamPostSchema)

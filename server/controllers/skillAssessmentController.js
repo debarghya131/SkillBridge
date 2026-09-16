@@ -5,13 +5,15 @@ const { findModelByActiveToken, getSessionTtlMs, buildAuthError } = require('../
 const { buildStudentSkillHubSkills, applyReviewedSkillAssessment } = require('./skillHubController')
 const { normalizeSubmissionLink } = require('./taskBridgeController')
 const { CHALLENGES, STAGES, dayKey, isVerifiedSkill, skillBrief } = require('../utils/skillPolicy')
+const { assertNotDemo, demoReadOnlyError } = require('../utils/demoProtection')
+const { DEMO_ASSESSMENTS, DEMO_SKILLS, clone } = require('../config/showcaseFixtures')
 
 const EVENTS = { verify: 'verify_completed', reverify: 'reverify_completed', upgrade: 'upgrade_completed', retain: 'retention_completed', challenge: 'challenge_completed' }
 const RUBRIC_WEIGHTS = { correctness: 40, evidence: 20, understanding: 20, testing: 10, communication: 10 }
 const findStudent = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
 
 function serialize(assessment) {
-  return { id: String(assessment._id), skillName: assessment.skillName, mode: assessment.mode, targetStage: assessment.targetStage,
+  return { id: String(assessment._id), demoData: assessment.demoData === true, skillName: assessment.skillName, mode: assessment.mode, targetStage: assessment.targetStage,
     challengeId: assessment.challengeId, evidenceLink: assessment.evidenceLink, response: assessment.response,
     status: assessment.status, feedback: assessment.feedback, createdAt: assessment.createdAt, reviewedAt: assessment.reviewedAt,
     earnedDay: assessment.earnedDay, brief: assessment.brief, rewardPoints: assessment.rewardPoints, rubric: assessment.rubric || null,
@@ -70,19 +72,24 @@ async function listStudentAssessments(token) {
     SkillAssessment.find({ studentId: student._id, status: { $in: ['pending', 'needs_revision'] } }).sort({ createdAt: -1 }).limit(100),
     SkillAssessment.find({ studentId: student._id, status: { $in: ['approved', 'rejected'] } }).sort({ createdAt: -1 }).limit(50),
   ])
-  return [...new Map([...open, ...recent].map(item => [String(item._id), item])).values()].map(serialize)
+  return [...[...new Map([...open, ...recent].map(item => [String(item._id), item])).values()].map(serialize), ...clone(DEMO_ASSESSMENTS)]
 }
 
 async function submitSkillAssessment(token, payload) {
   const student = await findStudent(token)
+  assertNotDemo(payload?.id)
+  const requestedSkillName = String(payload?.skillName || '').trim().toLowerCase()
+  const ownsRequestedSkill = buildStudentSkillHubSkills(student).some(item => item.name.toLowerCase() === requestedSkillName)
+  if (!ownsRequestedSkill && DEMO_SKILLS.some(item => item.name.toLowerCase() === requestedSkillName)) throw demoReadOnlyError()
   const values = validateAssessment(student, payload)
   const earnedDay = dayKey()
   const daily = ['retain', 'challenge'].includes(values.mode)
   const baseAttemptKey = values.attemptKey
+  const dailySubmissionKey = daily ? `${values.mode}:${earnedDay}` : ''
   if (daily) values.attemptKey = `${baseAttemptKey}:${earnedDay}`
-  if (!payload.id && daily && (student.skillHubState?.skillLog || []).some(item =>
-    item.earnedDay === earnedDay && item.eventType === EVENTS[values.mode] && item.skillName.toLowerCase() === values.skillName.toLowerCase()
-    && (values.mode !== 'challenge' || item.challengeId === values.challengeId))) throw buildAuthError('This task was already approved for today.', 409)
+  if (!payload.id && daily && (student.skillHubState?.skillLog || []).some(item => item.earnedDay === earnedDay && item.eventType === EVENTS[values.mode])) {
+    throw buildAuthError('A daily submission was already approved for today.', 409)
+  }
   try {
     if (payload.id) {
       if (!mongoose.isObjectIdOrHexString(payload.id)) throw buildAuthError('Invalid assessment ID')
@@ -95,13 +102,17 @@ async function submitSkillAssessment(token, payload) {
       if (!assessment) throw buildAuthError('This assessment cannot be revised', 409)
       return serialize(assessment)
     }
+    if (daily) {
+      const existingDailyOpen = await SkillAssessment.exists({ studentId: student._id, mode: values.mode, earnedDay, open: true })
+      if (existingDailyOpen) throw buildAuthError('A daily submission is already open for today. Revise it or wait for review.', 409)
+    }
     const existingOpen = await SkillAssessment.exists({
       studentId: student._id,
       ...(daily ? { $or: [{ attemptKey: values.attemptKey }, { attemptKey: baseAttemptKey, earnedDay }] } : { attemptKey: values.attemptKey }),
       status: { $in: ['pending', 'needs_revision'] },
     })
     if (existingOpen) throw buildAuthError('An assessment is already open. Revise the existing submission or wait for review.', 409)
-    return serialize(await SkillAssessment.create({ ...values, earnedDay, brief: skillBrief(values), studentId: student._id }))
+    return serialize(await SkillAssessment.create({ ...values, ...(daily ? { dailySubmissionKey } : {}), earnedDay, brief: skillBrief(values), studentId: student._id }))
   } catch (error) {
     if (error.code === 11000) throw buildAuthError('An assessment is already awaiting review. Refresh your history.', 409)
     throw error
@@ -122,6 +133,7 @@ async function reviewSkillAssessment(id, { status, feedback, reviewer, reviewerI
     if (reviewerId) query.assignedReviewerId = reviewerId
     const assessment = await SkillAssessment.findOne(query).session(session)
     if (!assessment) throw buildAuthError('Assessment is not pending', 409)
+    if (assessment.demoData) throw demoReadOnlyError()
     if (assessment.reviewHistory.length >= 50) throw buildAuthError('Assessment review limit reached. Open a new assessment.', 409)
     const student = await Student.findById(assessment.studentId).session(session)
     if (!student) throw buildAuthError('Student not found', 404)

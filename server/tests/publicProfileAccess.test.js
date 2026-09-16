@@ -29,6 +29,14 @@ test('public profile endpoints use the selected ID and enforce session and conta
   assert.equal((await getNetworkProfile('valid', targetId)).contactVisible, true)
   target.name = 'Updated target'
   assert.deepEqual(await getCompanyStudentProfile('valid', targetId), { id: targetId, name: 'Updated target', contactVisible: true })
+  const demoCompanyProfile = await getCompanyStudentProfile('valid', 'demo-student-1')
+  assert.equal(demoCompanyProfile.avatar, '/demo-network/aarav-sen.png')
+  assert.equal(demoCompanyProfile.contactVisible, true)
+  assert.equal(demoCompanyProfile.skills.every(skill => skill.verified && skill.stage), true)
+  const extendedDemoCompanyProfile = await getCompanyStudentProfile('valid', 'demo-student-5')
+  assert.equal(extendedDemoCompanyProfile.name, 'Ishita Rao')
+  assert.equal(extendedDemoCompanyProfile.avatar, '/demo-network/ishita-rao.png')
+  assert.equal(extendedDemoCompanyProfile.contactVisible, true)
   for (const read of [getNetworkProfile, getCompanyStudentProfile]) {
     await assert.rejects(read('', targetId), error => error.statusCode === 401)
     await assert.rejects(read('valid', 'invalid'), error => error.statusCode === 400)

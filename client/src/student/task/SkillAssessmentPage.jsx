@@ -10,12 +10,14 @@ const STATUS = { pending: 'Awaiting review', needs_revision: 'Revision requested
 const getIndiaDateKey = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
 
 export default function SkillAssessmentPage({ context }) {
+  const isDemo = context.demoData === true
+  const demoAssessment = context.demoAssessment || null
   const [tab, setTab] = useState('Submission')
-  const [history, setHistory] = useState([])
+  const [history, setHistory] = useState(() => demoAssessment ? [demoAssessment] : [])
   const [hub, setHub] = useState(null)
-  const [response, setResponse] = useState('')
-  const [evidenceLink, setEvidenceLink] = useState('')
-  const [revisionId, setRevisionId] = useState('')
+  const [response, setResponse] = useState(() => demoAssessment?.response || '')
+  const [evidenceLink, setEvidenceLink] = useState(() => demoAssessment?.evidenceLink || '')
+  const [revisionId, setRevisionId] = useState(() => demoAssessment?.status === 'needs_revision' ? demoAssessment.id : '')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -36,6 +38,14 @@ export default function SkillAssessmentPage({ context }) {
   useEffect(() => {
     let cancelled = false
     async function load() {
+      if (isDemo) {
+        setHistory(demoAssessment ? [demoAssessment] : [])
+        setResponse(demoAssessment?.response || '')
+        setEvidenceLink(demoAssessment?.evidenceLink || '')
+        setRevisionId(demoAssessment?.status === 'needs_revision' ? demoAssessment.id : '')
+        setLoading(false)
+        return
+      }
       const currentDay = getIndiaDateKey()
       setToday(currentDay)
       setLoading(true)
@@ -70,19 +80,19 @@ export default function SkillAssessmentPage({ context }) {
     }
     load()
     return () => { cancelled = true }
-  }, [context.skillName, context.challengeId, matchesContext, mode, targetStage, retry])
+  }, [context.skillName, context.challengeId, demoAssessment, isDemo, matchesContext, mode, targetStage, retry])
 
   useEffect(() => {
-    if (!draftKey || loading || busy) return
+    if (isDemo || !draftKey || loading || busy) return
     try {
       sessionStorage.setItem(draftKey, JSON.stringify({ version: 'skill-v1', savedAt: Date.now(), submissionContent: response, submissionLink: evidenceLink, note: revisionId }))
       setDraftNotice('Draft saved in this browser tab')
     } catch { setDraftNotice('Draft could not be saved on this device') }
-  }, [draftKey, response, evidenceLink, revisionId, loading, busy])
+  }, [draftKey, response, evidenceLink, revisionId, loading, busy, isDemo])
 
   async function submit(event) {
     event.preventDefault()
-    if (operation.current || pending) return
+    if (isDemo || operation.current || pending) return
     operation.current = true
     setBusy(true)
     setError('')
@@ -111,13 +121,12 @@ export default function SkillAssessmentPage({ context }) {
         <p className="work-muted">Human review required. Verification and TrustScore changes occur only after approval.</p>
       </section>
       <form className="assessment-form" onSubmit={submit}>
-        {pending ? <div className="assessment-awaiting" role="status"><Clock3 size={22} /><div><strong>Submission under review</strong><p>Your evidence has been received and is awaiting a reviewer decision.</p></div></div> : <fieldset disabled={busy}>
+        {pending ? <div className="assessment-awaiting" role="status"><Clock3 size={22} /><div><strong>Submission under review</strong><p>Your evidence has been received and is awaiting a reviewer decision.</p></div></div> : <fieldset disabled={busy || isDemo}>
           {revisionId && <p>Revising a reviewed assessment</p>}
           <label>Evidence link (optional)<input type="url" maxLength={500} value={evidenceLink} onChange={event => setEvidenceLink(event.target.value)} placeholder="https://github.com/yourname/project" /></label>
           <label>Your response<textarea aria-label="Your response" required minLength={50} maxLength={10000} rows={10} value={response} onChange={event => setResponse(event.target.value)} /></label>
           <small>{response.length} / 10,000 characters</small>
-          <button type="submit" className="btn-primary" disabled={busy || response.trim().length < 50}><Send size={16} /> {busy ? 'Submitting...' : revisionId ? 'Resubmit for review' : 'Submit for review'}</button>
-          <p role="status" className="work-muted">{draftNotice}</p>
+          {!isDemo && <><button type="submit" className="btn-primary" disabled={busy || response.trim().length < 50}><Send size={16} /> {busy ? 'Submitting...' : revisionId ? 'Resubmit for review' : 'Submit for review'}</button><p role="status" className="work-muted">{draftNotice}</p></>}
         </fieldset>}
       </form>
     </div> : <section className="assessment-history">
@@ -130,7 +139,7 @@ export default function SkillAssessmentPage({ context }) {
         {item.brief && <details><summary>Assigned requirements</summary><p>{item.brief}</p></details>}
         {item.status === 'approved' && <p>Trust awarded: {item.rewardPoints || 0}</p>}
         {item.reviewHistory?.length > 1 && <details><summary>Previous reviews</summary>{item.reviewHistory.slice(0, -1).map((review, index) => <p key={index}>{new Date(review.reviewedAt).toLocaleDateString('en-IN')}: {review.feedback}</p>)}</details>}
-        {item.status === 'needs_revision' && !pending && <button className="btn-secondary" disabled={busy} onClick={() => { setRevisionId(item.id); setResponse(item.response); setEvidenceLink(item.evidenceLink); setTab('Submission') }}>Revise submission</button>}
+        {item.status === 'needs_revision' && !pending && !isDemo && <button className="btn-secondary" disabled={busy} onClick={() => { setRevisionId(item.id); setResponse(item.response); setEvidenceLink(item.evidenceLink); setTab('Submission') }}>Revise submission</button>}
       </article>)}
     </section>}
   </section>

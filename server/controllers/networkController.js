@@ -5,12 +5,41 @@ const TeamPost = require('../models/TeamPost')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { hasIdentityVerificationProof } = require('../utils/verification')
 const { isDiscoverableVerifiedSkill, publishedSkillNames } = require('../utils/skillPolicy')
+const { DEMO_NETWORK_STATE, clone, demoNetworkProfile } = require('../config/showcaseFixtures')
 
 const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
 const clean = (value, max) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, max)
 const idOf = value => String(value?._id || value || '')
 const pairKey = (left, right) => [idOf(left), idOf(right)].sort().join(':')
 const NETWORK_CARD_FIELDS = '_id name avatar location skills skillHubSkills skillHubState.streaks trustScore trustScoreState.events.key trustScoreState.events.type trustScoreState.events.referenceId trustScoreState.events.occurredAt contactMethod verificationMethod createdAt +identityVerificationHash'
+
+async function syncTrustAchievements(student) {
+  if (!student?._id) return false
+  const [connections, teamUps] = await Promise.all([
+    NetworkConnection.countDocuments({ status: 'accepted', $or: [{ requester: student._id }, { recipient: student._id }] }),
+    TeamPost.countDocuments(teamUpParticipationQuery(student._id)),
+  ])
+  const { recordNetworkAchievementMilestones } = require('./trustScoreController')
+  if (!recordNetworkAchievementMilestones(student, { connections, teamUps })) return false
+  await student.save()
+  return true
+}
+
+async function syncTrustAchievementsFor(students) {
+  const unique = [...new Map(students.filter(Boolean).map(student => [idOf(student), student])).values()]
+  // The relationship decision has already persisted when this runs. A stale
+  // TrustScore document must not turn a successful connection/team acceptance
+  // into a client-visible failure; the idempotent reconciliation retries later.
+  return Promise.allSettled(unique.map(syncTrustAchievements))
+}
+
+function teamUpParticipationQuery(studentId) {
+  const successfulRequest = { $or: [{ status: 'accepted' }, { acceptedAt: { $ne: null } }] }
+  return { $or: [
+    { owner: studentId, requests: { $elemMatch: successfulRequest } },
+    { requests: { $elemMatch: { student: studentId, ...successfulRequest } } },
+  ] }
+}
 
 function requireObjectId(value, label = 'record') {
   if (!mongoose.isValidObjectId(value)) throw buildAuthError(`Invalid ${label}`, 400)
@@ -75,52 +104,70 @@ function normalizeTeamPayload(payload, partial = false) {
   return result
 }
 
-function serializePost(post, viewerId) {
+function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none' })) {
   const raw = post.toObject ? post.toObject() : post
   const accepted = (raw.requests || []).filter(item => item.status === 'accepted')
   const ownRequest = (raw.requests || []).find(item => idOf(item.student) === idOf(viewerId))
+  const peerProfile = (person, options = {}) => ({ ...profileFor(person, { compact: true, ...options }), relationship: relationshipFor(idOf(person)) })
   return {
     id: idOf(raw), title: raw.title, description: raw.description, type: raw.type,
     requiredSkills: raw.requiredSkills || [], slots: raw.slots, filled: accepted.length,
-    status: raw.status, createdAt: raw.createdAt, owner: profileFor(raw.owner, { compact: true }),
+    status: raw.status, createdAt: raw.createdAt, owner: peerProfile(raw.owner),
     joinStatus: ownRequest?.status || null, joinRequestId: idOf(ownRequest),
     requestSource: ownRequest?.source || null,
     requests: idOf(raw.owner) === idOf(viewerId) ? (raw.requests || []).map(item => ({
       id: idOf(item), message: item.message, status: item.status, source: item.source || 'application', createdAt: item.createdAt,
-      student: profileFor(item.student, { includeContact: item.status === 'accepted', compact: true }),
+      student: peerProfile(item.student, { includeContact: item.status === 'accepted' }),
     })) : [],
-    members: accepted.map(item => profileFor(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId), compact: true })),
+    // A member never needs to receive their own card. The owner is returned separately.
+    members: accepted.filter(item => idOf(item.student) !== idOf(viewerId)).map(item => peerProfile(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId) })),
   }
 }
 
 async function getStudentNetworkState(token) {
   const student = await findStudentByToken(token)
+  // Existing accounts can cross a threshold before this feature is deployed.
+  // Reconcile on Network load so they receive the same one-time award.
+  await syncTrustAchievementsFor([student])
   const viewerId = student._id
-  const [connections, posts] = await Promise.all([
+  const [connections, relatedPosts, browsePosts, acceptedTeamUps] = await Promise.all([
     NetworkConnection.find({ $or: [{ requester: viewerId }, { recipient: viewerId }], status: { $in: ['pending', 'accepted'] } }).lean(),
-    TeamPost.find({ $or: [{ status: 'open' }, { owner: viewerId }, { 'requests.student': viewerId }] })
+    // A student's own posts, applications, invitations and memberships must
+    // never be displaced by newer public listings in the browse feed.
+    TeamPost.find({ $or: [{ owner: viewerId }, { 'requests.student': viewerId }] })
+      .sort({ createdAt: -1 }).limit(120)
+      .populate({ path: 'owner', select: NETWORK_CARD_FIELDS })
+      .populate({ path: 'requests.student', select: NETWORK_CARD_FIELDS })
+      .lean(),
+    // Browse is intentionally bounded; the client has a compact feed rather
+    // than treating this state endpoint as an unbounded search API.
+    TeamPost.find({ status: 'open', owner: { $ne: viewerId } })
       .sort({ createdAt: -1 }).limit(60)
       .populate({ path: 'owner', select: NETWORK_CARD_FIELDS })
       .populate({ path: 'requests.student', select: NETWORK_CARD_FIELDS })
       .lean(),
+    TeamPost.countDocuments(teamUpParticipationQuery(viewerId)),
   ])
+  const posts = [...new Map([...relatedPosts, ...browsePosts].map(post => [idOf(post), post])).values()]
   const peerIds = connections.map(item => idOf(item.requester) === idOf(viewerId) ? item.recipient : item.requester)
   const [relationshipPeers, suggestions] = await Promise.all([
     Student.find({ _id: { $in: peerIds } }).select(NETWORK_CARD_FIELDS).lean(),
     Student.find({ _id: { $nin: [viewerId, ...peerIds] } }).select(NETWORK_CARD_FIELDS).sort({ trustScore: -1, createdAt: -1 }).limit(40).lean(),
   ])
-  const students = [...relationshipPeers, ...suggestions]
   const relationships = new Map()
   for (const item of connections) {
     const requester = idOf(item.requester)
     const otherId = requester === idOf(viewerId) ? idOf(item.recipient) : requester
     relationships.set(otherId, { connectionId: idOf(item), status: item.status === 'accepted' ? 'connected' : requester === idOf(viewerId) ? 'outgoing_pending' : 'incoming_pending' })
   }
+  const relationshipFor = personId => relationships.get(idOf(personId)) || { status: 'none' }
+  const students = [...relationshipPeers, ...suggestions]
   const people = students.map(item => ({ ...profileFor(item, { includeContact: relationships.get(idOf(item))?.status === 'connected', compact: true }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
   const findPerson = id => people.find(person => person.id === idOf(id))
-  const serializedPosts = posts.map(post => serializePost(post, viewerId))
-  return {
+  const serializedPosts = posts.map(post => serializePost(post, viewerId, relationshipFor))
+  const real = {
     viewerId: idOf(viewerId), suggestions: people.filter(item => item.relationship.status !== 'connected'),
+    achievementProgress: { connections: connections.filter(item => item.status === 'accepted').length, teamUps: acceptedTeamUps },
     connected: people.filter(item => item.relationship.status === 'connected'),
     incomingConnections: connections.filter(item => item.status === 'pending' && idOf(item.recipient) === idOf(viewerId)).map(item => ({ id: idOf(item), profile: findPerson(item.requester), createdAt: item.createdAt })),
     outgoingConnections: connections.filter(item => item.status === 'pending' && idOf(item.requester) === idOf(viewerId)).map(item => ({ id: idOf(item), profile: findPerson(item.recipient), createdAt: item.createdAt })),
@@ -130,10 +177,25 @@ async function getStudentNetworkState(token) {
     incomingTeamInvitations: serializedPosts.filter(item => item.owner.id !== idOf(viewerId) && item.requestSource === 'invitation' && item.joinStatus === 'pending'),
     memberships: serializedPosts.filter(item => item.owner.id !== idOf(viewerId) && item.joinStatus === 'accepted'),
   }
+  const demo = clone(DEMO_NETWORK_STATE)
+  return {
+    ...real,
+    suggestions: [...real.suggestions, ...demo.suggestions],
+    connected: [...real.connected, ...demo.connections],
+    incomingConnections: [...real.incomingConnections, ...demo.incomingRequests],
+    outgoingConnections: [...real.outgoingConnections, ...demo.outgoingRequests],
+    openTeamPosts: [...real.openTeamPosts, ...demo.openTeamPosts],
+    myTeamPosts: [...real.myTeamPosts, ...demo.myTeamPosts],
+    sentTeamRequests: [...real.sentTeamRequests, ...demo.sentTeamRequests],
+    incomingTeamInvitations: [...real.incomingTeamInvitations, ...demo.incomingTeamInvitations],
+    memberships: [...real.memberships, ...demo.memberships],
+  }
 }
 
 async function getNetworkProfile(token, studentId) {
   const viewer = await findStudentByToken(token)
+  const demoProfile = DEMO_NETWORK_STATE.people.find(item => item.id === studentId)
+  if (demoProfile) return clone(demoNetworkProfile(demoProfile))
   requireObjectId(studentId, 'student ID')
   const target = await Student.findById(studentId).lean()
   if (!target) throw buildAuthError('Student profile not found', 404)
@@ -166,6 +228,10 @@ async function decideConnectionRequest(token, connectionId, decision) {
   const connection = await NetworkConnection.findOne({ _id: connectionId, recipient: student._id, status: 'pending' })
   if (!connection) throw buildAuthError('Pending connection request not found', 404)
   connection.status = decision === 'accept' ? 'accepted' : 'declined'; connection.respondedAt = new Date(); await connection.save()
+  if (decision === 'accept') {
+    const requester = await Student.findById(connection.requester)
+    await syncTrustAchievementsFor([student, requester])
+  }
   return { id: idOf(connection), status: connection.status }
 }
 
@@ -199,7 +265,7 @@ async function deleteTeamPost(token, postId) {
   const student = await findStudentByToken(token); requireObjectId(postId, 'team-up ID')
   const post = await TeamPost.findOne({ _id: postId, owner: student._id })
   if (!post) throw buildAuthError('Team-up post not found', 404)
-  if (post.requests.some(item => item.status === 'accepted')) throw buildAuthError('Close posts with accepted members instead of deleting them', 409)
+  if (post.requests.some(item => item.status === 'accepted' || item.acceptedAt)) throw buildAuthError('Close posts with accepted members instead of deleting them', 409)
   await post.deleteOne(); return { removed: true }
 }
 
@@ -210,6 +276,7 @@ async function requestToJoinTeam(token, postId, payload) {
   const post = await TeamPost.findById(postId)
   if (!post || post.status !== 'open') throw buildAuthError('This team-up is no longer open', 409)
   if (idOf(post.owner) === idOf(student)) throw buildAuthError('You cannot join your own team-up')
+  if (post.requests.filter(item => item.status === 'accepted').length >= post.slots) throw buildAuthError('This team is already full', 409)
   const existing = post.requests.find(item => idOf(item.student) === idOf(student))
   if (existing && ['pending', 'accepted'].includes(existing.status)) throw buildAuthError(existing.source === 'invitation' ? 'You already have an invitation for this team-up' : 'You already requested to join this team-up', 409)
   if (existing) Object.assign(existing, { message, source: 'application', status: 'pending', respondedAt: null })
@@ -231,11 +298,13 @@ async function decideTeamRequest(token, postId, requestId, decision) {
   const accepted = post.requests.filter(item => item.status === 'accepted').length
   if (decision === 'accept' && (post.status !== 'open' || accepted >= post.slots)) throw buildAuthError('This team is already full', 409)
   request.status = decision === 'accept' ? 'accepted' : 'declined'; request.respondedAt = new Date()
+  if (decision === 'accept') request.acceptedAt = request.respondedAt
   if (decision === 'accept' && accepted + 1 >= post.slots) post.status = 'closed'
   try { await post.save() } catch (error) {
     if (error?.name === 'VersionError') throw buildAuthError('This team-up changed. Refresh and try again.', 409)
     throw error
   }
+  if (decision === 'accept') await syncTrustAchievementsFor([owner, await Student.findById(request.student)])
   return { id: idOf(post), status: request.status }
 }
 
@@ -245,6 +314,21 @@ async function withdrawTeamRequest(token, postId) {
   const request = post?.requests.find(item => idOf(item.student) === idOf(student))
   if (!request || request.status !== 'pending' || request.source === 'invitation') throw buildAuthError('Pending join request not found', 404)
   request.status = 'withdrawn'; request.respondedAt = new Date(); await post.save(); return { withdrawn: true }
+}
+
+async function leaveTeam(token, postId) {
+  const student = await findStudentByToken(token); requireObjectId(postId, 'team-up ID')
+  const post = await TeamPost.findOne({ _id: postId, 'requests.student': student._id })
+  const request = post?.requests.find(item => idOf(item.student) === idOf(student))
+  if (!request || request.status !== 'accepted') throw buildAuthError('Active team membership not found', 404)
+  request.status = 'withdrawn'
+  request.respondedAt = new Date()
+  if (!request.acceptedAt) request.acceptedAt = request.respondedAt
+  try { await post.save() } catch (error) {
+    if (error?.name === 'VersionError') throw buildAuthError('This team-up changed. Refresh and try again.', 409)
+    throw error
+  }
+  return { left: true, status: post.status }
 }
 
 async function inviteStudentToTeam(token, postId, studentId, payload) {
@@ -276,12 +360,14 @@ async function decideTeamInvitation(token, postId, requestId, decision) {
   const accepted = post.requests.filter(item => item.status === 'accepted').length
   if (decision === 'accept' && (post.status !== 'open' || accepted >= post.slots)) throw buildAuthError('This team is already full', 409)
   request.status = decision === 'accept' ? 'accepted' : 'declined'; request.respondedAt = new Date()
+  if (decision === 'accept') request.acceptedAt = request.respondedAt
   if (decision === 'accept' && accepted + 1 >= post.slots) post.status = 'closed'
   try { await post.save() } catch (error) {
     if (error?.name === 'VersionError') throw buildAuthError('This team-up changed. Refresh and try again.', 409)
     throw error
   }
+  if (decision === 'accept') await syncTrustAchievementsFor([student, await Student.findById(post.owner)])
   return { id: idOf(post), status: request.status }
 }
 
-module.exports = { createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile, getStudentNetworkState, inviteStudentToTeam, normalizeTeamPayload, pairKey, profileFor, removeConnection, requestToJoinTeam, sendConnectionRequest, updateTeamPost, withdrawTeamRequest }
+module.exports = { createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile, getStudentNetworkState, inviteStudentToTeam, leaveTeam, normalizeTeamPayload, pairKey, profileFor, removeConnection, requestToJoinTeam, sendConnectionRequest, updateTeamPost, withdrawTeamRequest }

@@ -7,8 +7,10 @@ const POOLS = {
   daily_challenge_solved: 'practice', retention_task_completed: 'practice',
   skill_verified: 'skills', skill_reverified: 'skills', skill_level_upgraded: 'skills',
   gig_completed: 'gigs', assessment_quality: 'quality', practice_milestone: 'consistency',
+  network_connections_100: 'network', network_connections_500: 'network', network_connections_1000: 'network',
+  team_up_10: 'teamUps', team_up_50: 'teamUps', team_up_100: 'teamUps',
 }
-const CAPS = { practice: 500, skills: 1500, gigs: 1500, quality: 500, consistency: 200 }
+const CAPS = { practice: 500, skills: 1500, gigs: 1500, quality: 500, consistency: 200, network: 250, teamUps: 250 }
 const TIERS = [
   { name: 'Foundation', range: '0-500', description: 'Build reviewed evidence. One base point equals one score point up to 500.' },
   { name: 'Skilled', range: '501-700', description: 'Requires 2 active verified skills. Additional base points count at 40%.' },

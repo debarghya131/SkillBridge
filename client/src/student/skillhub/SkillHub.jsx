@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Archive, Award, ArrowUpCircle, BadgeCheck, ChartNoAxesCombined, Flame, Plus, RefreshCw, RotateCcw, X, Zap } from 'lucide-react'
 import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import { fetchStudentSkillHub, saveStudentSkillHub, setStudentSkillVisibility, fetchSkillAssessments, getStudentSessionToken } from '../studentApi'
@@ -15,10 +15,13 @@ const TABS = [
 const CATEGORIES = ['Frontend', 'Backend', 'Full Stack', 'Mobile Development', 'Cloud Computing', 'DevOps', 'Cybersecurity', 'AI & Machine Learning', 'Data Engineering', 'Databases', 'Design', 'Analytics', 'Marketing', 'Content & Writing', 'Video & Animation', 'Game Development', 'Quality Assurance', 'Business & Finance', 'Product Management', 'Other']
 const STATUS = { valid: 'Verified', due: 'Renew soon', expired: 'Expired', unverified: 'Unverified', archived: 'Archived' }
 const REVIEW_STATUS = { pending: 'Awaiting review', needs_revision: 'Revision requested', approved: 'Approved', rejected: 'Not approved' }
+const ASSESSMENT_MODE_LABELS = { verify: 'Verification', reverify: 'Renewal', upgrade: 'Upgrade', retain: 'Practice', challenge: 'Daily challenge' }
 const LOG_LABELS = { created: 'Skill added', expired: 'Verification expired', verify_completed: 'Skill verified',
   reverify_completed: 'Verification renewed', upgrade_completed: 'Level upgraded', retention_completed: 'Practice approved', challenge_completed: 'Challenge approved', archived: 'Skill archived', restored: 'Skill restored' }
 const date = value => value && value !== '-' ? new Date(value.length === 10 ? value + 'T00:00:00' : value).toLocaleDateString('en-IN') : 'Not set'
 const activeSkill = skill => !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
+const isDemoReadOnlyError = message => message === 'Demo data is read-only and cannot be modified or deleted.'
+const ACTION_WARNING = 'AI can detect cheating. Copy-paste, no typing, very fast typing, tab switching, idle-then-submit, same answers, multiple logins, rapid submissions, DevTools, and camera signals can reduce your TrustScore.'
 
 function SkillStatusPicker({ value, onChange }) {
   const [open, setOpen] = useState(false)
@@ -51,9 +54,11 @@ function SkillCategoryPicker({ value, onChange }) {
 
 export default function SkillHub({ onProfileChange }) {
   const navigate = useNavigate()
+  const { search: locationSearch } = useLocation()
   const sessionToken = getStudentSessionToken()
   const cachedSnapshot = readStudentSectionCache('skillhub', sessionToken)
-  const [tab, setTab] = useState('myskills')
+  const requestedTab = new URLSearchParams(locationSearch).get('skillhubTab')
+  const [tab, setTab] = useState(() => TABS.some(([key]) => key === requestedTab) ? requestedTab : 'myskills')
   const [data, setData] = useState(() => cachedSnapshot?.hub || null)
   const [assessments, setAssessments] = useState(() => cachedSnapshot?.assessments || [])
   const [loading, setLoading] = useState(() => !cachedSnapshot)
@@ -65,7 +70,12 @@ export default function SkillHub({ onProfileChange }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [mobileTabsOpen, setMobileTabsOpen] = useState(false)
+  const [pendingTask, setPendingTask] = useState(null)
   const loadVersion = useRef(0)
+
+  useEffect(() => {
+    if (TABS.some(([key]) => key === requestedTab)) setTab(requestedTab)
+  }, [requestedTab])
 
   const load = useCallback(async ({ useCache = false } = {}) => {
     const version = ++loadVersion.current
@@ -131,7 +141,14 @@ export default function SkillHub({ onProfileChange }) {
   }
 
   const openAssessment = (skill, mode, extra = {}) => {
-    navigate('/student/task', { state: { skillName: skill.name, category: skill.category, mode, returnSection: 'skillhub', ...extra } })
+    if (!skill?.name) return
+    setPendingTask({ skill, mode, extra })
+  }
+  const confirmTask = () => {
+    if (!pendingTask) return
+    const { skill, mode, extra } = pendingTask
+    setPendingTask(null)
+    navigate('/student/task', { state: { skillName: skill.name, category: skill.category, mode, returnSection: 'skillhub', returnTab: tab, demoData: skill.demoData === true, ...extra } })
   }
   const changeVisibility = async skill => {
     if (busy || refreshing) return
@@ -141,7 +158,10 @@ export default function SkillHub({ onProfileChange }) {
       setData(current => ({ ...current, ...result.skillHub, skillHubState: { ...current.skillHubState, ...result.skillHub.skillHubState } }))
       onProfileChange?.(result.skillHub)
       clearStudentSectionCache('skillhub', getStudentSessionToken())
-    } catch (failure) { setError(failure.message || 'Could not update this skill.') }
+    } catch (failure) {
+      const message = failure.message || 'Could not update this skill.'
+      if (!isDemoReadOnlyError(message)) setError(message)
+    }
     finally { setBusy(false) }
   }
   if (loading) return <DashboardSkeleton section="skillhub" />
@@ -158,7 +178,9 @@ export default function SkillHub({ onProfileChange }) {
     archived: skills.filter(skill => skill.archived).length,
   }
   const queue = skills.filter(skill => !skill.archived && (!activeSkill(skill) || skill.renewalStatus === 'due'))
-  const upgrades = verified.filter(skill => skill.stage !== 'Pro Mastery')
+  // A due verification must be renewed before a further level upgrade. This
+  // mirrors the backend assessment validation for real student records.
+  const upgrades = verified.filter(skill => skill.renewalStatus === 'valid' && skill.stage !== 'Pro Mastery')
   const filtered = skills.filter(skill => skill.name.toLowerCase().includes(search.toLowerCase())
     && (filter === 'all' || filter === 'verified' && activeSkill(skill) || filter === 'archived' && skill.archived || skill.renewalStatus === filter && !skill.archived))
   const logs = data.skillHubState?.skillLog || []
@@ -167,20 +189,22 @@ export default function SkillHub({ onProfileChange }) {
 
   const skillRow = (skill, mode) => {
     const targetStage = skill.stage === 'Beginner' ? 'Intermediate' : skill.stage === 'Intermediate' ? 'Pro' : 'Pro Mastery'
-    const relevant = assessments.find(item => item.skillName.toLowerCase() === skill.name.toLowerCase() && item.mode === mode
-      && (mode !== 'upgrade' || item.targetStage === targetStage) && ['pending', 'needs_revision'].includes(item.status))
+    const matchingAssessments = assessments.filter(item => item.skillName.toLowerCase() === skill.name.toLowerCase() && item.mode === mode
+      && (mode !== 'upgrade' || item.targetStage === targetStage))
+    const relevant = matchingAssessments.find(item => ['pending', 'needs_revision'].includes(item.status))
+    const demoPreview = skill.demoData ? matchingAssessments[0] : null
     return <article className="sh-skill" key={skill.name}>
-      <div className="sh-skill-main"><strong>{skill.name}</strong>
+      <div className="sh-skill-main"><strong>{skill.name}{skill.demoData && <span className="demo-data-badge">Demo</span>}</strong>
         <div className="sh-meta"><span className={`sh-status sh-status-${skill.archived ? 'archived' : skill.renewalStatus}`}>{STATUS[skill.archived ? 'archived' : skill.renewalStatus]}</span>
           <span>{skill.category}</span><span>{activeSkill(skill) ? skill.stage : 'No active verified level'}</span></div>
         {activeSkill(skill) && <span className={`sh-inline-streak${skill.streak ? ' is-active' : ''}`}><Flame size={14}/>{skill.streak || 0} day streak{skill.longestStreak ? ` · Best ${skill.longestStreak}` : ''}</span>}
         <small>{skill.renewalDue !== '-' ? `Verification ${skill.renewalStatus === 'expired' ? 'expired' : 'expires'} ${date(skill.renewalDue)}` : 'No verification yet'}</small>
       </div>
-      {mode && <button type="button" className="btn-secondary" onClick={() => openAssessment(skill, mode, mode === 'upgrade' ? { targetStage } : {})}>
+      {mode && <button type="button" className="btn-secondary" onClick={() => openAssessment(skill, mode, { ...(mode === 'upgrade' ? { targetStage } : {}), ...(demoPreview ? { demoAssessment: demoPreview } : {}) })}>
         {relevant ? REVIEW_STATUS[relevant.status] : mode === 'upgrade' ? `Upgrade to ${targetStage}` : mode === 'reverify' ? 'Renew verification' : 'Submit evidence'}
       </button>}
       {!mode && <div className="sh-skill-actions">
-        {activeSkill(skill) && <BadgeCheck size={20} aria-label="Verified skill" />}
+        {activeSkill(skill) && <BadgeCheck className="sh-verified-icon" size={20} aria-label="Verified skill" />}
         <button type="button" className="btn-secondary" disabled={busy || refreshing} onClick={() => changeVisibility(skill)} title={skill.archived ? 'Restore skill to your public profile and matching' : 'Archive skill from your public profile and matching'}>
           {skill.archived ? <><RotateCcw size={16}/>Restore</> : <><Archive size={16}/>Archive</>}
         </button>
@@ -231,8 +255,8 @@ export default function SkillHub({ onProfileChange }) {
           </div>}</div>
         </section>
         <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Audit trail</span><h2>Skill Activity</h2></div><span>{logs.length} {logs.length === 1 ? 'event' : 'events'}</span></header>
-          <div className="sh-list">{logs.length ? logs.map((item, index) => <article className="sh-activity" key={item.assessmentId || `${item.occurredAt}:${index}`}>
-            <div><strong>{item.skillName}</strong><p>{LOG_LABELS[item.eventType] || item.eventType}</p><time>{date(item.occurredAt)}</time></div>
+          <div className="sh-list">{logs.length ? logs.map((item, index) => <article className="sh-activity" key={item.id || item.assessmentId || `${item.occurredAt}:${index}`}>
+            <div><strong>{item.skillName}{item.demoData && <span className="demo-data-badge">Demo</span>}</strong><p>{LOG_LABELS[item.eventType] || item.eventType}</p><time>{date(item.occurredAt)}</time></div>
             {Number(item.points) !== 0 && <span className={item.points < 0 ? 'sh-negative' : 'sh-positive'}>{item.points > 0 ? '+' : ''}{item.points} Trust</span>}
           </article>) : <div className="sh-empty"><p>No skill activity yet.</p><small>Verified assessments and approved practice will appear here.</small></div>}</div>
         </section>
@@ -244,18 +268,19 @@ export default function SkillHub({ onProfileChange }) {
             {!(tab === 'verify' ? queue : upgrades).length && <p className="sh-empty">{tab === 'verify' ? 'No skills awaiting verification or renewal.' : 'No eligible level upgrades.'}</p>}</div>
         </section>
         <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Review status</span><h2>Assessment History</h2></div></header><div className="sh-list">
-          {assessments.map(item => <article className={`sh-assessment sh-assessment-${item.status}`} key={item.id}><header><strong>{item.skillName}</strong><span>{REVIEW_STATUS[item.status]}</span></header>
-            <p className="sh-assessment-meta">{item.mode}{item.targetStage ? ` / ${item.targetStage}` : ''} · {date(item.createdAt)}</p>
+          {assessments.map(item => <article className={`sh-assessment sh-assessment-${item.status}`} key={item.id}><header><strong>{item.skillName}{item.demoData && <span className="demo-data-badge">Demo</span>}</strong><span>{REVIEW_STATUS[item.status]}</span></header>
+            <p className="sh-assessment-meta">{ASSESSMENT_MODE_LABELS[item.mode] || item.mode}{item.targetStage ? ` / ${item.targetStage}` : ''} · {date(item.createdAt)}</p>
             {item.feedback && <p className="sh-assessment-feedback">{item.feedback}</p>}
             <footer><small>{item.status === 'approved' ? `Trust awarded: ${item.rewardPoints || 0}` : item.status === 'pending' ? 'Awaiting platform review' : item.status === 'needs_revision' ? 'Revision requested' : 'No Trust awarded'}</small>
-              <button type="button" className="btn-secondary" onClick={() => openAssessment({ name: item.skillName }, item.mode, { targetStage: item.targetStage, challengeId: item.challengeId })}>View assessment</button></footer>
+              <button type="button" className="btn-secondary" onClick={() => openAssessment({ name: item.skillName, demoData: item.demoData }, item.mode, { targetStage: item.targetStage, challengeId: item.challengeId, ...(item.demoData ? { demoAssessment: item } : {}) })}>View assessment</button></footer>
           </article>)}
           {!assessments.length && <p className="sh-empty">No assessments submitted yet.</p>}
         </div></section>
       </div>}
-      {tab === 'daily' && <DailyChallenge skills={skills} skillHubState={data.skillHubState} challenges={data.challenges} rewards={data.rewards} assessments={assessments}/>}
+      {tab === 'daily' && <DailyChallenge skills={skills} skillHubState={data.skillHubState} challenges={data.challenges} rewards={data.rewards} assessments={assessments} onOpenTask={openAssessment}/>}
       {tab === 'streak' && <PracticeStreak skills={skills} skillHubState={data.skillHubState}/>}
       {tab === 'gap' && <SkillGapReport skillHubState={data.skillHubState}/>}
     </div>
+    {pendingTask && <div className="gig-integrity-backdrop" role="presentation" onMouseDown={event => event.target === event.currentTarget && setPendingTask(null)}><section className="gig-integrity-modal" role="dialog" aria-modal="true" aria-labelledby="skillhub-integrity-title"><div className="gig-integrity-icon" aria-hidden="true">⚠️</div><h2 id="skillhub-integrity-title">Before you open this task</h2><p className="gig-integrity-warning">{ACTION_WARNING}</p><p className="gig-integrity-note">By continuing, you confirm that you will complete the task yourself and follow the evidence and review rules.</p><div className="gig-integrity-actions"><button type="button" className="btn-secondary" onClick={() => setPendingTask(null)}>Cancel</button><button type="button" className="btn-primary" onClick={confirmTask}>I understand — open task</button></div></section></div>}
   </section>
 }

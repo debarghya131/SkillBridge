@@ -4,6 +4,7 @@ const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { recordTrustScoreEvent } = require('./trustScoreController')
+const { demoPaymentState } = require('../config/showcaseFixtures')
 
 function validateExternalPayment(payload, now = new Date()) {
   const amount = Number(payload?.amount)
@@ -37,8 +38,13 @@ async function getCompanyPayments(token) {
     : query
   const submissions = await compactQuery
     .sort({ updatedAt: -1 }).lean()
-  const gigs = company.gigManagementState?.gigs || []
-  return {
+  // Older company records can contain an incomplete or malformed persisted
+  // GIG state. Payment history must remain available even when that optional
+  // display state cannot provide a budget label.
+  const gigs = Array.isArray(company.gigManagementState?.gigs)
+    ? company.gigManagementState.gigs
+    : []
+  const real = {
     mode: 'external',
     pending: submissions.filter(item => item.status === 'approved' && !item.externalPayment).map(item => ({
       id: String(item._id), title: item.gigTitle, studentName: item.studentName,
@@ -48,6 +54,10 @@ async function getCompanyPayments(token) {
       id: String(item._id), title: item.gigTitle, studentName: item.studentName, ...item.externalPayment,
     })),
   }
+  const demo = demoPaymentState()
+  // Keep showcase records separate. Live payment totals and the record-payment
+  // form must only ever use MongoDB-backed submissions.
+  return { ...real, demoPending: demo.pending, demoTransactions: demo.transactions }
 }
 
 async function recordExternalPayment(token, submissionId, payload) {
@@ -84,9 +94,18 @@ async function recordExternalPayment(token, submissionId, payload) {
   }
 
   try {
-    const result = mongoose.connection.readyState === 1 && typeof mongoose.connection.transaction === 'function'
-      ? await mongoose.connection.transaction(session => persistPayment(session))
-      : await persistPayment()
+    let result
+    if (mongoose.connection.readyState === 1 && typeof mongoose.connection.transaction === 'function') {
+      try {
+        result = await mongoose.connection.transaction(session => persistPayment(session))
+      } catch (error) {
+        // Local and small production deployments can use a standalone MongoDB
+        // server. The atomic conditional submission update still protects the
+        // payment record there; only the optional ledger transaction is absent.
+        if (!/Transaction numbers are only allowed|replica set|mongos/i.test(error?.message || '')) throw error
+        result = await persistPayment()
+      }
+    } else result = await persistPayment()
     if (result.duplicate) return getCompanyPayments(token)
   } catch (error) {
     if (error.code === 11000) throw buildAuthError('This transaction reference has already been recorded', 409)

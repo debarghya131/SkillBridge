@@ -25,13 +25,15 @@ function isReviewStage(status) {
   return ['submitted', 'reviewed', 'delivered'].includes(status)
 }
 
-export default function SubmissionReview({ submission, onReview, readOnly = false }) {
+export default function SubmissionReview({ submission, onReview, readOnly = false, kickoffInWorkspace = false, onOpenWorkspace }) {
   const [feedback, setFeedback] = useState(submission.feedback || '')
   const [score, setScore] = useState(submission.score ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [workBrief, setWorkBrief] = useState(submission.workBrief || '')
-  const actions = readOnly ? [] : REVIEW_ACTIONS[submission.status] || []
+  const actions = readOnly || (kickoffInWorkspace && submission.status === 'selected')
+    ? []
+    : REVIEW_ACTIONS[submission.status] || []
   const formRef = useRef(null)
   const reviewStage = isReviewStage(submission.status)
   const link = safeExternalUrl(submission.submissionLink)
@@ -63,10 +65,10 @@ export default function SubmissionReview({ submission, onReview, readOnly = fals
   }
 
   return (
-    <article className="work-review">
+    <article className={`work-review${readOnly ? ' is-read-only' : ''}`}>
       <header className="work-review-header">
         <div>
-          <h3>{submission.studentName}</h3>
+          <h3>{submission.studentName}{submission.demoData && <span className="demo-data-badge">Demo</span>}</h3>
           <p className="work-muted">{submission.gigTitle} · {submission.taskTitle || 'Interview task'}</p>
         </div>
         <span className={'work-status work-status-' + submission.status}>{STATUS_LABELS[submission.status] || submission.status}</span>
@@ -93,8 +95,26 @@ export default function SubmissionReview({ submission, onReview, readOnly = fals
         </details>
       )}
 
+      {readOnly && submission.status === 'selected' && <p className="work-muted">The student passed the interview stage and is selected. Next, the company adds the work brief and starts the GIG.</p>}
+      {readOnly && submission.status === 'work_started' && <p className="work-muted">The GIG is in progress. The student will submit the final delivery when the work is ready for review.</p>}
+
+      {!readOnly && kickoffInWorkspace && submission.status === 'selected' && (
+        <section className="gig-work-handoff" aria-label="Next step: start GIG Work">
+          <div>
+            <strong>Interview complete — set up the actual GIG Work</strong>
+            <p>This student now has an independent GIG Work record. Add the paid work requirements, milestones, and due dates in Project Workspace.</p>
+          </div>
+          <button type="button" className="btn-primary" onClick={onOpenWorkspace}>Open Project Workspace</button>
+        </section>
+      )}
+
       {submission.workBrief && submission.status !== 'selected' && <div className="work-evidence"><strong>GIG work brief</strong><p className="work-response">{submission.workBrief}</p></div>}
-      {!readOnly && submission.status === 'selected' && <label className="workspace-work-brief">GIG work brief<textarea rows="4" maxLength="4000" value={workBrief} disabled={busy} onChange={event => setWorkBrief(event.target.value)} /></label>}
+      {!readOnly && !kickoffInWorkspace && submission.status === 'selected' && (
+        <section className="gig-work-kickoff" aria-label="GIG Work setup">
+          <div><strong>Actual GIG Work setup</strong><p>This is the paid delivery brief shown to the selected student. It is separate from the interview task above.</p></div>
+          <label className="workspace-work-brief">GIG Work requirements *<textarea required rows="5" maxLength="4000" value={workBrief} disabled={busy} onChange={event => setWorkBrief(event.target.value)} placeholder="Describe the final deliverables, acceptance criteria, required evidence, and handover expectations." /></label>
+        </section>
+      )}
 
       {reviewStage && actions.length > 0 && (
         <form ref={formRef} className="work-review-form" onSubmit={event => { event.preventDefault(); review(actions[0][0]) }}>

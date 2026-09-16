@@ -5,12 +5,16 @@ import CompanyLogo from '../ui/CompanyLogo'
 export default function BusinessOverview({ profile, stats, completion, checklist, activity, submissions, projects, onNavigate, formatWhen }) {
   const [tab, setTab] = useState('Priorities')
   const [page, setPage] = useState(0)
-  const reviews = submissions.filter(item => item.status === 'submitted').length
-  const approvals = submissions.filter(item => item.status === 'delivered').length
-  const payments = submissions.filter(item => item.status === 'approved' && !item.externalPayment).length
+  // The overview is a live company dashboard. Fixture records are useful in
+  // their own sections, but must never change operational counters here.
+  const realSubmissions = submissions.filter(item => !item.demoData)
+  const realProjects = projects.filter(item => !item.demoData)
+  const reviews = realSubmissions.filter(item => item.status === 'submitted').length
+  const approvals = realSubmissions.filter(item => item.status === 'delivered').length
+  const payments = realSubmissions.filter(item => item.status === 'approved' && !item.externalPayment).length
   const metrics = [...stats.slice(0, 3),
     { label: 'Tasks to review', value: reviews, target: 'tasks' },
-    { label: 'Active projects', value: projects.filter(item => item.status !== 'Completed').length, target: 'workspace' },
+    { label: 'Active projects', value: realProjects.filter(item => item.status !== 'Completed').length, target: 'workspace' },
     { label: 'Awaiting payment', value: payments, target: 'payment' },
   ]
   const priorities = [

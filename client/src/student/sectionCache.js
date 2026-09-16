@@ -24,3 +24,10 @@ export function clearStudentSectionCache(section, token) {
   const key = cacheKey(section, token)
   if (key) entries.delete(key)
 }
+
+export function clearAllStudentSectionCache(token) {
+  if (!token) return
+  for (const key of entries.keys()) {
+    if (key.endsWith(`:${token}`)) entries.delete(key)
+  }
+}

@@ -1,4 +1,9 @@
 const Student = require('../models/Student')
+const Company = require('../models/Company')
+const NetworkConnection = require('../models/NetworkConnection')
+const SkillAssessment = require('../models/SkillAssessment')
+const TaskSubmission = require('../models/TaskSubmission')
+const TeamPost = require('../models/TeamPost')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
 const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
 const { createSessionToken, hashPassword, verifyPassword } = require('../utils/auth')
@@ -66,6 +71,9 @@ function sanitizeStudent(student, { includeVideo = true } = {}) {
     verificationMethod: student.verificationMethod,
     trustScore: student.trustScore,
     avatar: student.avatar || null,
+    about: student.about || '',
+    collaborationFocus: Array.isArray(student.collaborationFocus) ? student.collaborationFocus : [],
+    workStyle: student.workStyle || '',
     skills: Array.isArray(student.skills) ? student.skills : buildDefaultStudentProfile().skills,
     skillHubSkills,
     practiceStats: {
@@ -214,6 +222,21 @@ async function updateCurrentStudent(token, payload) {
     updates.avatar = avatar
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, 'about')) {
+    if (typeof payload.about !== 'string') throw buildAuthError('About must be text')
+    updates.about = payload.about.trim().slice(0, 700)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'collaborationFocus')) {
+    if (!Array.isArray(payload.collaborationFocus)) throw buildAuthError('Collaboration focus must be a list')
+    updates.collaborationFocus = [...new Set(payload.collaborationFocus.map(item => String(item || '').trim().slice(0, 60)).filter(Boolean))].slice(0, 10)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'workStyle')) {
+    if (typeof payload.workStyle !== 'string') throw buildAuthError('Working style must be text')
+    updates.workStyle = payload.workStyle.trim().slice(0, 300)
+  }
+
   if (Array.isArray(payload.skills)) {
     // Skill Hub owns skill mutations; stale profile autosaves must not erase reviewed skills.
     updates.skills = buildStudentSkillHubSkills(student).map(skill => skill.name)
@@ -224,7 +247,7 @@ async function updateCurrentStudent(token, payload) {
     updates.githubLink = payload.githubLink
       .filter(item => item && typeof item.url === 'string' && item.url.trim())
       .map(item => ({
-        icon: typeof item.icon === 'string' ? item.icon : '🐙',
+        icon: typeof item.icon === 'string' ? item.icon.trim().slice(0, 24) || '🐙' : '🐙',
         url: safeExternalUrl(item.url),
         saved: item.saved !== false,
       })).filter(item => item.url)
@@ -235,10 +258,10 @@ async function updateCurrentStudent(token, payload) {
     updates.contactInfo = payload.contactInfo
       .filter(item => item && typeof item.label === 'string' && typeof item.value === 'string' && item.value.trim())
       .map(item => ({
-        label: item.label.trim(),
-        value: item.value.trim(),
+        label: item.label.trim().slice(0, 40),
+        value: item.value.trim().slice(0, 300),
         saved: item.saved !== false,
-      }))
+      })).filter(item => item.label && item.value)
   }
 
   if (Array.isArray(payload.projects)) {
@@ -261,6 +284,9 @@ async function updateCurrentStudent(token, payload) {
   const nextStudentState = {
     name: Object.prototype.hasOwnProperty.call(updates, 'name') ? updates.name : student.name,
     avatar: Object.prototype.hasOwnProperty.call(updates, 'avatar') ? updates.avatar : student.avatar,
+    about: Object.prototype.hasOwnProperty.call(updates, 'about') ? updates.about : student.about,
+    collaborationFocus: Object.prototype.hasOwnProperty.call(updates, 'collaborationFocus') ? updates.collaborationFocus : student.collaborationFocus,
+    workStyle: Object.prototype.hasOwnProperty.call(updates, 'workStyle') ? updates.workStyle : student.workStyle,
     skills: Object.prototype.hasOwnProperty.call(updates, 'skills') ? updates.skills : student.skills,
     githubLink: Object.prototype.hasOwnProperty.call(updates, 'githubLink') ? updates.githubLink : student.githubLink,
     contactInfo: Object.prototype.hasOwnProperty.call(updates, 'contactInfo') ? updates.contactInfo : student.contactInfo,
@@ -271,6 +297,9 @@ async function updateCurrentStudent(token, payload) {
   const currentStudentState = {
     name: student.name,
     avatar: student.avatar,
+    about: student.about,
+    collaborationFocus: student.collaborationFocus,
+    workStyle: student.workStyle,
     skills: student.skills,
     githubLink: student.githubLink,
     contactInfo: student.contactInfo,
@@ -330,6 +359,75 @@ async function updateCurrentStudent(token, payload) {
   return sanitizeStudent(student)
 }
 
+async function removeCompanyStudentReferences(studentId, submissionIds) {
+  const studentKey = String(studentId)
+  const submissionKeys = new Set(submissionIds.map(String))
+  const companies = await Company.find({
+    $or: [
+      { 'gigManagementState.applicantsByGig': { $exists: true } },
+      { taskReviewGuides: { $exists: true } },
+      { 'projectWorkspaceState.projects': { $exists: true } },
+    ],
+  })
+  for (const company of companies) {
+    let changed = false
+    const state = company.gigManagementState
+    if (state?.applicantsByGig && typeof state.applicantsByGig === 'object') {
+      for (const [gigId, applicants] of Object.entries(state.applicantsByGig)) {
+        if (!Array.isArray(applicants)) continue
+        const nextApplicants = applicants.filter(item => String(item?.studentId || item?.id || '') !== studentKey)
+        if (nextApplicants.length === applicants.length) continue
+        state.applicantsByGig[gigId] = nextApplicants
+        const gig = Array.isArray(state.gigs) && state.gigs.find(item => Number(item.id) === Number(gigId))
+        if (gig) gig.applicants = nextApplicants.length
+        changed = true
+      }
+      if (changed) company.markModified('gigManagementState')
+    }
+    if (company.taskReviewGuides && typeof company.taskReviewGuides === 'object') {
+      for (const key of Object.keys(company.taskReviewGuides)) {
+        if (!key.startsWith(`${studentKey}:`)) continue
+        delete company.taskReviewGuides[key]
+        changed = true
+      }
+      if (changed) company.markModified('taskReviewGuides')
+    }
+    const projects = company.projectWorkspaceState?.projects
+    if (Array.isArray(projects)) {
+      const nextProjects = projects.filter(project => !submissionKeys.has(String(project?.submissionId || '')))
+      if (nextProjects.length !== projects.length) {
+        company.projectWorkspaceState.projects = nextProjects
+        company.markModified('projectWorkspaceState')
+        changed = true
+      }
+    }
+    if (changed) await company.save()
+  }
+}
+
+async function deleteCurrentStudentAccount(token, payload = {}) {
+  const student = await findStudentByToken(token, '+passwordHash')
+  if (payload.confirmation !== 'DELETE') throw buildAuthError('Type DELETE to confirm account deletion')
+  if (typeof payload.password !== 'string' || !verifyPassword(payload.password, student.passwordHash)) {
+    throw buildAuthError('Enter your current password to delete this account', 401)
+  }
+  const submissionRows = await TaskSubmission.find({ studentId: student._id }).select('_id').lean()
+  const submissionIds = submissionRows.map(item => item._id)
+  // Remove denormalized student snapshots before deleting the primary record.
+  // This preserves other companies and collaborators while erasing this
+  // student's data from their stored views.
+  await removeCompanyStudentReferences(student._id, submissionIds)
+  await Promise.all([
+    NetworkConnection.deleteMany({ $or: [{ requester: student._id }, { recipient: student._id }] }),
+    SkillAssessment.deleteMany({ studentId: student._id }),
+    TaskSubmission.deleteMany({ studentId: student._id }),
+    TeamPost.deleteMany({ owner: student._id }),
+    TeamPost.updateMany({ 'requests.student': student._id }, { $pull: { requests: { student: student._id } } }),
+  ])
+  await Student.deleteOne({ _id: student._id })
+  return { deleted: true }
+}
+
 async function logoutCurrentStudent(token) {
   const student = await findStudentByToken(token)
   student.sessions = student.sessions.filter(session => session.token !== token)
@@ -339,6 +437,7 @@ async function logoutCurrentStudent(token) {
 module.exports = {
   getCurrentStudent,
   getCurrentStudentProfileMedia,
+  deleteCurrentStudentAccount,
   logoutCurrentStudent,
   signInStudent,
   signUpStudent,

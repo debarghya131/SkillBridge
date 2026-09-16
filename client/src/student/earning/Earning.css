@@ -1,6 +1,7 @@
 .student-external-earnings { display: flex; flex-direction: column; gap: 16px; }
 .student-external-earnings { display:flex; flex-direction:column; gap:16px; height:100%; min-height:0; min-width:0; }
 .student-external-earnings .work-heading { margin:0; }
+.student-external-earnings .earning-header-actions .btn-secondary { width:54px; height:46px; min-height:46px; padding:0; justify-content:center; }
 .student-external-earnings .work-muted { margin:0; }
 .external-earning-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; flex-shrink:0; }
 .external-earning-summary > div { padding: 16px; background: white; border: 1px solid var(--border); border-radius: 8px; }
@@ -12,13 +13,19 @@
 .student-viewport.student-section-earning > .student-external-earnings > .external-earning-records { flex: 1; min-height: 160px; overflow: auto; }
 .external-earning-records { min-width:0; border:1px solid var(--border); border-radius:8px; background:#fff; }
 .external-earning-records .work-empty { margin:0; padding:20px 16px; }
+.student-external-earnings .earning-payment-title strong .demo-data-badge { margin-left:6px; margin-right:4px; vertical-align:middle; }
+.student-external-earnings .earning-payment-title > span { display:block; margin-top:4px; }
 .earning-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-shrink:0; }
+.earning-demo-preview { border-top:1px solid var(--border); padding-top:16px; }
+.earning-demo-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:10px; }
+.earning-demo-heading h3 { margin:7px 0 4px; font-size:15px; }
+.earning-demo-heading > span { color:var(--muted); font-size:12px; white-space:nowrap; }
 @media (max-width: 600px) {
   .student-viewport.student-section-earning { padding:12px !important; overflow-y:auto !important; }
   .student-viewport.student-section-earning > .student-external-earnings { height:auto; min-height:0; gap:12px; flex:none; }
   .earning-heading { align-items:center !important; flex-direction:row !important; }
-  .earning-heading h2 { font-size:20px; }
-  .earning-header-actions button { width:42px; min-width:42px; height:42px; min-height:42px; padding:0; }
+.earning-heading h2 { font-size:20px; }
+  .student-external-earnings .earning-header-actions .btn-secondary { width:42px; min-width:42px; height:42px; min-height:42px; padding:0; }
   .external-earning-summary { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
   .external-earning-summary > div:first-child { grid-column:1 / -1; }
   .external-earning-summary > div { min-width:0; min-height:76px; padding:10px 8px; }
@@ -40,6 +47,7 @@
   .external-earning-records .earning-payment-title span { color:var(--muted); font-size:11px; }
   .earning-pagination { justify-content:space-between; gap:8px; }
   .earning-pagination button { flex:1; min-height:42px; }
+  .earning-demo-heading { gap:10px; }
 }
 
 @media (max-width: 360px) {
@@ -47,4 +55,15 @@
   .external-earning-summary > div:first-child { grid-column:auto; }
   .external-earning-summary > div { padding-inline:6px; }
   .external-earning-summary strong { font-size:14px; }
+}
+.student-external-earnings .earning-compact-header { display:grid; grid-template-columns:max-content minmax(0, 1fr) max-content; align-items:center; gap:24px; flex-shrink:0; }
+.earning-compact-header h2 { margin:0; }
+.earning-compact-header .external-earning-summary > div { display:flex; align-items:center; justify-content:center; gap:7px; min-height:48px; padding:6px 10px; }
+.earning-compact-header .external-earning-summary > div > svg { width:18px; height:18px; color:#047857; flex:0 0 auto; }
+.earning-compact-header .external-earning-summary strong { font-size:16px; line-height:1.3; }
+.earning-compact-header .external-earning-summary span { margin:0; font-size:10px; }
+@media (max-width:700px) {
+  .student-external-earnings .earning-compact-header { grid-template-columns:minmax(0, 1fr) max-content; gap:12px; }
+  .earning-compact-header .external-earning-summary { grid-column:1 / -1; grid-row:2; grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .earning-compact-header .external-earning-summary > div:first-child { grid-column:auto; }
 }

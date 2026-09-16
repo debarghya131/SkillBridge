@@ -11,6 +11,11 @@ function savedTaskContext(context) {
   if (!context || context.taskType !== 'company-interview' || !context.opportunity) return context
   const opportunity = context.opportunity
 
+  // Demo assignments are self-contained fixtures. Keep their safe task brief
+  // in browser session storage so refresh continues to show the read-only
+  // preview without asking the API for a stored assignment.
+  if (opportunity.demoData) return context
+
   // The API resolves accepted tasks by stable id. Persisting only that identity
   // prevents a browser refresh from restoring stale company or GIG metadata.
   return {
@@ -43,7 +48,11 @@ export default function TaskPage() {
     if (!state) return
     try { sessionStorage.setItem(CONTEXT_KEY, JSON.stringify(savedTaskContext(state))) } catch { /* Navigation still works without storage. */ }
   }, [state])
-  const back = () => navigate('/student/dashboard?section=' + (isCompanyTask ? 'gig' : 'skillhub'))
+  const back = () => {
+    if (isCompanyTask) return navigate('/student/dashboard?section=gig')
+    const tab = typeof context?.returnTab === 'string' ? context.returnTab : 'myskills'
+    return navigate(`/student/dashboard?section=skillhub&skillhubTab=${encodeURIComponent(tab)}`)
+  }
   return <main className="assessment-page">
     <button type="button" className="assessment-back" onClick={back}><ArrowLeft size={16} /> Back to Dashboard</button>
     {isCompanyTask ? <CompanyTaskPage opportunity={context.opportunity} />

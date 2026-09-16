@@ -13,6 +13,7 @@ test('public profile follows the selected student, keeps empty fields, and enfor
   const { publicStudentProfile } = require('../utils/publicStudentProfile')
   const student = {
     _id: 'owner', name: 'Latest name', avatar: null, skills: [], skillHubSkills: [],
+    about: 'I build accessible products.', collaborationFocus: ['React builds'], workStyle: 'Async written updates.',
     projects: [{ name: 'Published', saved: true }, { name: 'Draft', saved: false }],
     contactInfo: [{ label: 'Email', value: 'public@example.com', saved: true }, { label: 'Phone', value: 'private', saved: false }],
     githubLink: [], aadhaarNumber: 'private-document', passwordHash: 'private-password',
@@ -24,6 +25,9 @@ test('public profile follows the selected student, keeps empty fields, and enfor
   assert.equal(peer.avatar, null)
   assert.deepEqual(peer.skills, [])
   assert.deepEqual(peer.contactInfo, [])
+  assert.equal(peer.about, 'I build accessible products.')
+  assert.deepEqual(peer.collaborationFocus, ['React builds'])
+  assert.equal(peer.workStyle, 'Async written updates.')
   assert.equal(peer.projects.length, 1)
   assert.equal(peer.aadhaarNumber, undefined)
   assert.equal(peer.passwordHash, undefined)

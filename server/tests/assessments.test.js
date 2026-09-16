@@ -174,7 +174,7 @@ test('Skill Hub submission, revision and operator approval require ownership and
   assert.equal(created.status, 'pending')
   assert.equal(student.skillHubSkills[0].verified, false)
   await assert.rejects(submitSkillAssessment('s', payload), error => error.statusCode === 409)
-  assert.equal((await listStudentAssessments('s')).length, 1)
+  assert.equal((await listStudentAssessments('s')).filter(item => !item.demoData).length, 1)
   t.mock.method(mongoose.connection, 'transaction', async callback => callback('transaction'))
   t.mock.method(SkillAssessment, 'findOne', filter => ({ session: async () => record.status === filter.status ? record : null }))
   t.mock.method(Student, 'findById', () => ({ session: async () => student }))
