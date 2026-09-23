@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { BriefcaseBusiness, Check, ChevronDown, Clock3, Lock, Pencil, Plus, Rocket, Search, Send, Trash2, UserPlus, UserRoundCheck, Users, X } from 'lucide-react'
-import { createNetworkTeamPost, decideNetworkTeamInvitation, decideNetworkTeamRequest, deleteNetworkTeamPost, fetchNetworkProfile, inviteNetworkStudentToTeam, joinNetworkTeamPost, leaveNetworkTeamPost, sendNetworkConnection, updateNetworkTeamPost, withdrawNetworkTeamRequest } from '../studentApi'
+import { createNetworkTeamPost, decideNetworkTeamInvitation, decideNetworkTeamRequest, deleteNetworkTeamPost, inviteNetworkStudentToTeam, joinNetworkTeamPost, leaveNetworkTeamPost, sendNetworkConnection, updateNetworkTeamPost, withdrawNetworkTeamRequest } from '../studentApi'
 import { toast } from '../../ui/toast'
 import { useNetworkState } from './NetworkContext'
 import NetworkProfileModal from '../../ui/PublicStudentProfile'
@@ -60,7 +60,7 @@ function TeamUpTabs({ active, onChange, counts }) {
 }
 
 export default function NetworkTeamUp() {
-  const { networkState, reload, token, setActiveTab } = useNetworkState()
+  const { networkState, reload, token, setActiveTab, loadProfile } = useNetworkState()
   const [showForm, setShowForm] = useState(false)
   const [editingPost, setEditingPost] = useState(null)
   const [invitePost, setInvitePost] = useState(null)
@@ -195,7 +195,7 @@ export default function NetworkTeamUp() {
     setBusy(`profile-${person.id}`)
     setProfile({ ...person, loading: true })
     try {
-      const response = await fetchNetworkProfile(token, person.id)
+      const response = await loadProfile(person.id)
       if (request === profileRequest.current) setProfile({ ...response.profile, loading: false })
     } catch (error) {
       if (request === profileRequest.current) {

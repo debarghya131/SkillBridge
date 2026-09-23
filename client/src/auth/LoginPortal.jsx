@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, GraduationCap, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Building2, GraduationCap, LockKeyhole } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 import './LoginPortal.css'
@@ -6,7 +6,7 @@ import './LoginPortal.css'
 const OPTIONS = [
   { title: 'Student', description: 'Access your skills, opportunities, tasks, and TrustScore.', icon: GraduationCap, path: '/student?mode=signin', tone: 'student' },
   { title: 'Company', description: 'Manage GIGs, applicants, assignments, and project delivery.', icon: Building2, path: '/company?mode=signin', tone: 'company' },
-  { title: 'Platform reviewer', description: 'Review blind Skill Hub evidence using the assessment rubric.', icon: ShieldCheck, path: '/reviewer', tone: 'reviewer' },
+  { title: 'Platform Admin', description: 'Manage skill standards, requests, and blind assessment reviews.', icon: LockKeyhole, path: '/admin', tone: 'admin' },
 ]
 
 export default function LoginPortal() {

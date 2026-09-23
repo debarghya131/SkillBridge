@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const Student = require('../models/Student')
 const Company = require('../models/Company')
+const SkillCatalog = require('../models/SkillCatalog')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
 const { buildDefaultSkillHubState } = require('../config/skillHubStateDefaults')
 const { buildActivityDays, buildStudentSkillHubSkills, updateStudentSkillHub, getStudentSkillHub, applyReviewedSkillAssessment, normalizeHeatmapFilters, reconcileSkillExpiry, buildSkillGapReport, buildStreakSummary, setStudentSkillArchived } = require('../controllers/skillHubController')
@@ -45,16 +46,19 @@ test('dates use India midnight; expiration is after the final valid day', () => 
 test('add skill is explicit, unverified, zero-credit, and cannot overwrite reviewed fields', async t => {
   const student = studentWith([{ name: 'SQL', verified: true, stage: 'Pro', renewalDue: dayOffset(90) }])
   t.mock.method(Student, 'findOne', async () => student)
+  t.mock.method(SkillCatalog, 'findOne', async () => null)
   const added = await updateStudentSkillHub('s', { skills: [{ name: ' Python ', category: 'Backend', verified: true, stage: 'Pro', level: 100 }] })
   assert.deepEqual(student.skills, ['SQL', 'Python'])
   assert.equal(added.skills[1].verified, false)
+  assert.equal(added.skills[1].source, 'self_declared')
+  assert.equal(added.skills[1].assessmentEligible, false)
   assert.equal(added.skills[1].stage, 'Beginner')
   assert.equal(added.skills[1].level, 0)
   assert.equal(student.trustScore, 0)
   await updateStudentSkillHub('s', { skills: [{ name: 'SQL', category: 'Analytics', stage: 'Beginner', verified: false }] })
   assert.equal(student.skillHubSkills[0].stage, 'Pro')
   assert.equal(student.skillHubSkills[0].verified, true)
-  await assert.rejects(updateStudentSkillHub('s', { skills: [null] }), /names/)
+  await assert.rejects(updateStudentSkillHub('s', { skills: [null] }), /valid skill/)
   await assert.rejects(updateStudentSkillHub('s', { skills: [{ name: 'X', category: 'Invalid' }] }), /category/)
   await assert.rejects(updateStudentSkillHub('s', { skills: [{ name: 'X' }, { name: 'x' }] }), /unique/)
 })
@@ -134,6 +138,19 @@ test('skill hub query includes activity state used by streak summaries', async t
   ])
 })
 
+test('initial Skill Hub response skips the cross-company gap aggregate', async t => {
+  const student = studentWith()
+  let aggregateCalls = 0
+  t.mock.method(Student, 'findOne', () => ({ select: async () => student }))
+  t.mock.method(Company, 'aggregate', async () => { aggregateCalls += 1; return [] })
+
+  const hub = await getStudentSkillHub('s', { includeSkillGap: false })
+
+  assert.equal(aggregateCalls, 0)
+  assert.equal(hub.skillHubState.skillGapReport, undefined)
+  assert.deepEqual(hub.skillHubState.demoSkillGapReport, DEMO_SKILL_GAP_REPORT)
+})
+
 test('profile persistence rejects unsafe media and strips unsafe external links', async t => {
   const student = studentWith()
   t.mock.method(Student, 'findOne', async () => student)
@@ -146,6 +163,18 @@ test('profile persistence rejects unsafe media and strips unsafe external links'
   assert.equal(profile.projects[0].demoLink, 'https://example.com/demo')
   await assert.rejects(updateCurrentStudent('s', { avatar: 'data:image/svg+xml;base64,PHN2Zz4=' }), /profile image/)
   await assert.rejects(updateCurrentStudent('s', { videoUrl: 'data:video/ogg;base64,AAAA' }), /intro video/)
+})
+
+test('profile autosave responses omit separately loaded intro video media', async t => {
+  const student = studentWith()
+  student.videoUrl = 'data:video/mp4;base64,AAAA'
+  t.mock.method(Student, 'findOne', async () => student)
+
+  const profile = await updateCurrentStudent('s', { about: 'A smaller profile update.' })
+
+  assert.equal(profile.about, 'A smaller profile update.')
+  assert.equal(Object.prototype.hasOwnProperty.call(profile, 'videoUrl'), false)
+  assert.equal(student.videoUrl, 'data:video/mp4;base64,AAAA')
 })
 
 test('profile drafts and saved uploads do not earn unreviewed TrustScore', async t => {
@@ -227,8 +256,8 @@ test('streak summaries reset stale runs and report real seven-day practice activ
   assert.equal(activeStreak({ streak: 5, lastRetentionDate: dayOffset(-1) }), 5)
   assert.equal(activeStreak({ streak: 5, lastRetentionDate: dayOffset(-2) }), 0)
   const skills = [
-    { name: 'React', streak: 3, longestStreak: 8 },
-    { name: 'SQL', streak: 1, longestStreak: 2 },
+    { name: 'React', streak: 3, longestStreak: 8, verified: true, renewalDue: dayOffset(90) },
+    { name: 'SQL', streak: 1, longestStreak: 2, verified: true, renewalDue: dayOffset(90) },
   ]
   const log = [
     { eventType: 'retention_completed', skillName: 'React', earnedDay: dayOffset(0) },
@@ -243,7 +272,7 @@ test('streak summaries reset stale runs and report real seven-day practice activ
   assert.equal(summary.totalPracticeDays, 2)
   assert.equal(summary.activeSkills, 2)
   assert.equal(summary.completedToday, 2)
-  assert.equal(summary.nextMilestone, 7)
+  assert.equal(summary.nextMilestone, 3)
   assert.deepEqual(summary.week.slice(-2).map(day => day.count), [1, 2])
 })
 
@@ -262,6 +291,42 @@ test('assessment eligibility blocks level jumps, expired upgrades, early renewal
   student.skillHubSkills[0].renewalDue = dayOffset(-1)
   assert.throws(() => validateAssessment(student, { ...base, mode: 'upgrade', targetStage: 'Intermediate' }), /active verified/)
   assert.doesNotThrow(() => validateAssessment(student, { ...base, mode: 'reverify' }))
+})
+
+test('self-declared skills stay visible on the profile but cannot enter assessment or matching', () => {
+  const student = studentWith([{ name: 'Prompt Engineering', source: 'self_declared', category: 'AI & Machine Learning' }])
+  student.skills = ['Prompt Engineering']
+  const [skill] = buildStudentSkillHubSkills(student)
+
+  assert.equal(skill.assessmentEligible, false)
+  assert.deepEqual(publishedSkillNames(student.skills, student.skillHubSkills), [])
+  assert.throws(() => validateAssessment(student, { skillName: skill.name, mode: 'verify', response }), /Self-declared skills cannot be verified/)
+})
+
+test('catalog assessments capture the published standard and support catalog challenge IDs', () => {
+  const catalogId = 'aaaaaaaaaaaaaaaaaaaaaaaa'
+  const challengeId = 'bbbbbbbbbbbbbbbbbbbbbbbb'
+  const student = studentWith([{ name: 'React', source: 'catalog', catalogSkillId: catalogId, catalogVersion: 2, category: 'Frontend' }])
+  const definition = {
+    _id: catalogId, name: 'React', version: 3, renewalDays: 180,
+    verificationInstructions: 'Build and explain an accessible React interface with reproducible tests.',
+    upgradeRequirements: [],
+    dailyTasks: [{ _id: challengeId, title: 'Accessible form', kind: 'code', reviewMode: 'reviewer', active: true,
+      instructions: 'Build an accessible form and include keyboard and validation test evidence.' }],
+  }
+
+  const verification = validateAssessment(student, { skillName: 'React', mode: 'verify', response }, definition)
+  assert.equal(verification.catalogVersion, 3)
+  assert.equal(verification.criteriaSnapshot.renewalDays, 180)
+  assert.match(verification.criteriaSnapshot.instructions, /accessible React interface/)
+
+  student.skillHubSkills[0].verified = true
+  student.skillHubSkills[0].renewalDue = dayOffset(180)
+  const challenge = validateAssessment(student, { skillName: 'React', mode: 'challenge', challengeId, response }, definition)
+  assert.equal(challenge.challengeId, challengeId)
+  assert.equal(challenge.criteriaSnapshot.taskTitle, 'Accessible form')
+  assert.equal(challenge.criteriaSnapshot.taskKind, 'code')
+  assert.equal(challenge.criteriaSnapshot.reviewMode, 'reviewer')
 })
 
 test('archived skills retain evidence but are hidden from matching until restored', async t => {
@@ -291,6 +356,8 @@ test('gap report counts real active GIG requirements without invented market per
   const companies = [{ gigManagementState: { gigs: [
     { title: 'Full stack', status: 'Hiring', skills: ['React', 'react', 'SQL'] },
     { title: 'UI', status: 'Hiring', skills: ['React'] },
+    { id: 'demo-stored-gap', title: 'Stored demo', status: 'Hiring', skills: ['Figma'], demoData: true },
+    { id: 'demo-legacy-gap', title: 'Legacy demo', status: 'Hiring', skills: ['AWS'] },
     { title: 'Old', status: 'Closed', skills: ['Figma'] },
   ] } }]
   const report = buildSkillGapReport(skills, companies)
@@ -347,6 +414,7 @@ test('profile heatmap validates monthly and yearly database ranges', () => {
 test('stale skill writes report a conflict instead of silently succeeding', async t => {
   const student = studentWith()
   t.mock.method(Student, 'findOne', async () => student)
+  t.mock.method(SkillCatalog, 'findOne', async () => null)
   student.save = async () => { throw Object.assign(new Error('stale'), { name: 'DocumentNotFoundError' }) }
   await assert.rejects(updateStudentSkillHub('s', { skills: [{ name: 'React' }] }), error => error.statusCode === 409)
 })

@@ -12,6 +12,7 @@ const clean = (value, max) => String(value || '').trim().replace(/\s+/g, ' ').sl
 const idOf = value => String(value?._id || value || '')
 const pairKey = (left, right) => [idOf(left), idOf(right)].sort().join(':')
 const NETWORK_CARD_FIELDS = '_id name avatar location skills skillHubSkills skillHubState.streaks trustScore trustScoreState.events.key trustScoreState.events.type trustScoreState.events.referenceId trustScoreState.events.occurredAt contactMethod verificationMethod createdAt +identityVerificationHash'
+const TEAM_POST_FIELDS = '_id title description type requiredSkills slots status createdAt owner requests._id requests.student requests.message requests.status requests.source requests.createdAt requests.acceptedAt'
 
 async function syncTrustAchievements(student) {
   if (!student?._id) return false
@@ -31,6 +32,14 @@ async function syncTrustAchievementsFor(students) {
   // TrustScore document must not turn a successful connection/team acceptance
   // into a client-visible failure; the idempotent reconciliation retries later.
   return Promise.allSettled(unique.map(syncTrustAchievements))
+}
+
+async function syncTrustAchievementsFromCounts(student, counts) {
+  if (!student?._id) return false
+  const { recordNetworkAchievementMilestones } = require('./trustScoreController')
+  if (!recordNetworkAchievementMilestones(student, counts)) return false
+  await student.save()
+  return true
 }
 
 function teamUpParticipationQuery(studentId) {
@@ -104,7 +113,7 @@ function normalizeTeamPayload(payload, partial = false) {
   return result
 }
 
-function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none' })) {
+function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none' }), { includeMembers = true } = {}) {
   const raw = post.toObject ? post.toObject() : post
   const accepted = (raw.requests || []).filter(item => item.status === 'accepted')
   const ownRequest = (raw.requests || []).find(item => idOf(item.student) === idOf(viewerId))
@@ -120,35 +129,41 @@ function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none'
       student: peerProfile(item.student, { includeContact: item.status === 'accepted' }),
     })) : [],
     // A member never needs to receive their own card. The owner is returned separately.
-    members: accepted.filter(item => idOf(item.student) !== idOf(viewerId)).map(item => peerProfile(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId) })),
+    members: includeMembers
+      ? accepted.filter(item => idOf(item.student) !== idOf(viewerId)).map(item => peerProfile(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId) }))
+      : [],
   }
 }
 
 async function getStudentNetworkState(token) {
   const student = await findStudentByToken(token)
-  // Existing accounts can cross a threshold before this feature is deployed.
-  // Reconcile on Network load so they receive the same one-time award.
-  await syncTrustAchievementsFor([student])
   const viewerId = student._id
   const [connections, relatedPosts, browsePosts, acceptedTeamUps] = await Promise.all([
     NetworkConnection.find({ $or: [{ requester: viewerId }, { recipient: viewerId }], status: { $in: ['pending', 'accepted'] } }).lean(),
     // A student's own posts, applications, invitations and memberships must
     // never be displaced by newer public listings in the browse feed.
     TeamPost.find({ $or: [{ owner: viewerId }, { 'requests.student': viewerId }] })
+      .select(TEAM_POST_FIELDS)
       .sort({ createdAt: -1 }).limit(120)
       .populate({ path: 'owner', select: NETWORK_CARD_FIELDS })
       .populate({ path: 'requests.student', select: NETWORK_CARD_FIELDS })
       .lean(),
     // Browse is intentionally bounded; the client has a compact feed rather
     // than treating this state endpoint as an unbounded search API.
-    TeamPost.find({ status: 'open', owner: { $ne: viewerId } })
+    TeamPost.find({ status: 'open', owner: { $ne: viewerId }, 'requests.student': { $ne: viewerId } })
+      .select(TEAM_POST_FIELDS)
       .sort({ createdAt: -1 }).limit(60)
       .populate({ path: 'owner', select: NETWORK_CARD_FIELDS })
-      .populate({ path: 'requests.student', select: NETWORK_CARD_FIELDS })
       .lean(),
     TeamPost.countDocuments(teamUpParticipationQuery(viewerId)),
   ])
-  const posts = [...new Map([...relatedPosts, ...browsePosts].map(post => [idOf(post), post])).values()]
+  // Reuse the counts collected for this response to reconcile historical
+  // milestone awards. Previously this repeated both count queries before the
+  // state request began, making every Network visit wait for four counters.
+  await syncTrustAchievementsFromCounts(student, {
+    connections: connections.filter(item => item.status === 'accepted').length,
+    teamUps: acceptedTeamUps,
+  })
   const peerIds = connections.map(item => idOf(item.requester) === idOf(viewerId) ? item.recipient : item.requester)
   const [relationshipPeers, suggestions] = await Promise.all([
     Student.find({ _id: { $in: peerIds } }).select(NETWORK_CARD_FIELDS).lean(),
@@ -164,7 +179,12 @@ async function getStudentNetworkState(token) {
   const students = [...relationshipPeers, ...suggestions]
   const people = students.map(item => ({ ...profileFor(item, { includeContact: relationships.get(idOf(item))?.status === 'connected', compact: true }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
   const findPerson = id => people.find(person => person.id === idOf(id))
-  const serializedPosts = posts.map(post => serializePost(post, viewerId, relationshipFor))
+  const serializedPosts = [
+    ...relatedPosts.map(post => serializePost(post, viewerId, relationshipFor)),
+    // Browse cards do not expose applicant/member identities. They only need
+    // their owner and basic listing fields, so skip the costly nested populate.
+    ...browsePosts.map(post => serializePost(post, viewerId, relationshipFor, { includeMembers: false })),
+  ]
   const real = {
     viewerId: idOf(viewerId), suggestions: people.filter(item => item.relationship.status !== 'connected'),
     achievementProgress: { connections: connections.filter(item => item.status === 'accepted').length, teamUps: acceptedTeamUps },
@@ -180,6 +200,10 @@ async function getStudentNetworkState(token) {
   const demo = clone(DEMO_NETWORK_STATE)
   return {
     ...real,
+    // Demo profiles are immutable showcase data. Shipping their small public
+    // snapshots with the Network response makes View profile instantaneous
+    // without adding another authenticated database round trip.
+    demoProfiles: Object.fromEntries(demo.people.map(person => [person.id, demoNetworkProfile(person)])),
     suggestions: [...real.suggestions, ...demo.suggestions],
     connected: [...real.connected, ...demo.connections],
     incomingConnections: [...real.incomingConnections, ...demo.incomingRequests],

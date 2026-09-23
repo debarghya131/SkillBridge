@@ -8,11 +8,12 @@ import DashboardSkeleton from '../ui/DashboardSkeleton'
 import './StudentViewport.css'
 import { TrustScoreCriteriaContent } from './TrustScoreCriteria'
 import StudentTrustOverview from './TrustScoreOverview.jsx'
-import { clearStudentSessionToken, deleteStudentAccount, fetchCurrentStudent, fetchStudentActivityHeatmap, fetchStudentGigs, fetchStudentNetwork, fetchStudentProfileMedia, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
-import { clearAllStudentSectionCache, readStudentSectionCache, writeStudentSectionCache } from './sectionCache'
+import { clearStudentSessionToken, deleteStudentAccount, fetchCurrentStudent, fetchSkillAssessments, fetchStudentActivityHeatmap, fetchStudentEarning, fetchStudentGigs, fetchStudentNetwork, fetchStudentProfileMedia, fetchStudentSkillHub, fetchStudentSkillRequests, fetchStudentTrustScore, getStudentSessionToken, logoutStudent, saveStudentProfile } from './studentApi'
+import { clearAllStudentSectionCache, loadStudentSectionCache, readStudentSectionCache, writeStudentSectionCache } from './sectionCache'
 import { isBundledStudentIntroVideoUrl, mergeStudentProfile } from './studentProfileDefaults'
 import { toast } from '../ui/toast'
 import { safeExternalUrl } from '../lib/safeExternalUrl'
+import { ProfileLinkIcon } from '../lib/profileLinkIcon'
 
 const NAV_ITEMS = [
   { key: 'gig',        icon: '💼', label: 'GIG Center' },
@@ -250,7 +251,8 @@ function ProfileActivityHeatmap({ activityDays = [] }) {
   const [token] = useState(getStudentSessionToken)
   const [view, setView] = useState('month')
   const [period, setPeriod] = useState({ year: today.year, month: today.month })
-  const [remoteHeatmap, setRemoteHeatmap] = useState(null)
+  const cacheSection = `profile-activity:${view}:${period.year}:${view === 'month' ? period.month + 1 : 'year'}`
+  const [remoteHeatmap, setRemoteHeatmap] = useState(() => readStudentSectionCache(cacheSection, token))
   const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -270,11 +272,19 @@ function ProfileActivityHeatmap({ activityDays = [] }) {
 
   useEffect(() => {
     let cancelled = false
+    const section = `profile-activity:${view}:${period.year}:${view === 'month' ? period.month + 1 : 'year'}`
+    const cached = readStudentSectionCache(section, token)
+    if (cached && retry === 0) {
+      setRemoteHeatmap(cached)
+      setLoading(false)
+      setLoadError('')
+      return () => { cancelled = true }
+    }
     setLoading(true)
     setLoadError('')
     setRemoteHeatmap(null)
-    fetchStudentActivityHeatmap(token, { view, year: period.year, month: period.month + 1 })
-      .then(result => { if (!cancelled) setRemoteHeatmap(result.heatmap) })
+    loadStudentSectionCache(section, token, () => fetchStudentActivityHeatmap(token, { view, year: period.year, month: period.month + 1 }).then(result => result.heatmap))
+      .then(heatmap => { if (!cancelled) setRemoteHeatmap(heatmap) })
       .catch(error => { if (!cancelled) { setRemoteHeatmap(null); setLoadError(error.message || 'Could not load activity') } })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -526,7 +536,7 @@ function ProfileViewModal({ onClose, name, trustScore, avatar, setAvatar, skills
                     background: 'var(--dark)', color: 'white',
                     padding: '7px 16px', borderRadius: 7,
                     fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content',
-                  }}>{l.icon} View Profile ↗</a>
+                  }}><ProfileLinkIcon url={l.url} size={15} /> View Profile ↗</a>
                 ))}
               </div>
             ) : <span style={{ color: 'var(--muted)', fontSize: 13 }}>No links added</span>
@@ -626,7 +636,7 @@ function ProjectEditorModal({ project, isEditing, onChange, onSave, onClose }) {
   </div>, document.body)
 }
 
-function ProfileSection({ name, trustScore, avatar, setAvatar, about, setAbout, collaborationFocus, setCollaborationFocus, workStyle, setWorkStyle, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, onDeleteAccount, saveState, contactMethod, verificationMethod }) {
+function ProfileSection({ name, trustScore, avatar, setAvatar, about, setAbout, collaborationFocus, setCollaborationFocus, workStyle, setWorkStyle, skills, skillHubSkills, githubLink, setGithubLink, contactInfo, setContactInfo, projects, setProjects, videoUrl, setVideoUrl, onViewProfile, onPrefetchProfile, onDeleteAccount, saveState, contactMethod, verificationMethod }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [githubInput, setGithubInput] = useState({})
   const [contactInput, setContactInput] = useState({ label: 'Phone', value: '' })
@@ -745,6 +755,8 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, about, setAbout, 
               <VerifiedBadge contactMethod={contactMethod} verificationMethod={verificationMethod} />
               <button
                 onClick={onViewProfile}
+                onFocus={onPrefetchProfile}
+                onPointerEnter={onPrefetchProfile}
                 className="student-profile-view-button"
                 style={{
                   background: 'rgba(255,255,255,0.12)',
@@ -834,7 +846,7 @@ function ProfileSection({ name, trustScore, avatar, setAvatar, about, setAbout, 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {githubLink.filter(l => l.saved).map((l, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 16 }}>{l.icon}</span>
+              <span style={{ display: 'inline-flex', color: 'var(--primary)' }}><ProfileLinkIcon url={l.url} size={16} /></span>
               <a href={l.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 13, color: 'var(--primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.url}</a>
               <button onClick={() => setGithubLink(prev => prev.filter((_, idx) => idx !== i))}
                 style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
@@ -958,9 +970,8 @@ function TrustScoreSection({ trustScore }) {
     }
     setIsLoadingScore(true)
     setScoreError('')
-    fetchStudentTrustScore(token).then(result => {
-      writeStudentSectionCache('trustscore', token, result.trustScore)
-      if (!cancelled) setTrustScoreData(result.trustScore)
+    loadStudentSectionCache('trustscore', token, () => fetchStudentTrustScore(token).then(result => result.trustScore)).then(result => {
+      if (!cancelled) setTrustScoreData(result)
     }).catch(error => { if (!cancelled) setScoreError(error.message || 'Could not load TrustScore.') })
       .finally(() => { if (!cancelled) setIsLoadingScore(false) })
     return () => { cancelled = true }
@@ -1139,6 +1150,22 @@ export default function StudentDashboard() {
     setStudentRetry(value => value + 1)
   }, [])
 
+  const prefetchProfile = useCallback(() => {
+    const token = sessionTokenRef.current || getStudentSessionToken()
+    if (!token) return
+    const today = indiaToday()
+    const heatmapSection = `profile-activity:month:${today.year}:${today.month + 1}`
+    loadStudentSectionCache('profile-media', token, () => fetchStudentProfileMedia(token)).catch(() => {})
+    loadStudentSectionCache('gig', token, () => fetchStudentGigs(token).then(result => result.gigState)).catch(() => {})
+    loadStudentSectionCache('network', token, () => fetchStudentNetwork(token).then(result => result.networkState)).catch(() => {})
+    loadStudentSectionCache(heatmapSection, token, () => fetchStudentActivityHeatmap(token, { view: 'month', year: today.year, month: today.month + 1 }).then(result => result.heatmap)).catch(() => {})
+  }, [])
+
+  const openProfile = useCallback(() => {
+    prefetchProfile()
+    setShowProfile(true)
+  }, [prefetchProfile])
+
   useEffect(() => {
     setActive(current => current === requestedSection ? current : requestedSection)
   }, [requestedSection])
@@ -1155,17 +1182,51 @@ export default function StudentDashboard() {
     if (!sidebarOpen) return undefined
     const previousOverflow = document.body.style.overflow
     const closeOnEscape = event => event.key === 'Escape' && setSidebarOpen(false)
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => { if (desktop.matches) setSidebarOpen(false) }
+    desktop.addEventListener('change', closeOnDesktop)
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', closeOnEscape)
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', closeOnEscape)
+      desktop.removeEventListener('change', closeOnDesktop)
     }
   }, [sidebarOpen])
 
   const prefetchSection = useCallback(section => {
     SECTION_LOADERS[section]?.()
-  }, [])
+    const token = getStudentSessionToken()
+    if (section === 'profile') {
+      prefetchProfile()
+      return
+    }
+    if (section === 'network') {
+      if (!token || readStudentSectionCache('network', token)) return
+      loadStudentSectionCache('network', token, () => fetchStudentNetwork(token).then(result => result.networkState)).catch(() => {})
+      return
+    }
+    if (section === 'earning') {
+      if (!token || readStudentSectionCache('earning', token)) return
+      loadStudentSectionCache('earning', token, () => fetchStudentEarning(token).then(result => result.earningState)).catch(() => {})
+      return
+    }
+    if (section !== 'skillhub') return
+    if (!token || readStudentSectionCache('skillhub', token)) return
+    loadStudentSectionCache('skillhub', token, async () => {
+      const [hub, history, requests] = await Promise.all([
+        fetchStudentSkillHub(token, { includeSkillGap: false }),
+        fetchSkillAssessments(token),
+        fetchStudentSkillRequests(token),
+      ])
+      return {
+        hub: hub.skillHub,
+        assessments: history?.assessments || [],
+        skillRequests: requests?.requests || [],
+        hasSkillGapReport: false,
+      }
+    }).catch(() => {})
+  }, [prefetchProfile])
 
   useEffect(() => {
     window.sessionStorage.setItem(STUDENT_ACTIVE_SECTION_KEY, active)
@@ -1184,13 +1245,13 @@ export default function StudentDashboard() {
 
     // Resolve each metric independently so a delayed network request cannot
     // prevent the completed-GIG count from appearing.
-    fetchStudentGigs(token)
-      .then(result => {
+    loadStudentSectionCache('gig', token, () => fetchStudentGigs(token).then(result => result.gigState))
+      .then(gigState => {
         if (cancelled) return
         // Showcase GIGs are available to explore, but never represent the
         // signed-in student's own completed work or reputation.
-        const completedGigs = Array.isArray(result?.gigState?.completedGigs)
-          ? result.gigState.completedGigs.filter(gig => !gig?.demoData).length
+        const completedGigs = Array.isArray(gigState?.completedGigs)
+          ? gigState.completedGigs.filter(gig => !gig?.demoData).length
           : 0
         setProfileActivity(current => ({ ...current, completedGigs }))
       })
@@ -1198,8 +1259,8 @@ export default function StudentDashboard() {
         if (!cancelled) setProfileActivity(current => ({ ...current, completedGigs: 0 }))
       })
 
-    fetchStudentNetwork(token)
-      .then(({ networkState }) => {
+    loadStudentSectionCache('network', token, () => fetchStudentNetwork(token).then(result => result.networkState))
+      .then(networkState => {
         if (cancelled) return
         // This server value excludes showcase fixtures and only counts an
         // accepted collaboration, including historical accepted memberships.
@@ -1221,7 +1282,7 @@ export default function StudentDashboard() {
     if (!token) return undefined
 
     let cancelled = false
-    fetchStudentProfileMedia(token)
+    loadStudentSectionCache('profile-media', token, () => fetchStudentProfileMedia(token))
       .then(media => {
         if (cancelled) return
         const nextVideoUrl = mergeStudentProfile({ videoUrl: media.videoUrl }).videoUrl
@@ -1293,6 +1354,11 @@ export default function StudentDashboard() {
             : {}),
         }
         didHydrateRef.current = true
+        // TrustScore is the next-most common destination after the GIG Center.
+        // Warm it after the initial workspace is usable, rather than making a
+        // student wait for a second API round trip after clicking its sidebar item.
+        loadStudentSectionCache('trustscore', token, () => fetchStudentTrustScore(token).then(score => score.trustScore))
+          .catch(() => {})
       } catch (error) {
         if (!cancelled) {
           if (error.status === 401) {
@@ -1321,7 +1387,7 @@ export default function StudentDashboard() {
     }
     const version = ++profileSaveVersionRef.current
     const timeoutId = window.setTimeout(() => {
-      const payload = {
+      const snapshot = {
         name,
         avatar,
         about,
@@ -1332,19 +1398,25 @@ export default function StudentDashboard() {
         projects,
         ...(profileMediaLoaded ? { videoUrl: isBundledStudentIntroVideoUrl(videoUrl) ? null : videoUrl } : {}),
       }
-      if (JSON.stringify(payload) === JSON.stringify(persistedProfileRef.current)) return
-
-      // Profile edits send the complete profile snapshot. Serialize those
-      // writes so quick edits cannot finish out of order and overwrite newer data.
+      // Only changed fields are sent. Serialize writes so quick edits cannot
+      // finish out of order while avoiding repeated avatar/video uploads.
       profileSaveQueueRef.current = profileSaveQueueRef.current
         .catch(() => {})
         .then(async () => {
           if (version !== profileSaveVersionRef.current) return
+          // Recompute after older queued saves finish. This also preserves a
+          // deliberate edit back to the original value while a save is active.
+          const persisted = persistedProfileRef.current || {}
+          const payload = Object.fromEntries(Object.entries(snapshot).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(persisted[key])))
+          if (!Object.keys(payload).length) return
           setProfileSaveState('saving')
           try {
             const result = await saveStudentProfile(sessionTokenRef.current, payload)
+            persistedProfileRef.current = { ...persistedProfileRef.current, ...payload }
+            if (Object.prototype.hasOwnProperty.call(payload, 'videoUrl')) {
+              writeStudentSectionCache('profile-media', sessionTokenRef.current, { videoUrl: payload.videoUrl })
+            }
             if (version === profileSaveVersionRef.current) {
-              persistedProfileRef.current = payload
               if (Number.isFinite(result?.student?.trustScore)) setTrustScore(result.student.trustScore)
               setProfileSaveState('saved')
             }
@@ -1408,14 +1480,17 @@ export default function StudentDashboard() {
         />
       )}
 
-      <StudentNav
-        avatar={avatar}
-        name={name}
-        trustScore={trustScore}
-        practiceStats={practiceStats}
-        onOpenProfile={() => setShowProfile(true)}
-        onToggleSidebar={() => setSidebarOpen(true)}
-      />
+      <header className="student-navigation-shell">
+        <StudentNav
+          avatar={avatar}
+          name={name}
+          trustScore={trustScore}
+          practiceStats={practiceStats}
+          onOpenProfile={openProfile}
+          onPrefetchProfile={prefetchProfile}
+          onToggleSidebar={() => setSidebarOpen(true)}
+        />
+      </header>
 
       {/* Body */}
       <div className="dashboard-body" style={{ display: 'flex', flex: 1 }}>
@@ -1447,7 +1522,8 @@ export default function StudentDashboard() {
               contactInfo={contactInfo} setContactInfo={setContactInfo}
               projects={projects} setProjects={setProjects}
               videoUrl={videoUrl} setVideoUrl={setVideoUrl}
-              onViewProfile={() => setShowProfile(true)}
+              onViewProfile={openProfile}
+              onPrefetchProfile={prefetchProfile}
               onDeleteAccount={handleDeleteAccount}
               saveState={profileSaveState}
               contactMethod={contactMethod} verificationMethod={verificationMethod}

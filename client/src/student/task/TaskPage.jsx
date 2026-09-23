@@ -56,7 +56,7 @@ export default function TaskPage() {
   return <main className="assessment-page">
     <button type="button" className="assessment-back" onClick={back}><ArrowLeft size={16} /> Back to Dashboard</button>
     {isCompanyTask ? <CompanyTaskPage opportunity={context.opportunity} />
-      : context?.skillName ? <SkillAssessmentPage key={[context.skillName, context.mode, context.challengeId, context.targetStage].join(':')} context={context} />
+      : context?.skillName ? <SkillAssessmentPage key={[context.skillName, context.mode, context.challengeId, context.targetStage, context.assessmentId].join(':')} context={context} />
         : <section className="assessment-empty"><h2>No assessment selected</h2><button className="btn-primary" onClick={back}>Open Skill Hub</button></section>}
   </main>
 }

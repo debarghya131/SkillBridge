@@ -26,7 +26,7 @@ export default function Footer() {
             <Link to="/student?mode=signup">For students</Link>
             <Link to="/company?mode=signup">For organizations</Link>
             <Link to="/login">Log in</Link>
-            <Link to="/reviewer">Reviewer sign in</Link>
+            <Link to="/admin">Admin sign in</Link>
           </nav>
           <nav aria-label="Contact links">
             <h3>Get in touch</h3>

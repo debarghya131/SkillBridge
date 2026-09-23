@@ -1,11 +1,12 @@
 import { createElement, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, MapPin, Globe, Mail, Phone, Building2, Users, BriefcaseBusiness, Fingerprint, Video } from 'lucide-react'
 import CompanyLogo from './CompanyLogo'
 import { safeExternalUrl, safeVideoUrl } from '../lib/safeExternalUrl'
 import companyIntroVideo from '../assets/companyintro.mp4'
 import './CompanyProfileModal.css'
 
-export default function CompanyProfileModal({ profile, gig, onClose, loading, error, onRetry }) {
+export default function CompanyProfileModal({ profile, gig, onClose, loading, error, onRetry, contactMethod, verificationMethod }) {
   const close = useRef(null)
   useEffect(() => {
     const previous = document.activeElement
@@ -33,7 +34,7 @@ export default function CompanyProfileModal({ profile, gig, onClose, loading, er
   // Every company starts with the application introduction. A saved company
   // video replaces it as soon as one is published.
   const introVideoUrl = safeVideoUrl(company.introVideoUrl) || companyIntroVideo
-  return <div className="company-profile-overlay" onClick={event => event.target === event.currentTarget && onClose()}>
+  return createPortal(<div className="company-profile-overlay" onClick={event => event.target === event.currentTarget && onClose()}>
     <section className="company-profile-dialog" role="dialog" aria-modal="true" aria-label={`${name} details`}>
       <header className="company-profile-heading"><CompanyLogo logo={profile ? company.logo : gig?.companyLogo} name={name} size={50}/>
         <div><small>{gig ? 'Company details' : 'Business profile'}</small><h2>{name}</h2><p><MapPin size={13}/>{company.location || 'Location not provided'}</p>
@@ -56,8 +57,8 @@ export default function CompanyProfileModal({ profile, gig, onClose, loading, er
           </section>
           <section><h3><Video size={15}/>Business introduction</h3><video className="company-profile-video" controls preload="metadata" src={introVideoUrl}>Your browser cannot play this video.</video></section>
           <section><details className="company-profile-account"><summary><Fingerprint size={16}/>Account details</summary>
-            <p>Registered via {({ email: 'Business Email', phone: 'Phone Number' })[company.contactMethod] || 'unavailable method'}</p>
-            <p>Business identity method: {({ gstin: 'GSTIN', udyam: 'Udyam' })[company.verificationMethod] || 'Not provided'}</p>
+            <p>Registered via {({ email: 'Business Email', phone: 'Phone Number' })[company.contactMethod || contactMethod] || 'unavailable method'}</p>
+            <p>Business identity method: {({ gstin: 'GSTIN', udyam: 'Udyam' })[company.verificationMethod || verificationMethod] || 'Not provided'}</p>
           </details></section>
           <section><h3>Company contact</h3><div className="company-profile-contact">
             {website && <a href={website} target="_blank" rel="noreferrer"><Globe size={15}/>Website</a>}
@@ -67,5 +68,5 @@ export default function CompanyProfileModal({ profile, gig, onClose, loading, er
         </>}
       </div><footer><button onClick={onClose}>Close {gig ? 'Details' : 'Profile'}</button></footer>
     </section>
-  </div>
+  </div>, document.body)
 }

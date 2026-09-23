@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { claimLeaseMs, normalizeQueueFilters } = require('../controllers/reviewerController')
+const Reviewer = require('../models/Reviewer')
+const SkillAssessment = require('../models/SkillAssessment')
+const { claimLeaseMs, listReviewQueue, normalizeQueueFilters } = require('../controllers/reviewerController')
 const { normalizeRubric, serializeBlindAssessment } = require('../controllers/skillAssessmentController')
 
 test('review rubric validates all criteria and calculates the weighted score', () => {
@@ -39,4 +41,19 @@ test('blind assessment serialization excludes student identity', () => {
   assert.equal(result.studentId, undefined)
   assert.equal(result.studentName, undefined)
   assert.equal(result.college, undefined)
+})
+
+test('administrator accounts can use the review queue inside the admin workspace', async t => {
+  t.mock.method(Reviewer, 'findOne', async () => ({
+    _id: 'admin-1', role: 'admin', sessions: [{ token: 'admin-token', createdAt: new Date() }], save: async () => {},
+  }))
+  t.mock.method(SkillAssessment, 'find', () => ({
+    sort() { return this },
+    skip() { return this },
+    async limit() { return [] },
+  }))
+  t.mock.method(SkillAssessment, 'countDocuments', async () => 0)
+  const result = await listReviewQueue('admin-token', {})
+  assert.equal(result.page, 1)
+  assert.equal(result.assessments.every(item => item.studentName == null), true)
 })

@@ -5,6 +5,7 @@ const { getEnvConfig } = require('./config/env')
 const {
   getCompanyStudentProfile,
   getCurrentCompany,
+  getCurrentCompanyProfileMedia,
   getCurrentCompanyTaskLibraryState,
   getCurrentCompanyDashboard,
   getCurrentCompanyGigManagementState,
@@ -22,6 +23,9 @@ const {
   updateCompanyGig,
   setCompanyWorkspaceMilestone,
   shareCompanyWorkspaceUpdate,
+  withDemoGigState,
+  withDemoTaskLibraryState,
+  withDemoWorkspace,
 } = require('./controllers/companyController')
 const {
   getCurrentStudent,
@@ -38,6 +42,7 @@ const {
   compactGigStateMedia,
   declineOpportunity,
   getStudentGigState,
+  mergeGigStateWithDemo,
   saveGig,
   unsaveGig,
 } = require('./controllers/gigController')
@@ -50,6 +55,8 @@ const {
 const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub } = require('./controllers/skillHubController')
 const { listStudentAssessments, submitSkillAssessment } = require('./controllers/skillAssessmentController')
 const { claimAssessment, decideAssessment, getCurrentReviewer, listReviewQueue, logoutReviewer, releaseAssessment, signInReviewer } = require('./controllers/reviewerController')
+const { createAdminReviewer, createAdminSkill, decideAdminSkillRequest, getAdminOverview, listAdminReviewers, listAdminSkillRequests, listAdminSkills, updateAdminReviewer, updateAdminSkill } = require('./controllers/adminController')
+const { listPublishedSkillCatalog, listStudentSkillRequests, requestCatalogSkill } = require('./controllers/skillCatalogController')
 const { getStudentTrustScore, recordStudentTrustScoreEvent } = require('./controllers/trustScoreController')
 const {
   getCompanyTaskSubmissions,
@@ -178,6 +185,12 @@ async function handleCompanyApi(req, res, pathname) {
       return true
     }
 
+    if (req.method === 'GET' && pathname === '/api/company/profile-media') {
+      const media = await getCurrentCompanyProfileMedia(getBearerToken(req))
+      sendJson(res, 200, media)
+      return true
+    }
+
     if (req.method === 'GET' && pathname === '/api/company/dashboard') {
       const dashboard = await getCurrentCompanyDashboard(getBearerToken(req))
       sendJson(res, 200, { dashboard })
@@ -204,7 +217,7 @@ async function handleCompanyApi(req, res, pathname) {
 
     if (req.method === 'POST' && pathname === '/api/company/gigs') {
       const payload = await readJsonBody(req)
-      const gigManagementState = await createCompanyGig(getBearerToken(req), payload)
+      const gigManagementState = withDemoGigState(await createCompanyGig(getBearerToken(req), payload))
       sendJson(res, 201, { gigManagementState })
       return true
     }
@@ -218,14 +231,14 @@ async function handleCompanyApi(req, res, pathname) {
 
     const gigIdMatch = pathname.match(/^\/api\/company\/gigs\/(\d+)$/)
     if (req.method === 'DELETE' && gigIdMatch) {
-      const gigManagementState = await deleteCompanyGig(getBearerToken(req), gigIdMatch[1])
+      const gigManagementState = withDemoGigState(await deleteCompanyGig(getBearerToken(req), gigIdMatch[1]))
       sendJson(res, 200, { gigManagementState })
       return true
     }
 
     if (req.method === 'PATCH' && gigIdMatch) {
       const payload = await readJsonBody(req)
-      const gigManagementState = await updateCompanyGig(getBearerToken(req), gigIdMatch[1], payload)
+      const gigManagementState = withDemoGigState(await updateCompanyGig(getBearerToken(req), gigIdMatch[1], payload))
       sendJson(res, 200, { gigManagementState })
       return true
     }
@@ -240,7 +253,7 @@ async function handleCompanyApi(req, res, pathname) {
 
     if (req.method === 'PATCH' && pathname === '/api/company/tasks/library') {
       const payload = await readJsonBody(req)
-      const taskLibraryState = await updateCurrentCompanyTaskLibraryState(getBearerToken(req), payload)
+      const taskLibraryState = withDemoTaskLibraryState(await updateCurrentCompanyTaskLibraryState(getBearerToken(req), payload))
       sendJson(res, 200, { taskLibraryState })
       return true
     }
@@ -270,7 +283,7 @@ async function handleCompanyApi(req, res, pathname) {
       const projectWorkspaceState = workspaceProjectMatch[2] === 'update'
         ? await shareCompanyWorkspaceUpdate(getBearerToken(req), projectId, payload)
         : await setCompanyWorkspaceMilestone(getBearerToken(req), projectId, payload)
-      sendJson(res, 200, { projectWorkspaceState })
+      sendJson(res, 200, { projectWorkspaceState: withDemoWorkspace(projectWorkspaceState) })
       return true
     }
 
@@ -311,7 +324,11 @@ async function handleCompanyApi(req, res, pathname) {
     if (req.method === 'PATCH' && taskReviewMatch) {
       const payload = await readJsonBody(req)
       const result = await reviewCompanyTaskSubmission(getBearerToken(req), taskReviewMatch[1], payload)
-      sendJson(res, 200, result)
+      sendJson(res, 200, {
+        ...result,
+        gigManagementState: withDemoGigState(result.gigManagementState),
+        projectWorkspaceState: withDemoWorkspace(result.projectWorkspaceState),
+      })
       return true
     }
 
@@ -373,6 +390,61 @@ async function handleReviewerApi(req, res, pathname) {
   return false
 }
 
+async function handleAdminApi(req, res, pathname) {
+  try {
+    const token = getBearerToken(req)
+    if (req.method === 'GET' && pathname === '/api/admin/overview') {
+      sendJson(res, 200, await getAdminOverview(token))
+      return true
+    }
+    if (pathname === '/api/admin/skills' && req.method === 'GET') {
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      sendJson(res, 200, { skills: await listAdminSkills(token, Object.fromEntries(searchParams.entries())) })
+      return true
+    }
+    if (pathname === '/api/admin/skills' && req.method === 'POST') {
+      sendJson(res, 201, { skill: await createAdminSkill(token, await readJsonBody(req)) })
+      return true
+    }
+    const skillMatch = pathname.match(/^\/api\/admin\/skills\/([a-f0-9]{24})$/i)
+    if (skillMatch && req.method === 'PATCH') {
+      sendJson(res, 200, { skill: await updateAdminSkill(token, skillMatch[1], await readJsonBody(req)) })
+      return true
+    }
+    if (pathname === '/api/admin/skill-requests' && req.method === 'GET') {
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      sendJson(res, 200, { requests: await listAdminSkillRequests(token, Object.fromEntries(searchParams.entries())) })
+      return true
+    }
+    const requestMatch = pathname.match(/^\/api\/admin\/skill-requests\/([a-f0-9]{24})$/i)
+    if (requestMatch && req.method === 'PATCH') {
+      sendJson(res, 200, { request: await decideAdminSkillRequest(token, requestMatch[1], await readJsonBody(req)) })
+      return true
+    }
+    if (pathname === '/api/admin/reviewers' && req.method === 'GET') {
+      sendJson(res, 200, { reviewers: await listAdminReviewers(token) })
+      return true
+    }
+    if (pathname === '/api/admin/reviewers' && req.method === 'POST') {
+      sendJson(res, 201, { reviewer: await createAdminReviewer(token, await readJsonBody(req)) })
+      return true
+    }
+    const reviewerMatch = pathname.match(/^\/api\/admin\/reviewers\/([a-f0-9]{24})$/i)
+    if (reviewerMatch && req.method === 'PATCH') {
+      sendJson(res, 200, { reviewer: await updateAdminReviewer(token, reviewerMatch[1], await readJsonBody(req)) })
+      return true
+    }
+  } catch (error) {
+    sendJson(res, error.statusCode || 500, {
+      status: 'error',
+      message: error.statusCode ? error.message : 'The server could not complete this request.',
+      requestId: res.requestId,
+    })
+    return true
+  }
+  return false
+}
+
 async function handleStudentApi(req, res, pathname) {
   try {
     if (req.method === 'POST' && pathname === '/api/student/signup') {
@@ -405,7 +477,9 @@ async function handleStudentApi(req, res, pathname) {
     if (req.method === 'PATCH' && pathname === '/api/student/profile') {
       const payload = await readJsonBody(req)
       const student = await updateCurrentStudent(getBearerToken(req), payload)
-      sendJson(res, 200, { student })
+      // The editor already owns the submitted field values. Keep autosave
+      // acknowledgements small instead of echoing the avatar and profile lists.
+      sendJson(res, 200, { student: { id: student.id, trustScore: student.trustScore } })
       return true
     }
 
@@ -526,8 +600,27 @@ async function handleStudentApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/student/skillhub') {
-      const skillHub = await getStudentSkillHub(getBearerToken(req))
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const skillHub = await getStudentSkillHub(getBearerToken(req), {
+        includeSkillGap: searchParams.get('includeSkillGap') !== 'false',
+      })
       sendJson(res, 200, { skillHub })
+      return true
+    }
+
+    if (req.method === 'GET' && pathname === '/api/student/skillhub/catalog') {
+      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      sendJson(res, 200, { skills: await listPublishedSkillCatalog(getBearerToken(req), Object.fromEntries(searchParams.entries())) })
+      return true
+    }
+
+    if (pathname === '/api/student/skillhub/skill-requests' && req.method === 'GET') {
+      sendJson(res, 200, { requests: await listStudentSkillRequests(getBearerToken(req)) })
+      return true
+    }
+
+    if (pathname === '/api/student/skillhub/skill-requests' && req.method === 'POST') {
+      sendJson(res, 201, { request: await requestCatalogSkill(getBearerToken(req), await readJsonBody(req)) })
       return true
     }
 
@@ -598,34 +691,34 @@ async function handleStudentApi(req, res, pathname) {
 
     const applyMatch = pathname.match(/^\/api\/student\/gigs\/(\d+)\/apply$/)
     if (req.method === 'POST' && applyMatch) {
-      const gigState = await applyToGig(getBearerToken(req), applyMatch[1])
+      const gigState = mergeGigStateWithDemo(await applyToGig(getBearerToken(req), applyMatch[1]))
       sendJson(res, 200, { gigState })
       return true
     }
 
     const saveMatch = pathname.match(/^\/api\/student\/gigs\/(\d+)\/save$/)
     if (req.method === 'POST' && saveMatch) {
-      const gigState = await saveGig(getBearerToken(req), saveMatch[1])
+      const gigState = mergeGigStateWithDemo(await saveGig(getBearerToken(req), saveMatch[1]))
       sendJson(res, 200, { gigState })
       return true
     }
 
     if (req.method === 'DELETE' && saveMatch) {
-      const gigState = await unsaveGig(getBearerToken(req), saveMatch[1])
+      const gigState = mergeGigStateWithDemo(await unsaveGig(getBearerToken(req), saveMatch[1]))
       sendJson(res, 200, { gigState })
       return true
     }
 
     const acceptMatch = pathname.match(/^\/api\/student\/opportunities\/([^/]+)\/accept$/)
     if (req.method === 'POST' && acceptMatch) {
-      const gigState = await acceptOpportunity(getBearerToken(req), decodeURIComponent(acceptMatch[1]))
+      const gigState = mergeGigStateWithDemo(await acceptOpportunity(getBearerToken(req), decodeURIComponent(acceptMatch[1])))
       sendJson(res, 200, { gigState })
       return true
     }
 
     const declineMatch = pathname.match(/^\/api\/student\/opportunities\/([^/]+)\/decline$/)
     if (req.method === 'POST' && declineMatch) {
-      const gigState = await declineOpportunity(getBearerToken(req), decodeURIComponent(declineMatch[1]))
+      const gigState = mergeGigStateWithDemo(await declineOpportunity(getBearerToken(req), decodeURIComponent(declineMatch[1])))
       sendJson(res, 200, { gigState })
       return true
     }
@@ -723,6 +816,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (await handleReviewerApi(req, res, pathname)) {
+    return
+  }
+
+  if (await handleAdminApi(req, res, pathname)) {
     return
   }
 

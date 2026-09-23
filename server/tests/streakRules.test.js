@@ -57,6 +57,8 @@ test('pending daily practice does not block the next IST day; same-day duplicate
     return records[0]
   })
   records[0].status = 'needs_revision'
+  t.mock.method(SkillAssessment, 'findOne', async query => records.find(record => String(record._id) === String(query._id)
+    && String(record.studentId) === String(query.studentId) && record.status === query.status) || null)
   const revised = await submitSkillAssessment('s', { ...payload, id: first.id })
   assert.equal(revised.earnedDay, '2026-09-11')
 })

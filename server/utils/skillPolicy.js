@@ -43,15 +43,12 @@ function isDiscoverableVerifiedSkill(skill, now = new Date()) {
   return !isArchivedSkill(skill) && isVerifiedSkill(skill, now)
 }
 
-function publishedSkillNames(profileSkills, skillHubSkills, now = new Date()) {
-  const archivedNames = new Set((Array.isArray(skillHubSkills) ? skillHubSkills : [])
-    .filter(isArchivedSkill)
-    .map(skill => String(skill.name || '').trim().toLowerCase())
-    .filter(Boolean))
-  const names = [
-    ...(Array.isArray(profileSkills) ? profileSkills : []).filter(name => typeof name === 'string' && name.trim() && !archivedNames.has(name.trim().toLowerCase())),
-    ...(Array.isArray(skillHubSkills) ? skillHubSkills : []).filter(skill => isDiscoverableVerifiedSkill(skill, now)).map(skill => skill.name),
-  ]
+function publishedSkillNames(_profileSkills, skillHubSkills, now = new Date()) {
+  // `student.skills` is an editable/profile compatibility field. Discovery and
+  // matching must only publish structured skills that passed platform review.
+  const names = (Array.isArray(skillHubSkills) ? skillHubSkills : [])
+    .filter(skill => isDiscoverableVerifiedSkill(skill, now))
+    .map(skill => skill.name)
   return [...new Set(names.map(name => name.trim()))]
 }
 

@@ -4,7 +4,7 @@ import LandingPage from './landing/LandingPage'
 import ToastViewport from './ui/ToastViewport'
 import { getStudentSessionToken } from './student/studentApi'
 import { getCompanySessionToken } from './company/companyApi'
-import { getReviewerSessionToken } from './reviewer/reviewerApi'
+import { getAdminSessionToken } from './admin/adminApi'
 
 const StudentAuth = lazy(() => import('./student/StudentAuth'))
 const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
@@ -12,8 +12,8 @@ const TaskPage = lazy(() => import('./student/task/TaskPage'))
 const TrustScoreCriteria = lazy(() => import('./student/TrustScoreCriteria'))
 const CompanyAuth = lazy(() => import('./company/CompanyAuth'))
 const CompanyDashboard = lazy(() => import('./company/CompanyDashboard'))
-const ReviewerAuth = lazy(() => import('./reviewer/ReviewerAuth'))
-const ReviewerDashboard = lazy(() => import('./reviewer/ReviewerDashboard'))
+const AdminAuth = lazy(() => import('./admin/AdminAuth'))
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 const LoginPortal = lazy(() => import('./auth/LoginPortal'))
 const NotFound = lazy(() => import('./ui/NotFound'))
 
@@ -43,9 +43,9 @@ function CompanyProtectedRoute() {
   return <Outlet />
 }
 
-function ReviewerProtectedRoute() {
+function AdminProtectedRoute() {
   const location = useLocation()
-  if (!getReviewerSessionToken()) return <Navigate to="/reviewer" replace state={{ from: location.pathname }} />
+  if (!getAdminSessionToken()) return <Navigate to="/admin" replace state={{ from: location.pathname }} />
   return <Outlet />
 }
 
@@ -66,9 +66,11 @@ export default function App() {
           <Route element={<CompanyProtectedRoute />}>
             <Route path="/company/dashboard" element={<CompanyDashboard />} />
           </Route>
-          <Route path="/reviewer" element={<ReviewerAuth />} />
-          <Route element={<ReviewerProtectedRoute />}>
-            <Route path="/reviewer/dashboard" element={<ReviewerDashboard />} />
+          <Route path="/reviewer" element={<Navigate to="/admin" replace />} />
+          <Route path="/reviewer/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin" element={<AdminAuth />} />
+          <Route element={<AdminProtectedRoute />}>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

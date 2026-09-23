@@ -44,7 +44,7 @@ export function PracticeStreak({ skills = [], skillHubState }) {
     return days
   }, {})
   for (const item of demoStreakDays) {
-    if (!item?.skillName) continue
+    if (!item?.skillName || !demoSkills.some(skill => skill.name.toLowerCase() === item.skillName.toLowerCase())) continue
     const skillName = item.skillName.toLowerCase()
     if (!practiceDaysBySkill[skillName]) practiceDaysBySkill[skillName] = new Set()
     for (const practiceDay of item.days || []) practiceDaysBySkill[skillName].add(practiceDay)
@@ -75,11 +75,11 @@ export function PracticeStreak({ skills = [], skillHubState }) {
         <div className="sh-habit-skill-head">Skill</div>
         {Array.from({ length: daysInMonth }, (_, index) => <div className="sh-habit-day-head" key={index + 1}><span>{dayLabel(monthKey(viewYear, viewMonth, index + 1))}</span>{index + 1}</div>)}
         {ranked.map(skill => {
-          const eligible = !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
+          const eligible = skill.assessmentEligible !== false && !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
           const skillDays = practiceDaysBySkill[skill.name.toLowerCase()] || new Set()
           const current = Number(skill.streak) || 0
           return <div className="sh-habit-row" key={skill.name}>
-            <div className="sh-habit-skill"><div><strong>{skill.name}{skill.demoData && <span className="demo-data-badge">Demo</span>}</strong><span>{skill.category} · {skill.stage}</span></div><div className="sh-habit-skill-meta"><span><Flame size={13}/>{current} days</span>{eligible ? <small>Active</small> : <small className="is-locked">{skill.archived ? 'Archived' : skill.renewalStatus === 'expired' ? 'Renew first' : 'Verify first'}</small>}</div></div>
+            <div className="sh-habit-skill"><div><strong>{skill.name}{skill.demoData && <span className="demo-data-badge">Demo</span>}</strong><span>{skill.category} · {skill.stage}</span></div><div className="sh-habit-skill-meta"><span><Flame size={13}/>{current} {current === 1 ? 'day' : 'days'}</span>{eligible ? <small>Active</small> : <small className="is-locked">{skill.archived ? 'Archived' : skill.renewalStatus === 'expired' ? 'Renew first' : 'Verify first'}</small>}</div></div>
             {Array.from({ length: daysInMonth }, (_, index) => {
               const dateKey = monthKey(viewYear, viewMonth, index + 1)
               const practiced = skillDays.has(dateKey)
@@ -97,10 +97,12 @@ export function PracticeStreak({ skills = [], skillHubState }) {
 
 export default function DailyChallenge({ skills = [], skillHubState, challenges = [], rewards, assessments = [], onOpenTask }) {
   const daily = skillHubState?.daily || {}
-  const verified = skills.filter(skill => !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus))
+  const verified = skills.filter(skill => skill.assessmentEligible !== false && !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus))
   const open = (skill, mode, extra = {}) => onOpenTask?.(skill, mode, { returnTab: 'daily', ...extra })
-  const reviewState = (name, mode, challengeId) => assessments.find(item => item.skillName.toLowerCase() === name.toLowerCase() && item.mode === mode
-    && (mode !== 'challenge' || item.challengeId === challengeId) && ['pending', 'needs_revision'].includes(item.status))?.status
+  const todayAssessment = mode => assessments.find(item => !item.demoData && item.mode === mode && item.earnedDay === daily.date
+    && ['pending', 'needs_revision', 'approved'].includes(item.status))
+  const reviewRecord = (name, mode, challengeId) => assessments.find(item => !item.demoData && item.skillName.toLowerCase() === name.toLowerCase() && item.mode === mode
+    && item.earnedDay === daily.date && (mode !== 'challenge' || String(item.challengeId) === String(challengeId)) && ['pending', 'needs_revision'].includes(item.status))
   const actionLabel = (status, fallback) => status === 'pending' ? 'Awaiting review' : status === 'needs_revision' ? 'Revise submission' : fallback
   const demoPractice = skillHubState?.demoDailyPractice || []
   const demoChallenges = skillHubState?.demoChallengeStates || []
@@ -108,31 +110,35 @@ export default function DailyChallenge({ skills = [], skillHubState, challenges 
   return <div className="sh-daily-layout">
     <div className="sh-columns">
     <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Verified skills</span><h2>Daily Practice</h2></div><span>{daily.date} IST</span></header>
-      <p className="sh-policy">Up to +{rewards.retain} Trust per submission day after review. No automatic penalties for missed practice.</p>
+      <p className="sh-policy">One practice submission per IST day, across all skills. Approval earns +{rewards.retain} base credits and counts toward the submission day's streak. No automatic penalties for missed practice.</p>
       <div className="sh-list">{verified.map(skill => {
         const done = (daily.completedRetention || []).includes(skill.name.toLowerCase())
-        const status = reviewState(skill.name, 'retain')
+        const record = reviewRecord(skill.name, 'retain')
+        const status = record?.status
+        const blocked = !skill.demoData && !record && (Boolean(todayAssessment('retain')) || daily.completedRetention?.length > 0)
         const demoState = skill.demoData ? demoPractice.find(item => item.skillName.toLowerCase() === skill.name.toLowerCase()) : null
         const demoDone = demoState?.status === 'approved'
         const effectiveStatus = demoState?.status || status
         return <article className="sh-skill" key={skill.name}><div className="sh-skill-main"><strong>{skill.name}{skill.demoData && <span className="demo-data-badge">Demo</span>}</strong><p className="sh-meta">{skill.stage} · Approved evidence only</p><StreakBadge skill={skill} done={done || demoDone}/></div>
-          {done || demoDone ? <><CheckCircle2 aria-label="Practice approved" size={20}/><span className="sh-positive">Approved</span></> : <button className="btn-secondary" onClick={() => open(skill, 'retain', demoState ? { demoAssessment: demoAssessment(demoState) } : {})}>{actionLabel(effectiveStatus, 'Submit practice')}<ArrowRight size={16}/></button>}</article>
+          {done || demoDone ? <><CheckCircle2 aria-label="Practice approved" size={20}/><span className="sh-positive">Approved</span></> : <button className="btn-secondary" disabled={blocked} onClick={() => open(skill, 'retain', demoState ? { demoAssessment: demoAssessment(demoState) } : { assessmentId: record?.id })}>{blocked ? 'Daily submission recorded' : actionLabel(effectiveStatus, 'Submit practice')}<ArrowRight size={16}/></button>}</article>
       })}{!verified.length && <p className="sh-empty">No actively verified skills available for practice.</p>}</div>
     </section>
-    <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Evidence tasks</span><h2>Challenges</h2></div><span>+{daily.points || 0} Trust for today's submissions</span></header>
-      <p className="sh-policy">Up to +{rewards.challenge} Trust per submission day across all challenges. Original evidence and reviewer approval required.</p>
+    <section className="sh-panel"><header className="sh-section-heading"><div><span className="sh-section-kicker">Evidence tasks</span><h2>Challenges</h2></div><span>+{daily.points || 0} base credits today</span></header>
+      <p className="sh-policy">One challenge submission per IST day. Approval earns +{rewards.challenge} base credits. TrustScore gains depend on caps and evidence tiers.</p>
       <div className="sh-list">{challenges.map(challenge => {
-        const skill = skills.find(item => item.name.toLowerCase() === challenge.skill.toLowerCase())
-        const eligible = skill && !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
+        const skill = skills.find(item => challenge.catalogSkillId ? item.catalogSkillId === challenge.catalogSkillId : item.name.toLowerCase() === challenge.skill.toLowerCase())
+        const eligible = skill && skill.assessmentEligible !== false && !skill.archived && skill.verified && ['valid', 'due'].includes(skill.renewalStatus)
         const done = (daily.completedChallenges || []).includes(challenge.id)
         const demoState = skill?.demoData ? demoChallenges.find(item => item.challengeId === challenge.id && item.skillName.toLowerCase() === skill.name.toLowerCase()) : null
         const demoDone = demoState?.status === 'approved'
-        const status = demoState?.status || (skill ? reviewState(skill.name, 'challenge', challenge.id) : '')
-        const unavailableLabel = !skill ? 'Skill not on profile' : skill.archived ? 'Restore skill first' : !skill.verified || skill.renewalStatus === 'unverified' ? 'Verify skill first' : skill.renewalStatus === 'expired' ? 'Renew verification first' : ''
+        const record = skill ? reviewRecord(skill.name, 'challenge', challenge.id) : null
+        const status = demoState?.status || record?.status
+        const blocked = !skill?.demoData && !record && (Boolean(todayAssessment('challenge')) || daily.completedChallenges?.length > 0)
+        const unavailableLabel = !skill ? 'Skill not on profile' : skill.archived ? 'Restore skill first' : skill.catalogAvailable === false ? 'Standard unavailable' : skill.renewalStatus === 'expired' ? 'Renew verification first' : 'Verify skill first'
         return <article className="sh-assessment" key={challenge.id}><header><strong>{challenge.title}</strong><span>{challenge.skill}</span></header>
           <p>{challenge.instructions}</p>
-          {done || demoDone ? <span className="sh-positive">Approved</span> : <button className="btn-secondary" disabled={!eligible} onClick={() => open(skill, 'challenge', { challengeId: challenge.id, challengeTitle: challenge.title, instructions: challenge.instructions, ...(demoState ? { demoAssessment: demoAssessment({ ...demoState, mode: 'challenge' }) } : {}) })}>
-            {!eligible ? unavailableLabel : actionLabel(status, 'Open challenge')}<ArrowRight size={16}/>
+          {done || demoDone ? <span className="sh-positive">Approved</span> : <button className="btn-secondary" disabled={!eligible || blocked} onClick={() => open(skill, 'challenge', { assessmentId: record?.id, challengeId: challenge.id, challengeTitle: challenge.title, instructions: challenge.instructions, ...(demoState ? { demoAssessment: demoAssessment({ ...demoState, mode: 'challenge' }) } : {}) })}>
+            {!eligible ? unavailableLabel : blocked ? 'Daily submission recorded' : actionLabel(status, 'Open challenge')}<ArrowRight size={16}/>
           </button>}
         </article>
       })}{!challenges.length && <p className="sh-empty">No challenges available.</p>}</div>

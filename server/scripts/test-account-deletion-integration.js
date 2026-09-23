@@ -5,6 +5,7 @@ const Student = require('../models/Student')
 const Company = require('../models/Company')
 const NetworkConnection = require('../models/NetworkConnection')
 const SkillAssessment = require('../models/SkillAssessment')
+const SkillRequest = require('../models/SkillRequest')
 const TaskSubmission = require('../models/TaskSubmission')
 const TeamPost = require('../models/TeamPost')
 const { deleteCurrentStudentAccount } = require('../controllers/studentController')
@@ -37,6 +38,7 @@ async function run() {
     await company.save()
     await NetworkConnection.create({ pairKey: pairKey(student._id, peer._id), requester: student._id, recipient: peer._id, status: 'accepted' })
     await SkillAssessment.create({ studentId: student._id, skillName: 'React', mode: 'verify', attemptKey: `delete-${suffix}`, response: 'Original deletion-test evidence.' })
+    await SkillRequest.create({ studentId: student._id, requestedName: 'Deletion Skill', normalizedName: `deletion skill ${suffix}`, category: 'Other' })
     const [ownedPost, peerPost] = await TeamPost.create([
       { owner: student._id, title: 'Owned deletion team', description: 'This post is deleted with its owner account.', type: 'Project', slots: 2, requiredSkills: ['React'] },
       { owner: peer._id, title: 'Peer deletion team', description: 'The deleted member is removed from this team request list.', type: 'Project', slots: 2, requiredSkills: ['React'], requests: [{ student: student._id, message: 'I can contribute original React work.', status: 'pending' }] },
@@ -48,6 +50,7 @@ async function run() {
     assert.equal(await Student.exists({ _id: student._id }), null)
     assert.equal(await NetworkConnection.countDocuments({ $or: [{ requester: student._id }, { recipient: student._id }] }), 0)
     assert.equal(await SkillAssessment.countDocuments({ studentId: student._id }), 0)
+    assert.equal(await SkillRequest.countDocuments({ studentId: student._id }), 0)
     assert.equal(await TaskSubmission.countDocuments({ studentId: student._id }), 0)
     assert.equal(await TeamPost.exists({ _id: ownedPost._id }), null)
     assert.equal((await TeamPost.findById(peerPost._id).lean()).requests.length, 0)

@@ -125,7 +125,7 @@ function WorkspaceDatePicker({ value, onChange, disabled = false }) {
   </div>
 }
 
-export default function ProjectWorkspace({ projectWorkspaceState, taskSubmissions = [], onReviewTaskSubmission, onShareUpdate, onSetMilestone, onViewStudent }) {
+export default function ProjectWorkspace({ projectWorkspaceState, taskSubmissions = [], onReviewTaskSubmission, onShareUpdate, onSetMilestone, onViewStudent, onPrefetchStudent }) {
   const projects = projectWorkspaceState?.projects || EMPTY_PROJECTS
   const realProjects = projects.filter(project => !project.demoData)
   const [filter, setFilter] = useState('All')
@@ -268,7 +268,7 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
                 <div>
                   <p className="workspace-detail-kicker">Selected GIG Work</p>
                   <h3>{project.title}</h3>
-                  <div className="workspace-selected-student"><StudentAvatar name={studentName} avatar={studentAvatar} /><span><strong>{studentName}</strong><small>Due {formatDate(project.deadline)}</small></span>{onViewStudent && project.studentId && <button type="button" className="workspace-view-profile" onClick={() => onViewStudent({ id: project.studentId, studentId: project.studentId, name: studentName, avatar: studentAvatar, demoData: project.demoData })}>View Profile</button>}</div>
+                  <div className="workspace-selected-student"><StudentAvatar name={studentName} avatar={studentAvatar} /><span><strong>{studentName}</strong><small>Due {formatDate(project.deadline)}</small></span>{onViewStudent && project.studentId && <button type="button" className="workspace-view-profile" onFocus={() => onPrefetchStudent?.({ id: project.studentId, studentId: project.studentId })} onPointerEnter={() => onPrefetchStudent?.({ id: project.studentId, studentId: project.studentId })} onClick={() => onViewStudent({ id: project.studentId, studentId: project.studentId, name: studentName, avatar: studentAvatar, demoData: project.demoData })}>View Profile</button>}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {project.demoData && <span className="demo-data-badge">Read-only example</span>}

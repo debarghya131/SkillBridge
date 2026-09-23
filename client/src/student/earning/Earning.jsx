@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Download, Clock3, CircleCheck, IndianRupee } from 'lucide-react'
 import { paymentCsv } from '../../lib/paymentFormatting'
 import { clearStudentSessionToken, fetchStudentEarning, getStudentSessionToken } from '../studentApi'
-import { readStudentSectionCache, writeStudentSectionCache } from '../sectionCache'
+import { loadStudentSectionCache, readStudentSectionCache } from '../sectionCache'
 import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import './Earning.css'
 
@@ -44,9 +44,10 @@ export default function Earning() {
       }
       setLoading(true)
       try {
-        const result = await fetchStudentEarning(token)
-        writeStudentSectionCache('earning', token, result.earningState)
-        if (!cancelled) setState(result.earningState)
+        // Reuse a sidebar prefetch if it is still running and keep one
+        // canonical cached shape for both prefetched and mounted views.
+        const earningState = await loadStudentSectionCache('earning', token, () => fetchStudentEarning(token).then(result => result.earningState))
+        if (!cancelled) setState(earningState)
       } catch (failure) {
         if (cancelled) return
         if (failure.status === 401) {
@@ -62,13 +63,19 @@ export default function Earning() {
   }, [navigate, refresh])
 
   useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === 'visible') setRefresh(value => value + 1) }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const token = getStudentSessionToken()
+      // Do not replace a warm Earning view with another full-page loader every
+      // time the browser tab regains focus. Refresh only after cache expiry.
+      if (token && !readStudentSectionCache('earning', token)) setRefresh(value => value + 1)
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
-  if (loading) return <DashboardSkeleton section="earning" />
-  if (error) return <div role="alert" className="work-error">{error} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>
+  if (loading && !state) return <DashboardSkeleton section="earning" />
+  if (error && !state) return <div role="alert" className="work-error">{error} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>
   if (!state) return null
   // Also keep older cached responses safe: demo rows never become real
   // earnings just because a browser retained an earlier API response.
@@ -81,6 +88,7 @@ export default function Earning() {
   const pages = Math.max(1, Math.ceil(rows.length / 10))
   const currentPage = Math.min(page, pages - 1)
   return <div className="student-external-earnings">
+    {error && <div role="alert" className="work-error">{error} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>}
     <header className="earning-compact-header">
       <h2>Earning</h2>
     <div className="external-earning-summary" aria-label="Earning summary">
@@ -88,7 +96,7 @@ export default function Earning() {
       <div><CircleCheck aria-hidden="true" /><strong>{transactions.length}</strong><span>Recorded payments</span></div>
       <div><IndianRupee aria-hidden="true" /><strong>{money(state.totalRecorded)}</strong><span>Total recorded</span></div>
     </div>
-      <div className="earning-header-actions" style={{ display: 'flex', gap: 8 }}><button className="btn-secondary" title="Export earning records" aria-label="Export earning records" disabled={!transactions.length} onClick={exportRecords}><Download size={18}/></button><button className="btn-secondary" title="Refresh payment records" aria-label="Refresh payment records" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={18} /></button></div>
+      <div className="earning-header-actions" style={{ display: 'flex', gap: 8 }}><button className="btn-secondary" title="Export earning records" aria-label="Export earning records" disabled={!transactions.length} onClick={exportRecords}><Download size={18}/></button><button className="btn-secondary" title={loading ? 'Refreshing payment records' : 'Refresh payment records'} aria-label={loading ? 'Refreshing payment records' : 'Refresh payment records'} disabled={loading} onClick={() => setRefresh(value => value + 1)}><RefreshCw className={loading ? 'is-spinning' : ''} size={18} /></button></div>
     </header>
     <p className="work-muted">Company-reported external payments. SkillBridge does not hold funds or process withdrawals.</p>
     <nav className="earning-tabs" aria-label="Earning views">{['History', 'Awaiting payment'].map(name => <button key={name} aria-pressed={tab === name} onClick={() => { setTab(name); setPage(0) }}>{name}</button>)}</nav>

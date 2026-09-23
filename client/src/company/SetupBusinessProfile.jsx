@@ -60,9 +60,7 @@ export default function SetupBusinessProfile({ profile, onSave, onDeleteAccount 
     setSaveError('')
 
     try {
-      // Save only the logo from the last persisted profile so a logo upload
-      // never publishes unrelated form edits that are still in progress.
-      const savedProfile = await onSave({ ...profile, logo })
+      const savedProfile = await onSave({ logo })
       updateField('logo', savedProfile?.logo ?? logo)
     } catch (error) {
       setSaveError(error.message || 'The business logo could not be saved.')
@@ -112,8 +110,7 @@ export default function SetupBusinessProfile({ profile, onSave, onDeleteAccount 
       setSaveError('')
       setIsSavingVideo(true)
       try {
-        // Match logo behavior: publish only this media field, never unrelated draft edits.
-        const savedProfile = await onSave({ ...profile, introVideoUrl })
+        const savedProfile = await onSave({ introVideoUrl })
         updateField('introVideoUrl', savedProfile?.introVideoUrl ?? introVideoUrl)
       } catch (error) {
         setSaveError(error.message || 'The business introduction video could not be saved.')
@@ -129,7 +126,7 @@ export default function SetupBusinessProfile({ profile, onSave, onDeleteAccount 
     setSaveError('')
     setIsSavingVideo(true)
     try {
-      const savedProfile = await onSave({ ...profile, introVideoUrl: null })
+      const savedProfile = await onSave({ introVideoUrl: null })
       updateField('introVideoUrl', savedProfile?.introVideoUrl ?? null)
     } catch (error) {
       setSaveError(error.message || 'The business introduction video could not be removed.')
@@ -176,10 +173,15 @@ export default function SetupBusinessProfile({ profile, onSave, onDeleteAccount 
     setIsSaving(true)
     try {
       await onSave({
-        ...draft,
         businessName: draft.businessName.trim(),
         location: draft.location.trim(),
+        industry: draft.industry,
         website: draft.website.trim(),
+        teamSize: draft.teamSize,
+        workModes: draft.workModes,
+        description: draft.description,
+        hiringCategories: draft.hiringCategories,
+        requiredSkills: draft.requiredSkills,
         contactEmail: draft.contactEmail.trim().toLowerCase(),
         contactPhone: draft.contactPhone.trim(),
       })

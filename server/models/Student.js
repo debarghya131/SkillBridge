@@ -82,6 +82,9 @@ const gigStateSchema = new mongoose.Schema({
 
 const skillHubSkillSchema = new mongoose.Schema({
   name: { type: String, default: '' },
+  source: { type: String, enum: ['catalog', 'self_declared', 'legacy'], default: 'legacy' },
+  catalogSkillId: { type: mongoose.Schema.Types.ObjectId, ref: 'SkillCatalog', default: null },
+  catalogVersion: { type: Number, min: 1, default: null },
   level: { type: Number, default: 0 },
   stage: { type: String, enum: ['Beginner', 'Intermediate', 'Pro', 'Pro Mastery'], default: 'Beginner' },
   category: { type: String, default: 'Frontend' },
@@ -154,5 +157,6 @@ studentSchema.index({ trustScore: -1, createdAt: -1 })
 studentSchema.index({ location: 1 })
 studentSchema.index({ skills: 1 })
 studentSchema.index({ 'skillHubSkills.name': 1 })
+studentSchema.index({ 'skillHubSkills.catalogSkillId': 1 })
 
 module.exports = mongoose.models.Student || mongoose.model('Student', studentSchema)

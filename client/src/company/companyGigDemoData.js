@@ -15,6 +15,7 @@ export function buildDefaultCompanyGigManagementState() {
     ],
     recentActivity: [],
     applicantsByGig: {},
+    demoProfiles: {},
   }
 }
 
@@ -29,5 +30,8 @@ export function mergeCompanyGigManagementState(state = {}) {
     applicantsByGig: state.applicantsByGig && typeof state.applicantsByGig === 'object'
       ? state.applicantsByGig
       : defaults.applicantsByGig,
+    demoProfiles: state.demoProfiles && typeof state.demoProfiles === 'object'
+      ? state.demoProfiles
+      : defaults.demoProfiles,
   }
 }

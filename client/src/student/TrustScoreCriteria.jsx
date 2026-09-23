@@ -38,5 +38,5 @@ export function TrustScoreCriteriaContent() {
 
 export default function TrustScoreCriteria() {
   const navigate = useNavigate()
-  return <main style={{ padding: 24 }}><button className="btn-secondary" onClick={() => navigate('/student/dashboard?section=trustscore')}><ArrowLeft size={16}/>Back to TrustScore</button><TrustScoreCriteriaContent/></main>
+  return <main className="trustscore-criteria-page"><button className="btn-secondary" onClick={() => navigate('/student/dashboard?section=trustscore')}><ArrowLeft size={16}/>Back to TrustScore</button><TrustScoreCriteriaContent/></main>
 }

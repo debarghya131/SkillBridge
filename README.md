@@ -12,11 +12,12 @@ SkillBridge connects students from Tier-2 and Tier-3 colleges with MSMEs through
 
 Capable students often lack access to credible work, while local businesses struggle to find affordable, evidence-backed talent. SkillBridge closes both gaps with one end-to-end workflow:
 
-1. Students build a portfolio and submit evidence to verify their skills.
-2. Platform reviewers assess the evidence with a structured rubric.
-3. Companies discover candidates through verified skills, TrustScore, and practical interview tasks.
-4. Selected students receive independent GIG Work records grouped under the source GIG in Project Workspace.
-5. Companies approve delivery and record the payment made outside SkillBridge.
+1. Platform admins publish versioned skill standards, upgrade criteria, renewal periods, and practice tasks.
+2. Students add a catalog skill or keep a profile-only self-declared skill and request catalog support.
+3. Authorized review staff inside the Admin workspace assess submitted evidence against the standard captured at submission.
+4. Companies discover candidates through active verified skills, TrustScore, and practical interview tasks.
+5. Selected students receive independent GIG Work records grouped under the source GIG in Project Workspace.
+6. Companies approve delivery and record the payment made outside SkillBridge.
 
 ## ✨ Product Capabilities
 
@@ -24,13 +25,15 @@ Capable students often lack access to credible work, while local businesses stru
 | --- | --- |
 | **🎓 Student** | Profile and portfolio, GIG discovery, saved/applied/active work, direct invites, interview assignments, Skill Hub, TrustScore, peer network, Team-Up, and earnings history. |
 | **🏢 Company** | Business profile, GIG publishing, applicant pipeline, talent search, direct opportunities, task library, submission review, project workspace, and external payment records. |
-| **🧑‍⚖️ Reviewer** | Protected reviewer access, blind assessment queue, claim ownership, scoring rubric, revision requests, approval/rejection, and review history. |
+| **🛡️ Platform admin** | Versioned skill catalog, verification and upgrade standards, daily-task library, student skill-request decisions, reviewer-team lifecycle, and the blind assessment queue with claim ownership, scoring, revision, approval, rejection, and history. Reviewer-role staff sign into this workspace with queue-only access. |
 | **📈 Merit layer** | Verified skill stages, renewal and retention, approved-activity streaks, skill-gap analysis, event-ledger TrustScore, and public evidence-backed profiles. |
 
 ### 🛡️ Core Guarantees
 
 - Unreviewed profile content does not award TrustScore.
-- Reviewer approval is required before a skill becomes verified or upgraded.
+- Self-declared skills remain profile-only until an admin maps them to a published catalog standard.
+- Approval from the Admin review queue is required before a skill becomes verified or upgraded.
+- Only active verified skills are published to talent discovery, GIG matching, Network, and public profiles.
 - Duplicate assessment, payment, and TrustScore events are guarded at the database and service layers.
 - SkillBridge records externally completed payments; it does not hold funds, provide escrow, or offer withdrawals.
 
@@ -47,9 +50,11 @@ Capable students often lack access to credible work, while local businesses stru
 │  - Landing and login      - Profile and portfolio  - Business profile    │
 │  - Public profiles        - GIG Center             - GIG Management      │
 │                           - Skill Hub and tasks     - Talent Search      │
-│  Reviewer Portal          - TrustScore             - Project Workspace   │
-│  - Blind review queue     - Network and Team-Up    - External Payments   │
-│  - Rubric and decisions   - Earnings                                     │
+│                           - TrustScore             - Project Workspace   │
+│                           - Network and Team-Up    - External Payments   │
+│                           - Earnings                                     │
+│                                                                          │
+│  Admin Workspace: catalog, requests, blind reviews and review team       │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      │
                                      │ HTTPS / JSON API
@@ -61,7 +66,7 @@ Capable students often lack access to credible work, while local businesses stru
 │  Request Pipeline                         Domain Services                │
 │  - Routing and JSON parsing               - Student and Company          │
 │  - Session authentication                 - GIG and Interview Tasks      │
-│  - Student, Company and Reviewer roles    - Skill Assessments            │
+│  - Student, Company and Admin workspaces  - Skill Catalog and Requests   │
 │  - CORS and rate limiting                 - Blind Reviewer Queue         │
 │  - Payload and ownership validation       - TrustScore Policy Engine     │
 │  - Conflict and error handling            - Network and Team-Up          │
@@ -77,7 +82,8 @@ Capable students often lack access to credible work, while local businesses stru
 │  Core Accounts            Evidence and Work        Community and Metrics │
 │  - Students               - SkillAssessments       - NetworkConnections  │
 │  - Companies              - TaskSubmissions        - TeamPosts           │
-│  - Reviewers              - Review history         - SiteMetrics         │
+│  - Admin operations users - Review history         - SiteMetrics         │
+│  - SkillCatalogs          - SkillRequests                                │
 │  - Role sessions          - External payment data                        │
 │                                                                          │
 │  Embedded account state: profiles, Skill Hub activity, TrustScore ledger,│
@@ -95,7 +101,8 @@ flowchart TB
     subgraph Actors[Platform Actors]
         Student[Student]
         Company[Company or MSME]
-        Reviewer[Authorized platform reviewer]
+        Admin[Platform administrator]
+        Reviewer[Authorized review staff]
         Visitor[Public visitor]
     end
 
@@ -103,14 +110,14 @@ flowchart TB
         Landing[Landing and authentication]
         StudentUI[Student workspace: Profile, GIG Center, TrustScore, Skill Hub, Network and Earnings]
         CompanyUI[Company workspace: Business Profile, GIG Management, Talent Search, Projects and Payments]
-        ReviewerUI[Blind reviewer portal: Available, My Reviews and History]
+        AdminUI[Admin workspace: admin governance and reviewer blind queue]
         PublicUI[Public student and company profiles]
         ApiClient[Shared HTTP and JSON API client]
 
         Landing --> ApiClient
         StudentUI --> ApiClient
         CompanyUI --> ApiClient
-        ReviewerUI --> ApiClient
+        AdminUI --> ApiClient
         PublicUI --> ApiClient
     end
 
@@ -118,8 +125,10 @@ flowchart TB
     Student --> StudentUI
     Company --> Landing
     Company --> CompanyUI
+    Admin --> Landing
+    Admin --> AdminUI
     Reviewer --> Landing
-    Reviewer --> ReviewerUI
+    Reviewer --> AdminUI
     Visitor --> PublicUI
 
     subgraph Backend[Node.js Application Layer]
@@ -128,8 +137,9 @@ flowchart TB
         Validation[Payload validation, URL safety, ownership checks and conflict handling]
 
         StudentController[Student profile controller]
-        SkillController[Skill Hub and assessment controllers]
+        SkillController[Skill Hub, catalog and assessment controllers]
         ReviewerController[Reviewer queue and rubric controller]
+        AdminController[Catalog governance and reviewer operations]
         TrustController[TrustScore ledger and policy engine]
         GigController[GIG discovery and application controller]
         TaskController[Interview, delivery and workspace bridge]
@@ -141,6 +151,7 @@ flowchart TB
         Validation --> StudentController
         Validation --> SkillController
         Validation --> ReviewerController
+        Validation --> AdminController
         Validation --> TrustController
         Validation --> GigController
         Validation --> TaskController
@@ -154,8 +165,10 @@ flowchart TB
     subgraph Database[MongoDB Data Layer through Mongoose]
         Students[(Students: profile, sessions, Skill Hub state, GIG state and TrustScore ledger)]
         Companies[(Companies: profile, GIG state, task library and project workspace)]
-        Reviewers[(Reviewers: credentials, role and sessions)]
+        Reviewers[(Admin operations users: admin or queue-only reviewer role, credentials and sessions)]
         Assessments[(SkillAssessments: evidence, rubric, claim and review history)]
+        Catalog[(SkillCatalogs: versioned standards and practice tasks)]
+        SkillRequests[(SkillRequests: student requests and admin decisions)]
         Submissions[(TaskSubmissions: interview, delivery, payment and completion state)]
         Connections[(NetworkConnections and TeamPosts)]
         Metrics[(SiteMetrics)]
@@ -168,6 +181,12 @@ flowchart TB
     ReviewerController <--> Reviewers
     ReviewerController <--> Assessments
     ReviewerController --> Students
+    AdminController <--> Reviewers
+    AdminController <--> Catalog
+    AdminController <--> SkillRequests
+    AdminController --> Students
+    SkillController --> Catalog
+    SkillController --> SkillRequests
     TrustController <--> Students
     GigController <--> Students
     GigController <--> Companies
@@ -182,7 +201,7 @@ flowchart TB
     PaymentController <--> Submissions
     PaymentController --> Students
     PaymentController --> Companies
-    Router --> Metrics
+    Router -->|Public site-view endpoints| Metrics
 
     subgraph Workflows[Cross-Role Workflows]
         SkillFlow[Skill evidence submitted]
@@ -199,7 +218,7 @@ flowchart TB
 
     StudentUI -.-> SkillFlow
     SkillFlow -.-> SkillController
-    ReviewerUI -.-> BlindReview
+    AdminUI -.-> BlindReview
     BlindReview -.-> ReviewerController
     SkillResult -.-> TrustController
     SkillResult -.-> StudentUI
@@ -260,14 +279,11 @@ flowchart TD
     end
 
     CompanyState --> Applicants
-    StudentGigState --> Applicants
 
     subgraph Interview[Interview Assessment]
         OpenTask[Open accepted assignment]
         TaskType{Assignment type}
-        Written[Written or MCQ response]
-        Project[Code or live-project link]
-        Mixed[Mixed evidence]
+        TaskEvidence[Task-specific evidence: response and/or public link]
         SubmitInterview[Submit interview evidence]
         Submission[(TaskSubmission document)]
         ReviewInterview{Company review}
@@ -277,12 +293,7 @@ flowchart TD
         Selected[Student selected]
 
         OpenTask --> TaskType
-        TaskType --> Written
-        TaskType --> Project
-        TaskType --> Mixed
-        Written --> SubmitInterview
-        Project --> SubmitInterview
-        Mixed --> SubmitInterview
+        TaskType --> TaskEvidence --> SubmitInterview
         SubmitInterview -->|Status: submitted| Submission --> ReviewInterview
         ReviewInterview -->|Needs revision| InterviewRevision --> SubmitInterview
         ReviewInterview -->|Reject| InterviewRejected
@@ -296,7 +307,7 @@ flowchart TD
         WorkspaceGroup[GIG group in Project Workspace]
         Workspace[Independent GIG Work record for each selected student]
         SelectedActive[Student Active GIG: selected; final delivery locked]
-        Kickoff[Company submits the paid work brief and starts the GIG]
+        Kickoff[Company submits the work brief and starts the GIG]
         BriefSent[Lifecycle checkpoint: brief sent]
         WorkStarted[Status: work started]
         Updates[Company shares project updates]
@@ -325,7 +336,7 @@ flowchart TD
         PayOutside[Company pays student outside SkillBridge]
         Confirm[Company confirms payment was already made]
         ValidatePayment[Validate ownership, amount, payment date, method and unique reference]
-        PaymentTransaction[Atomic payment and reputation transaction]
+        PaymentTransaction[Payment recording and TrustScore update]
         Completed[Status: completed]
         PaymentRecord[(TaskSubmission externalPayment record)]
 
@@ -358,144 +369,171 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    subgraph StudentActions[Student Skill Hub]
-        Add[Add skill to profile]
-        Archive[Archive a skill from public matching]
-        Restore[Restore archived skill]
-        Select{Choose assessment action}
-        Verify[Verify an unverified skill]
-        Reverify[Renew a due or expired skill]
-        Upgrade[Upgrade an active verified skill]
-        Retain[Submit daily practice for an active skill]
-        Challenge[Complete a challenge for its matching skill]
-        Evidence[Submit written response and optional evidence link]
-
-        Add -->|No TrustScore credit| Select
-        Add --> Archive
-        Archive -->|Keep reviewed history; hide from profile and matching| Restore
-        Restore --> Select
-        Select --> Verify
-        Select --> Reverify
-        Select --> Upgrade
-        Select --> Retain
-        Select --> Challenge
-        Verify --> Evidence
-        Reverify --> Evidence
-        Upgrade --> Evidence
-        Retain --> Evidence
-        Challenge --> Evidence
+    subgraph Governance[Platform Admin Governance]
+        Draft[Create draft skill standard]
+        Define[Define aliases, stages, verification rules, upgrade rules, renewal period and daily tasks]
+        Publish[Publish versioned catalog skill]
+        Catalog[(SkillCatalog)]
+        ReviewerOps[Provision, suspend or reactivate reviewer accounts]
+        Draft --> Define --> Publish --> Catalog
     end
 
-    subgraph SubmissionAPI[Student API and Validation]
-        Validate{Validate assessment}
-        Rules[Check skill ownership, mode eligibility, response length, URL, next level and challenge match]
-        Duplicate{Open or same-day attempt already exists?}
-        Assessment[(SkillAssessment document)]
-        Pending[Status: pending]
+    subgraph StudentInventory[Student Skill Inventory]
+        Add{Add skill}
+        Browse[Choose a published catalog skill]
+        Custom[Add a self-declared skill]
+        ProfileOnly[Profile-only: no verification, matching or TrustScore]
+        Request[Request platform support or mapping]
+        RequestRecord[(SkillRequest)]
+        RequestDecision{Admin decision}
+        Owned[Catalog-backed skill on student profile]
+        Archive[Archive skill: hide from matching and block new assessments]
+        Restore[Restore skill]
+        Add --> Browse --> Owned
+        Add --> Custom --> ProfileOnly
+        ProfileOnly --> Request --> RequestRecord --> RequestDecision
+        RequestDecision -->|Approve or merge| Owned
+        RequestDecision -->|Reject with reason| ProfileOnly
+        Owned --> Archive --> Restore --> Owned
+        Catalog --> Browse
+        Catalog --> RequestDecision
+    end
 
-        Validate --> Rules --> Duplicate
-        Duplicate -->|Yes| Conflict[Return conflict without changing TrustScore]
+    subgraph StudentActions[Governed Skill Actions]
+        Select{Choose action}
+        Verify[Initial verification]
+        Reverify[Renew due or expired verification]
+        Upgrade[Upgrade to the next published stage]
+        Retain[Submit daily practice]
+        Challenge[Complete a published daily task]
+        Evidence[Submit original response and optional evidence link]
+        Owned --> Select
+        Select --> Verify --> Evidence
+        Select --> Reverify --> Evidence
+        Select --> Upgrade --> Evidence
+        Select --> Retain --> Evidence
+        Select --> Challenge --> Evidence
+    end
+
+    subgraph SubmissionAPI[Assessment Validation and Snapshot]
+        Validate[Validate ownership, catalog availability, mode, stage, task, response and URL]
+        Snapshot[Capture catalog ID, version and exact criteria]
+        Duplicate{Open or same-day attempt exists?}
+        Assessment[(SkillAssessment)]
+        Pending[Pending blind review]
+        Evidence --> Validate --> Snapshot --> Duplicate
+        Duplicate -->|Yes| Conflict[Return conflict; no TrustScore change]
         Duplicate -->|No| Assessment --> Pending
     end
 
-    Evidence -->|POST student assessments| Validate
-
-    subgraph ReviewerPipeline[Blind Platform Reviewer]
-        Queue[Available review queue]
-        Blind[Student identity, college, location, photo and TrustScore hidden]
-        Claim[Reviewer claims assessment with expiring lease]
-        Rubric[Score rubric: correctness 40%, evidence 20%, understanding 20%, testing 10%, communication 10%]
-        Decision{Reviewer decision}
-
-        Queue --> Blind --> Claim --> Rubric --> Decision
+    subgraph ReviewerPipeline[Admin Workspace Blind Review]
+        AdminQueue[Admin > Review Queue]
+        Queue[Available queue]
+        Blind[Identity, college, photo, location and TrustScore hidden]
+        Claim[Claim with expiring lease]
+        Standard[Review captured versioned criteria]
+        Rubric[Weighted evidence rubric]
+        Decision{Decision}
+        Pending --> AdminQueue --> Queue --> Blind --> Claim --> Standard --> Rubric --> Decision
     end
 
-    Pending --> Queue
+    Decision -->|Needs revision| Revision[Student revises evidence against the original criteria snapshot]
+    Revision -->|Same assessment returns to pending review| Pending
+    Decision -->|Reject| Rejected[Record feedback and no skill reward]
+    Decision -->|70 overall and minimum evidence scores| Transaction[MongoDB transaction]
 
-    Decision -->|Request revision| Revision[Status: needs revision]
-    Revision --> Resubmit[Student edits and resubmits the same assessment]
-    Resubmit -->|Original earned day retained| Pending
-
-    Decision -->|Reject| Rejected[Status: rejected; no skill reward]
-    Rejected --> LowScore{Rubric below 40?}
-    LowScore -->|Yes| Penalty[Record assessment-below-standard event: -10]
-    LowScore -->|No| AuditOnly[Keep feedback and review history]
-
-    Decision -->|Approve; rubric at least 70| Transaction[MongoDB transaction]
-
-    subgraph ApprovalEffects[Transactional Approval Effects]
-        ModeEvent{Assessment mode}
-        Verified[Activate skill verification and set 365-day renewal]
-        Renewed[Renew active verification for 365 days]
-        Upgraded[Move skill to the next stage]
-        Practiced[Record approved practice day and recalculate streak]
-        Challenged[Record approved challenge completion]
-        SkillLog[(Student skillHubState.skillLog)]
-        Ledger[(Student trustScoreState.events)]
-        Quality{Rubric at least 90?}
-        QualityCredit[Record high-quality assessment event: +25]
-
-        Transaction --> ModeEvent
-        ModeEvent -->|Verify| Verified
-        ModeEvent -->|Reverify| Renewed
-        ModeEvent -->|Upgrade| Upgraded
-        ModeEvent -->|Retention| Practiced
-        ModeEvent -->|Challenge| Challenged
-        Verified -->|+60 base points| SkillLog
-        Renewed -->|+50 base points| SkillLog
-        Upgraded -->|+100 base points| SkillLog
-        Practiced -->|+20 per approved day| SkillLog
-        Challenged -->|+80 per approved day| SkillLog
+    subgraph Approval[Transactional Approval Effects]
+        Mode{Assessment mode}
+        Verified[Activate verification using catalog renewal period]
+        Renewed[Renew verification and preserve remaining valid days]
+        Upgraded[Move to next catalog stage]
+        Practiced[Record approved practice day and streak]
+        Challenged[Record approved daily task]
+        SkillLog[(Skill activity log)]
+        Ledger[(Idempotent TrustScore event ledger)]
+        Transaction --> Mode
+        Mode -->|Verify| Verified --> SkillLog
+        Mode -->|Renew| Renewed --> SkillLog
+        Mode -->|Upgrade| Upgraded --> SkillLog
+        Mode -->|Practice| Practiced --> SkillLog
+        Mode -->|Challenge| Challenged --> SkillLog
         SkillLog --> Ledger
-        Ledger --> Quality
-        Quality -->|Yes| QualityCredit --> Ledger
-        Quality -->|No| Recalculate
     end
 
-    Penalty --> Ledger
-    AuditOnly --> ReviewHistory[(Assessment review history)]
-    Revision --> ReviewHistory
-    Rejected --> ReviewHistory
-    Transaction --> ReviewHistory
-
-    subgraph TrustPolicy[TrustScore Policy Engine]
-        Recalculate[Deduplicate ledger events and recalculate score]
-        Caps[Apply category caps and tier weighting]
-        Gates[Apply evidence ceilings from verified skills, skill levels, completed GIGs, practice days and quality reviews]
-        Expiry[Expired verified skill: record -80 penalty for 90 days]
-        Score[(Current TrustScore)]
-
-        Ledger --> Recalculate
-        Expiry --> Ledger
-        Recalculate --> Caps --> Gates --> Score
-    end
-
-    subgraph StudentResults[Student and Public Results]
-        Hub[Skill Hub refresh]
-        Skills[My Skills: verification, stage, renewal, archive state and assessment history]
-        Daily[Daily Task and Challenge completion]
-        Streak[Streak calendar and practice totals]
-        Heatmap[Profile approved-activity heatmap]
-        Profile[Profile: active verified skills and TrustScore]
-        TrustPage[TrustScore ledger, tier and evidence requirements]
-        Gap[Skill Gap Report compares active verified skills with active company GIG requirements]
-
-        Score --> Hub
+    subgraph Results[Derived Platform Results]
+        Score[Recalculate TrustScore under policy caps and evidence gates]
+        Hub[Skill Hub status, history and progress]
+        Matching[Company talent discovery and GIG matching]
+        Network[Network and public profile]
+        Gap[Skill Gap Report]
+        Ledger --> Score --> Hub
         SkillLog --> Hub
-        ReviewHistory --> Hub
-        Hub --> Skills
-        Hub --> Daily
-        Hub --> Streak
-        Hub --> Heatmap
-        Hub --> Profile
-        Hub --> TrustPage
+        Hub -->|Active verified skills only| Matching
+        Hub -->|Active verified skills only| Network
         Hub --> Gap
     end
 
-    Transaction -->|Approval and reputation update both commit or both roll back| Score
+    ReviewerOps --> AdminQueue
 ```
 
-> ⚡ **Quick flow:** Student submits skill evidence → reviewer claims and scores it → approved result updates skill status, activity, and TrustScore → verified evidence appears across the profile and platform. Students can archive a skill to remove it from public matching while retaining its reviewed history.
+> ⚡ **Quick flow:** Admin publishes a versioned skill standard → student adds the catalog skill and submits evidence → the exact standard is captured → authorized review staff use the Admin review queue and decide with a blind rubric → approval updates the skill and TrustScore transactionally → only active verified skills enter matching and public discovery. Self-declared skills remain profile-only until an admin approves or maps the request.
+
+#### Skill Hub Operating Rules
+
+| Action | Eligibility and review | Base credit effect |
+| --- | --- | --- |
+| Add skill | Choose a published platform standard; starts unverified at Beginner | 0 |
+| Verify | Submit original evidence against the published verification brief | +60 once per skill |
+| Renew | Available during the last 30 valid days or after expiry; preserves the current level and any remaining valid days | +50 once per renewal cycle |
+| Upgrade | Active verification; next consecutive enabled stage only | +100 once per skill level |
+| Daily practice | Active verification; admin-defined practice brief; one submission across all skills per IST day | +20 once per original submission day |
+| Challenge | Active verification; an active task in the published skill's task library; one submission per IST day | +80 once per original submission day |
+| High-quality review | Assigned reviewer approves an assessment scoring at least 90/100 | +25 once per assessment |
+| Practice milestone | Every 30 distinct approved practice days, through 240 days | +25 per milestone |
+| Low-scoring rejection | Assigned reviewer rejects an assessment scoring below 40/100 | -10 at most once per original submission day |
+| Verification expiry | Previously reviewed verification passes its last valid day | -80 once per expired renewal cycle |
+
+Credits are inputs to TrustScore, not a promise of an equal score increase. Category
+caps, diminishing weights, active-skill requirements, completed GIGs, and reviewed
+practice history determine the displayed score. Assessment history records both
+the credit breakdown and the actual score change. See [TrustScore policy](docs/trustscore-v2.md).
+
+- Approval requires at least 70/100 overall and at least 3/5 each for correctness,
+  evidence quality, and understanding. Review feedback is required for every decision.
+- The server captures catalog identity, version, renewal duration, and instructions.
+  Client-supplied criteria cannot override them. A stale displayed catalog version
+  returns a conflict so the student can refresh before submitting.
+- Revisions keep the original requirements and submission day, even when an admin
+  updates or archives the standard. Existing eligible submissions can still be
+  reviewed after verification expires; expiry does not turn an old submission into
+  a new verified credential. New submissions require a published standard.
+- Approval of daily practice records its original IST submission day. Out-of-order
+  reviews recompute streaks correctly; pending/rejected work does not count. A
+  whole missed day breaks the current streak without an automatic missed-day penalty.
+  Alternating skills can continue the overall streak while each skill retains its own streak.
+- Demo examples are opt-in in Skill Hub and the Admin review queue. They do not
+  block catalog enrollment, contribute practice dates to real skills, or earn credit.
+- Skill Hub uses human evidence review. It does not claim camera monitoring or
+  automatic cheating detection based on typing speed, browser tabs, or developer tools.
+
+The catalog seed adds 24 example published standards without overwriting existing
+admin edits: from `server`, run `npm run seed:skill-catalog -- --admin-email admin@example.com --confirm`.
+Review the example requirements before adopting them as production assessment standards.
+
+Run `npm test` and `npm run check` in `server`, and `npm run lint` and `npm run build`
+in `client`. The workflow integration test uses a new isolated database on a
+replica-set server, checks publishing, request mapping, evidence snapshots,
+revisions, scoring, renewal, practice, and transaction rollback, then removes that database:
+
+```bash
+cd server
+npm run test:skillhub:integration -- --use-configured-server
+```
+
+For a dedicated test server, set `SKILLHUB_TEST_MONGO_URL` and omit the flag.
+Production operations still require reviewer capacity, backups, scheduled score
+reconciliation, and a documented appeal process; these checks do not certify load
+capacity or establish misconduct detection.
 
 ### 5. 🤝 Full Network and Team-Up Pipeline
 
@@ -706,11 +744,11 @@ skillbridge/
 │   ├── src/
 │   │   ├── assets/                 # Runtime video assets
 │   │   ├── auth/                   # Shared login portal
+│   │   ├── admin/                  # Auth, governance, review queue and operations APIs
 │   │   ├── company/                # Company dashboard and workflows
 │   │   ├── config/                 # Frontend runtime configuration
 │   │   ├── landing/                # Public landing experience
 │   │   ├── lib/                    # API, URL and formatting helpers
-│   │   ├── reviewer/               # Reviewer auth and assessment queue
 │   │   ├── student/                # Student dashboard and workflows
 │   │   │   ├── earning/            # Earnings read model
 │   │   │   ├── gig/                # GIG discovery and applications
@@ -726,7 +764,7 @@ skillbridge/
 ├── server/                         # Node.js API and MongoDB persistence
 │   ├── config/                     # Environment, policies and default state
 │   ├── controllers/                # Domain and request handlers
-│   ├── models/                     # Eight Mongoose collection schemas
+│   ├── models/                     # Ten Mongoose collection schemas
 │   ├── scripts/                    # Reviewer, seed and reconciliation tools
 │   ├── tests/                      # Backend unit and workflow tests
 │   ├── utils/                      # Auth, validation, policy and logging helpers
@@ -755,7 +793,9 @@ SkillBridge uses MongoDB through Mongoose. Account-owned state is embedded in th
 | --- | --- | --- |
 | `students` | Student account | Identity, profile, portfolio, Skill Hub state, verified skills, TrustScore event ledger, GIG state, sessions, and usage data. |
 | `companies` | Company account | Business profile, GIG management, task library, private review guides, project workspace, sessions, and usage data. |
-| `reviewers` | Reviewer account | Reviewer/admin identity, active status, authentication sessions, and last sign-in time. |
+| `reviewers` | Admin operations account | Admin or queue-only reviewer role, active status, authentication sessions, and last sign-in time. |
+| `skillcatalogs` | Platform-owned; references creating/updating `Reviewer` admin | Versioned skill names and aliases, verification rules, stage requirements, renewal periods, and reviewer-checked daily tasks. |
+| `skillrequests` | References `Student`, optional matched `SkillCatalog`, and deciding admin | Student requests for a self-declared skill to be approved or mapped into the governed catalog. |
 | `skillassessments` | References `Student`; optionally `Reviewer` | Verification, re-verification, upgrade, retention, and challenge submissions with evidence, rubric scores, feedback, claim ownership, and review history. |
 | `tasksubmissions` | References `Student` and `Company` | Stable record shared by the interview, selection, workspace, delivery, approval, external-payment, completion, and TrustScore pipeline. |
 | `networkconnections` | References requester and recipient `Student` | One normalized relationship per student pair with pending, accepted, or declined status. |
@@ -767,7 +807,11 @@ SkillBridge uses MongoDB through Mongoose. Account-owned state is embedded in th
 ```mermaid
 erDiagram
     STUDENT ||--o{ SKILL_ASSESSMENT : submits
+    STUDENT ||--o{ SKILL_REQUEST : requests
+    SKILL_CATALOG ||--o{ SKILL_REQUEST : resolves
+    SKILL_CATALOG ||--o{ SKILL_ASSESSMENT : governs
     REVIEWER o|--o{ SKILL_ASSESSMENT : reviews
+    REVIEWER ||--o{ SKILL_CATALOG : administers
     STUDENT ||--o{ TASK_SUBMISSION : submits
     COMPANY ||--o{ TASK_SUBMISSION : owns
     STUDENT ||--o{ NETWORK_CONNECTION : requests
@@ -822,10 +866,37 @@ erDiagram
         date lastSignedInAt
     }
 
+    SKILL_CATALOG {
+        ObjectId _id
+        string name
+        array aliases
+        string category
+        string status
+        number version
+        number renewalDays
+        array stages
+        string verificationInstructions
+        array upgradeRequirements
+        array dailyTasks
+    }
+
+    SKILL_REQUEST {
+        ObjectId _id
+        ObjectId studentId
+        ObjectId matchedSkillId
+        string requestedName
+        string category
+        string status
+        string adminFeedback
+        ObjectId decidedBy
+    }
+
     SKILL_ASSESSMENT {
         ObjectId _id
         ObjectId studentId
         ObjectId assignedReviewerId
+        ObjectId catalogSkillId
+        number catalogVersion
         string skillName
         string mode
         string targetStage
@@ -835,6 +906,7 @@ erDiagram
         string status
         boolean open
         object rubric
+        object criteriaSnapshot
         string feedback
         array reviewHistory
         date reviewedAt
@@ -898,7 +970,9 @@ erDiagram
 | Data | Source of truth | How it is used |
 | --- | --- | --- |
 | Student profile and portfolio | `students` | Public profile responses expose a sanitized projection rather than copying data into another collection. |
+| Skill definition and eligibility | `skillcatalogs` and `students.skillHubSkills.catalogSkillId` | Admin-published standards control which skills can be verified, upgraded, practiced, and used for matching; self-declared skills remain profile-only. |
 | Verified skill level and renewal status | `students.skillHubSkills` | Updated only after reviewer-approved assessment outcomes and displayed in Skill Hub, Network, GIG matching, and the public profile. |
+| Assessment criteria | `skillassessments.criteriaSnapshot` | Captures the catalog ID, version, renewal period, and exact instructions so revisions and reviews remain tied to the submitted standard. |
 | Skill activity, streak, and gap snapshot | `students.skillHubState` | Activity is built from approved events; the gap report compares verified skills with active company GIG requirements. |
 | TrustScore | `students.trustScoreState.events` | The event ledger is authoritative; `students.trustScore` is the materialized total used for fast sorting and display. |
 | GIG definition and applicant pipeline | `companies.gigManagementState` | Drives opportunity discovery, applications, company review, and selection. |
@@ -909,6 +983,8 @@ erDiagram
 ### 4. 🛡️ Integrity and Concurrency Controls
 
 - Unique account identifiers prevent duplicate logins within each student, company, and reviewer account collection.
+- A unique normalized catalog-term index prevents two skill standards from sharing a canonical name or alias.
+- A partial unique index permits only one pending request for the same student and self-declared skill.
 - Partial unique indexes allow only one open Skill Hub assessment per student attempt, while queue indexes support reviewer claims and history lookup.
 - A normalized unique `pairKey` prevents duplicate network relationships between the same two students.
 - A compound unique index prevents duplicate task submissions for the same student, company, GIG, and opportunity.
@@ -924,31 +1000,93 @@ erDiagram
 
 <img src="docs/assets/screenshots/landing-page.png" width="920" alt="SkillBridge landing page full-length screenshot" />
 
-The primary authenticated workspaces are shown below at a consistent desktop viewport.
+The authenticated workspace captures below use the current interface at a consistent, readable desktop viewport. Illustrative read-only data is used where a screen needs example activity; no private account data is shown.
 
 ### 🎓 Student workspace
 
-| GIG Center | TrustScore |
+#### GIG Center
+
+<img src="docs/assets/screenshots/student-gig-center.png" width="920" alt="SkillBridge student GIG Center" />
+
+#### TrustScore
+
+<img src="docs/assets/screenshots/student-trustscore.png" width="920" alt="SkillBridge student TrustScore" />
+
+#### Skill Hub
+
+<img src="docs/assets/screenshots/student-skillhub.png" width="920" alt="SkillBridge student Skill Hub" />
+
+#### Network
+
+<img src="docs/assets/screenshots/student-network.png" width="920" alt="SkillBridge student network" />
+
+#### Earning
+
+<img src="docs/assets/screenshots/student-earning.png" width="920" alt="SkillBridge student earning" />
+
+#### My Profile
+
+| Editable profile | Public profile preview |
 | --- | --- |
-| <img src="docs/assets/screenshots/student-gig-center.png" width="460" alt="SkillBridge student GIG Center" /> | <img src="docs/assets/screenshots/student-trustscore.png" width="460" alt="SkillBridge student TrustScore" /> |
-| **Skill Hub**<br><img src="docs/assets/screenshots/student-skill-hub.png" width="460" alt="SkillBridge student Skill Hub" /> | **Network**<br><img src="docs/assets/screenshots/student-network.png" width="460" alt="SkillBridge student network" /> |
-| **Earning**<br><img src="docs/assets/screenshots/student-earning.png" width="460" alt="SkillBridge student earning" /> | **My Profile**<br><img src="docs/assets/screenshots/student-profile.png" width="460" alt="SkillBridge student profile" /> |
-| **Task page**<br><img src="docs/assets/screenshots/student-task.png" width="460" alt="SkillBridge student task page" /> | |
+| <img src="docs/assets/screenshots/student-profile.png" width="590" alt="SkillBridge student profile editor" /> | <img src="docs/assets/screenshots/student-public-profile.png" width="260" alt="SkillBridge public student profile preview" /> |
+
+#### Task page
+
+<img src="docs/assets/screenshots/student-task-page.png" width="920" alt="SkillBridge student task page" />
 
 ### 🏢 Company workspace
 
-| My Business | GIG Management |
+#### My Business
+
+<img src="docs/assets/screenshots/company-dashboard.png" width="920" alt="SkillBridge company command center" />
+
+#### GIG Management
+
+<img src="docs/assets/screenshots/company-gig-management.png" width="920" alt="SkillBridge company GIG management" />
+
+#### Task Center
+
+<img src="docs/assets/screenshots/company-task-center.png" width="920" alt="SkillBridge company Task Center" />
+
+#### Talent Search
+
+<img src="docs/assets/screenshots/company-talent-search.png" width="920" alt="SkillBridge company Talent Search" />
+
+#### Project Workspace
+
+<img src="docs/assets/screenshots/company-project-workspace.png" width="920" alt="SkillBridge company Project Workspace" />
+
+#### Payment
+
+<img src="docs/assets/screenshots/company-payment.png" width="920" alt="SkillBridge company payment" />
+
+#### Business Profile
+
+| Editable business profile | Public business profile preview |
 | --- | --- |
-| <img src="docs/assets/screenshots/company-dashboard.png" width="460" alt="SkillBridge company dashboard" /> | <img src="docs/assets/screenshots/company-gig-management.png" width="460" alt="SkillBridge company GIG management" /> |
-| **Task Center**<br><img src="docs/assets/screenshots/company-task-center.png" width="460" alt="SkillBridge company Task Center" /> | **Talent Search**<br><img src="docs/assets/screenshots/company-talent-search.png" width="460" alt="SkillBridge company Talent Search" /> |
-| **Project Workspace**<br><img src="docs/assets/screenshots/company-project-workspace.png" width="460" alt="SkillBridge company Project Workspace" /> | **Payment**<br><img src="docs/assets/screenshots/company-payment.png" width="460" alt="SkillBridge company payment" /> |
-| **Business Profile**<br><img src="docs/assets/screenshots/company-business-profile.png" width="460" alt="SkillBridge company business profile" /> | |
+| <img src="docs/assets/screenshots/company-business-profile.png" width="590" alt="SkillBridge company business profile editor" /> | <img src="docs/assets/screenshots/company-public-profile.png" width="260" alt="SkillBridge public business profile preview" /> |
 
-### 🧾 Reviewer workspace
+### 🛡️ Platform Admin workspace
 
-| Review queue |
-| --- |
-| <img src="docs/assets/screenshots/reviewer-dashboard.png" width="460" alt="SkillBridge reviewer dashboard" /> |
+#### Overview
+
+<img src="docs/assets/screenshots/admin-overview.png" width="920" alt="SkillBridge Platform Admin overview" />
+
+#### Skill Catalog
+
+<img src="docs/assets/screenshots/admin-skill-catalog.png" width="920" alt="SkillBridge Platform Admin Skill Catalog" />
+
+#### Skill Requests
+
+<img src="docs/assets/screenshots/admin-skill-requests.png" width="920" alt="SkillBridge Platform Admin Skill Requests" />
+
+#### Review Queue
+
+<img src="docs/assets/screenshots/admin-review-queue.png" width="920" alt="SkillBridge Platform Admin blind review queue" />
+
+#### Review Team
+
+<img src="docs/assets/screenshots/admin-review-team.png" width="920" alt="SkillBridge Platform Admin Review Team" />
 
 <!-- markdownlint-enable MD033 -->
 
@@ -1042,6 +1180,13 @@ npm run dev
 | `LOG_LEVEL` | `info` | Server log threshold |
 
 Always select the database explicitly. A MongoDB URI with no path and no `MONGO_DB_NAME` falls back to the database named `test`; production startup now rejects that ambiguous configuration. Adding `MONGO_DB_NAME` does not migrate existing collections, so back up and migrate any existing `test` data before changing a deployed service.
+
+Create the first platform administrator from the server directory, then apply production indexes:
+
+```bash
+npm run reviewers:create -- --name "Platform Admin" --email admin@example.com --password "use-a-long-temporary-password" --role admin
+npm run db:indexes -- --apply
+```
 
 ### 🌐 Client: `client/.env`
 

@@ -59,6 +59,15 @@ export async function saveCompanyProfile(token, payload) {
   })
 }
 
+export async function fetchCompanyProfileMedia(token) {
+  return apiRequest('/api/company/profile-media', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+}
+
 export async function logoutCompany(token) {
   return apiRequest('/api/company/logout', {
     method: 'POST',

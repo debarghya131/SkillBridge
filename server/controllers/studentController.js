@@ -2,6 +2,7 @@ const Student = require('../models/Student')
 const Company = require('../models/Company')
 const NetworkConnection = require('../models/NetworkConnection')
 const SkillAssessment = require('../models/SkillAssessment')
+const SkillRequest = require('../models/SkillRequest')
 const TaskSubmission = require('../models/TaskSubmission')
 const TeamPost = require('../models/TeamPost')
 const { buildDefaultStudentProfile } = require('../config/studentDefaults')
@@ -356,7 +357,10 @@ async function updateCurrentStudent(token, payload) {
   if (student.updatedAt) student.$where = { updatedAt: student.updatedAt }
   await student.save()
 
-  return sanitizeStudent(student)
+  // Profile media is loaded through the dedicated endpoint. Returning an
+  // uploaded video after every small text edit can otherwise add several MB
+  // to each autosave response.
+  return sanitizeStudent(student, { includeVideo: false })
 }
 
 async function removeCompanyStudentReferences(studentId, submissionIds) {
@@ -420,6 +424,7 @@ async function deleteCurrentStudentAccount(token, payload = {}) {
   await Promise.all([
     NetworkConnection.deleteMany({ $or: [{ requester: student._id }, { recipient: student._id }] }),
     SkillAssessment.deleteMany({ studentId: student._id }),
+    SkillRequest.deleteMany({ studentId: student._id }),
     TaskSubmission.deleteMany({ studentId: student._id }),
     TeamPost.deleteMany({ owner: student._id }),
     TeamPost.updateMany({ 'requests.student': student._id }, { $pull: { requests: { student: student._id } } }),

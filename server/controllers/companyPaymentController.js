@@ -67,7 +67,10 @@ async function recordExternalPayment(token, submissionId, payload) {
   if (payload?.confirmed !== true) throw buildAuthError('Confirm that this payment has already been made')
 
   async function persistPayment(session) {
-    const submissionQuery = TaskSubmission.findOne({ _id: submissionId, companyId: company._id })
+    const rawSubmissionQuery = TaskSubmission.findOne({ _id: submissionId, companyId: company._id })
+    const submissionQuery = typeof rawSubmissionQuery.select === 'function'
+      ? rawSubmissionQuery.select('_id studentId status externalPayment')
+      : rawSubmissionQuery
     const existing = session ? await submissionQuery.session(session) : await submissionQuery
     if (!existing) throw buildAuthError('Submission not found', 404)
     if (existing.externalPayment) {
@@ -77,15 +80,21 @@ async function recordExternalPayment(token, submissionId, payload) {
     }
     if (existing.status !== 'approved') throw buildAuthError('Approve the delivered work before recording payment', 409)
 
-    const updateQuery = TaskSubmission.findOneAndUpdate(
+    const rawUpdateQuery = TaskSubmission.findOneAndUpdate(
       { _id: submissionId, companyId: company._id, status: 'approved', externalPayment: null },
       { $set: { status: 'completed', completedAt: new Date(), externalPayment: payment }, $inc: { __v: 1 } },
       { returnDocument: 'after', runValidators: true },
     )
+    const updateQuery = typeof rawUpdateQuery.select === 'function'
+      ? rawUpdateQuery.select('_id studentId status externalPayment')
+      : rawUpdateQuery
     const updated = session ? await updateQuery.session(session) : await updateQuery
     if (!updated) throw buildAuthError('This submission changed. Refresh before recording payment.', 409)
 
-    const studentQuery = Student.findById(updated.studentId)
+    const rawStudentQuery = Student.findById(updated.studentId)
+    const studentQuery = typeof rawStudentQuery.select === 'function'
+      ? rawStudentQuery.select('_id trustScore trustScoreState')
+      : rawStudentQuery
     const student = session ? await studentQuery.session(session) : await studentQuery
     if (!student) throw buildAuthError('The student account for this submission no longer exists', 409)
     recordTrustScoreEvent(student, 'gig_completed', String(updated._id))

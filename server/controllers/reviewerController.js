@@ -7,6 +7,11 @@ const { reviewSkillAssessment, serializeBlindAssessment } = require('./skillAsse
 const { DEMO_ASSESSMENTS, clone } = require('../config/showcaseFixtures')
 
 const findReviewer = token => findModelByActiveToken(Reviewer, token, 'Reviewer', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+const findAssessmentReviewer = async token => {
+  const reviewer = await findReviewer(token)
+  if (!['reviewer', 'admin'].includes(reviewer.role)) throw buildAuthError('Assessment operations access is required.', 403)
+  return reviewer
+}
 const claimLeaseMs = () => Math.max(15, Math.min(Number(process.env.REVIEW_CLAIM_TTL_MINUTES) || 240, 1440)) * 60 * 1000
 
 function sanitizeReviewer(reviewer) {
@@ -19,7 +24,7 @@ async function signInReviewer(payload) {
   const reviewer = query
     ? (typeof query?.select === 'function' ? await query.select('+passwordHash +sessions') : await query)
     : null
-  if (!reviewer || !verifyPassword(payload?.password, reviewer.passwordHash)) throw buildAuthError('Invalid reviewer email or password', 401)
+  if (!reviewer || !verifyPassword(payload?.password, reviewer.passwordHash)) throw buildAuthError('Invalid operations email or password', 401)
   const token = createSessionToken()
   reviewer.lastSignedInAt = new Date()
   await appendSession(reviewer, token, Math.max(Number(process.env.MAX_SESSIONS_PER_ACCOUNT) || 5, 1))
@@ -46,7 +51,7 @@ function normalizeQueueFilters(filters = {}) {
 }
 
 async function listReviewQueue(token, filters) {
-  const reviewer = await findReviewer(token)
+  const reviewer = await findAssessmentReviewer(token)
   const values = normalizeQueueFilters(filters)
   const expiredClaim = new Date(Date.now() - claimLeaseMs())
   const query = values.queue === 'available'
@@ -59,16 +64,16 @@ async function listReviewQueue(token, filters) {
     SkillAssessment.find(query).sort(values.queue === 'available' ? { createdAt: 1 } : { updatedAt: -1 }).skip((values.page - 1) * values.pageSize).limit(values.pageSize),
     SkillAssessment.countDocuments(query),
   ])
-  const demo = DEMO_ASSESSMENTS.filter(item => (
+  const demo = (filters?.includeDemo === 'true' ? DEMO_ASSESSMENTS : []).filter(item => (
     values.queue === 'available' ? item.id === 'demo-assessment-available'
       : values.queue === 'mine' ? item.id === 'demo-assessment-mine'
         : item.id === 'demo-assessment-completed'
   )).filter(item => !values.mode || item.mode === values.mode)
-  return { assessments: [...records.map(serializeBlindAssessment), ...clone(demo)], total: total + demo.length, page: values.page, pageSize: values.pageSize }
+  return { assessments: [...records.map(serializeBlindAssessment), ...clone(demo)], total, page: values.page, pageSize: values.pageSize }
 }
 
 async function claimAssessment(token, id) {
-  const reviewer = await findReviewer(token)
+  const reviewer = await findAssessmentReviewer(token)
   if (!mongoose.isObjectIdOrHexString(id)) throw buildAuthError('Invalid assessment ID')
   const expiredClaim = new Date(Date.now() - claimLeaseMs())
   const assessment = await SkillAssessment.findOneAndUpdate({
@@ -81,7 +86,7 @@ async function claimAssessment(token, id) {
 }
 
 async function releaseAssessment(token, id) {
-  const reviewer = await findReviewer(token)
+  const reviewer = await findAssessmentReviewer(token)
   if (!mongoose.isObjectIdOrHexString(id)) throw buildAuthError('Invalid assessment ID')
   const assessment = await SkillAssessment.findOneAndUpdate({ _id: id, status: 'pending', assignedReviewerId: reviewer._id }, {
     $set: { assignedReviewerId: null, assignedReviewerName: '', claimedAt: null },
@@ -91,7 +96,7 @@ async function releaseAssessment(token, id) {
 }
 
 async function decideAssessment(token, id, payload) {
-  const reviewer = await findReviewer(token)
+  const reviewer = await findAssessmentReviewer(token)
   return reviewSkillAssessment(id, {
     status: payload?.status,
     feedback: payload?.feedback,

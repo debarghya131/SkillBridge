@@ -100,8 +100,9 @@ export async function recordStudentTrustScoreEvent(token, payload) {
   })
 }
 
-export async function fetchStudentSkillHub(token) {
-  return apiRequest('/api/student/skillhub', {
+export async function fetchStudentSkillHub(token, { includeSkillGap = true } = {}) {
+  const query = includeSkillGap ? '' : '?includeSkillGap=false'
+  return apiRequest(`/api/student/skillhub${query}`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -125,6 +126,30 @@ export async function saveStudentSkillHub(token, payload) {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function fetchSkillCatalog(token, filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.search) params.set('search', filters.search)
+  if (filters.category) params.set('category', filters.category)
+  const query = params.toString()
+  return apiRequest(`/api/student/skillhub/catalog${query ? `?${query}` : ''}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export function fetchStudentSkillRequests(token) {
+  return apiRequest('/api/student/skillhub/skill-requests', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export function requestPlatformSkill(token, payload) {
+  return apiRequest('/api/student/skillhub/skill-requests', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   })
 }

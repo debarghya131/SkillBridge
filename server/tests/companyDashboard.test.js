@@ -55,6 +55,14 @@ test('company dashboard overview derives metrics from saved company state', () =
   assert.deepEqual(overview.stats.map(item => item.value), ['1', '12', '6'])
   assert.equal(overview.profileCompletion, 100)
   assert.equal(overview.recentHiringActivity[0].name, 'Aman Verma')
+  assert.deepEqual(overview.operations.pipeline, {
+    applications: 12,
+    interviewTasks: 1,
+    awaitingDecision: 1,
+    selected: 0,
+  })
+  assert.equal(overview.operations.reviewsDue, 1)
+  assert.equal(overview.operations.activeWork, 0)
 })
 
 test('company GIG operations validate and persist new and updated roles in state', () => {
@@ -185,11 +193,10 @@ test('talent profiles only publish saved profile content and active verified ski
     ],
   })
 
-  assert.deepEqual(profile.skills, ['Node.js', 'React'])
+  assert.deepEqual(profile.skills, ['React'])
   assert.deepEqual(profile.verifiedSkills, ['React'])
   assert.deepEqual(profile.skillsByLevel.Pro, ['React'])
   assert.deepEqual(profile.skillDetails, [
-    { name: 'Node.js', verified: false, level: null, streak: 0 },
     { name: 'React', verified: true, level: 'Pro', streak: 4 },
   ])
   assert.equal(profile.projects, 1)

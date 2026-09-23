@@ -152,7 +152,7 @@ function sanitizeDashboardState(state) {
   }
 }
 
-function buildCompanyDashboardOverview(company, { talentCount = 0, submissions = [], includeDemo = false } = {}) {
+function buildCompanyDashboardOverview(company, { talentCount = 0, submissions = [] } = {}) {
   const realGigManagementState = sanitizeGigManagementState(company.gigManagementState)
   const gigManagementState = realGigManagementState
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, buildDefaultCompanyProfile({
@@ -180,10 +180,7 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
       color: submission.status === 'ready_to_hire' ? '#065F46' : submission.status === 'needs_revision' ? '#92400E' : '#1D4ED8',
       bg: submission.status === 'ready_to_hire' ? '#D1FAE5' : submission.status === 'needs_revision' ? '#FEF3C7' : '#DBEAFE',
     }))
-    : includeDemo ? [
-      { name: 'Aarav Sen', status: 'delivered work for Retail Inventory Dashboard', when: '2026-09-10T10:30:00.000Z', color: '#1D4ED8', bg: '#DBEAFE', demoData: true },
-      { name: 'Meera Das', status: 'completed Delivery Performance Analysis', when: '2026-09-12T10:30:00.000Z', color: '#065F46', bg: '#D1FAE5', demoData: true },
-    ] : []
+    : []
   const checklist = [
     { label: 'Business name and location', done: Boolean(businessProfile.businessName && businessProfile.location) },
     { label: 'Industry, website, and team size', done: Boolean(businessProfile.industry && businessProfile.website && businessProfile.teamSize) },
@@ -191,6 +188,31 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
     { label: 'Company description and required skills', done: Boolean(businessProfile.description && businessProfile.requiredSkills) },
     { label: 'Contact details for applicants', done: Boolean(businessProfile.contactEmail && businessProfile.contactPhone) },
   ]
+  const needsInterviewReview = submission => submission.status === 'submitted'
+    || (submission.status === 'needs_revision' && submission.revisionReturnStatus !== 'delivered')
+  const isSelected = submission => ['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(submission.status)
+    || (submission.status === 'needs_revision' && submission.revisionReturnStatus === 'delivered')
+  const isActiveWork = submission => ['selected', 'work_started', 'delivered', 'approved'].includes(submission.status)
+    || (submission.status === 'needs_revision' && submission.revisionReturnStatus === 'delivered')
+  const pipeline = {
+    applications: applicationCount,
+    interviewTasks: submissions.length,
+    awaitingDecision: submissions.filter(submission => (
+      needsInterviewReview(submission) || ['reviewed', 'ready_to_hire'].includes(submission.status)
+    )).length,
+    selected: submissions.filter(isSelected).length,
+  }
+  const operations = {
+    openGigs: activeGigCount,
+    applications: applicationCount,
+    talentAvailable: matchedStudents,
+    reviewsDue: submissions.filter(needsInterviewReview).length,
+    deliveriesDue: submissions.filter(submission => submission.status === 'delivered').length,
+    activeWork: submissions.filter(isActiveWork).length,
+    awaitingPayment: submissions.filter(submission => submission.status === 'approved' && !submission.externalPayment).length,
+    completedWork: submissions.filter(submission => submission.status === 'completed' || Boolean(submission.externalPayment)).length,
+    pipeline,
+  }
 
   return {
     stats: [
@@ -202,6 +224,7 @@ function buildCompanyDashboardOverview(company, { talentCount = 0, submissions =
     profileCompletion: Math.round((checklist.filter(item => item.done).length / checklist.length) * 100),
     checklist,
     recentHiringActivity,
+    operations,
   }
 }
 
@@ -393,7 +416,14 @@ function sanitizeProjectWorkspaceState(state) {
 }
 
 async function syncWorkspaceWithSelectedSubmissions(company) {
-  const submissions = await TaskSubmission.find({ companyId: company._id }).sort({ updatedAt: -1 })
+  const query = TaskSubmission.find({ companyId: company._id })
+  const compactQuery = typeof query.select === 'function'
+    ? query.select('_id studentId studentAvatar companyGigId companyGigPublicId gigTitle companyName status revisionReturnStatus completedAt reviewedAt updatedAt submittedAt taskTitle studentName submissionLink submissionContent feedback externalPayment')
+    : query
+  const sortedQuery = compactQuery.sort({ updatedAt: -1 })
+  const submissions = typeof sortedQuery.lean === 'function'
+    ? await sortedQuery.lean()
+    : await sortedQuery
   const state = sanitizeGigManagementState(company.gigManagementState)
   company.projectWorkspaceState = buildWorkspaceState(company.projectWorkspaceState, submissions, state.gigs)
   synchronizeCompanyGigMetrics(state, submissions)
@@ -725,12 +755,13 @@ function buildTalentSearchResult(profiles, filters = {}, requiredSkills = '') {
   }
 }
 
-function sanitizeCompany(company) {
+function sanitizeCompany(company, { includeIntroVideo = true } = {}) {
   const fallbackProfile = buildDefaultCompanyProfile({
     businessName: company.businessName,
     location: company.location,
   })
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
+  if (!includeIntroVideo) delete businessProfile.introVideoUrl
   const dashboardState = sanitizeDashboardState(company.dashboardState)
   const gigManagementState = sanitizeGigManagementState(company.gigManagementState)
   const projectWorkspaceState = sanitizeProjectWorkspaceState(company.projectWorkspaceState)
@@ -769,6 +800,10 @@ function withDemoGigState(realState) {
     pipeline: realState.pipeline,
     recentActivity: [...realState.recentActivity, ...demo.recentActivity].slice(0, 8),
     applicantsByGig: { ...demo.applicantsByGig, ...realState.applicantsByGig },
+    demoProfiles: Object.fromEntries(COMPANY_DEMO_TALENT.map(person => [
+      person.id,
+      demoNetworkProfile({ ...person, relationship: { status: 'connected' } }),
+    ])),
   }
 }
 
@@ -779,6 +814,10 @@ function withDemoWorkspace(realState) {
     projects: [...realState.projects, ...demo.projects],
     selectedProjectId: realState.selectedProjectId || demo.selectedProjectId,
   }
+}
+
+function withDemoTaskLibraryState(realState) {
+  return { ...realState, tasks: [...realState.tasks, ...demoTaskLibraryState().tasks] }
 }
 
 function sanitizeTaskLibraryState(state) {
@@ -803,8 +842,8 @@ function sanitizeTaskLibraryState(state) {
   return { tasks, revision: Number(state?.revision) || 0 }
 }
 
-async function findCompanyByToken(token) {
-  return findModelByActiveToken(Company, token, 'Company', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30))
+async function findCompanyByToken(token, fields = '') {
+  return findModelByActiveToken(Company, token, 'Company', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), fields)
 }
 
 async function signUpCompany(payload) {
@@ -855,7 +894,7 @@ async function signUpCompany(payload) {
 
   return {
     token,
-    company: sanitizeCompany(company),
+    company: sanitizeCompany(company, { includeIntroVideo: false }),
   }
 }
 
@@ -874,7 +913,7 @@ async function signInCompany(payload) {
     ],
   })
   const company = typeof query?.select === 'function'
-    ? await query.select('+passwordHash +sessions')
+    ? await query.select('+passwordHash +sessions -businessProfile.introVideoUrl')
     : await query
 
   if (!company || !verifyPassword(payload.password, company.passwordHash)) {
@@ -886,19 +925,24 @@ async function signInCompany(payload) {
 
   return {
     token,
-    company: sanitizeCompany(company),
+    company: sanitizeCompany(company, { includeIntroVideo: false }),
   }
 }
 
 async function getCurrentCompany(token) {
-  const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token))
-  return sanitizeCompany(company)
+  const company = await syncWorkspaceWithSelectedSubmissions(await findCompanyByToken(token, '-businessProfile.introVideoUrl'))
+  return sanitizeCompany(company, { includeIntroVideo: false })
+}
+
+async function getCurrentCompanyProfileMedia(token) {
+  const company = await findCompanyByToken(token, '_id businessProfile.introVideoUrl')
+  return { introVideoUrl: company.businessProfile?.introVideoUrl || null }
 }
 
 async function getCurrentCompanyTaskLibraryState(token) {
   const company = await findCompanyByToken(token)
   const real = sanitizeTaskLibraryState(company.taskLibraryState)
-  return { ...real, tasks: [...real.tasks, ...demoTaskLibraryState().tasks] }
+  return withDemoTaskLibraryState(real)
 }
 
 async function updateCurrentCompanyTaskLibraryState(token, payload) {
@@ -938,17 +982,15 @@ async function updateCurrentCompanyTaskLibraryState(token, payload) {
 
 async function getCurrentCompanyDashboard(token) {
   const company = await findCompanyByToken(token)
-  const gigTitles = sanitizeGigManagementState(company.gigManagementState).gigs
-    .map(gig => gig.title)
-    .filter(Boolean)
   const [talentCount, submissions] = await Promise.all([
     Student.countDocuments(),
-    gigTitles.length > 0
-      ? TaskSubmission.find({ companyId: company._id }).sort({ updatedAt: -1, submittedAt: -1 }).limit(20)
-      : Promise.resolve([]),
+    TaskSubmission.find({ companyId: company._id })
+      .select('studentName gigTitle status revisionReturnStatus externalPayment updatedAt submittedAt')
+      .sort({ updatedAt: -1, submittedAt: -1 })
+      .lean(),
   ])
 
-  return buildCompanyDashboardOverview(company, { talentCount, submissions, includeDemo: true })
+  return buildCompanyDashboardOverview(company, { talentCount, submissions })
 }
 
 async function updateCurrentCompany(token, payload) {
@@ -982,7 +1024,15 @@ async function updateCurrentCompany(token, payload) {
 
   await company.save()
 
-  return sanitizeCompany(company)
+  const savedCompany = sanitizeCompany(company, { includeIntroVideo: false })
+  return {
+    id: savedCompany.id,
+    businessName: savedCompany.businessName,
+    location: savedCompany.location,
+    contactMethod: savedCompany.contactMethod,
+    verificationMethod: savedCompany.verificationMethod,
+    businessProfile: savedCompany.businessProfile,
+  }
 }
 
 async function logoutCurrentCompany(token) {
@@ -1036,7 +1086,9 @@ async function getCompanyGigApplicants(token, gigId) {
       { 'gigState.opportunities': { $elemMatch: inviteMatch } },
     ],
   })
-    .select('name avatar location skills skillHubSkills trustScore trustScoreState projects githubLink contactInfo videoUrl preferredLanguage gigState').lean()
+    // Applicant cards only need compact identity and opportunity fields. Full
+    // projects, links, contact data and video load after View Profile is used.
+    .select('name avatar location skills skillHubSkills skillHubState.streaks trustScore trustScoreState.events.key trustScoreState.events.type trustScoreState.events.referenceId trustScoreState.events.occurredAt preferredLanguage gigState.opportunities').lean()
 
   return students.map(student => {
     const profile = sanitizeTalentProfile(student)
@@ -1189,7 +1241,7 @@ async function getCompanyTalentProfiles(token, filters = {}) {
     location: company.location,
   })
   const businessProfile = sanitizeCompanyProfile(company.businessProfile, fallbackProfile)
-  const availableLocations = await Student.distinct('location')
+  const availableLocationsRequest = Student.distinct('location')
   const requiredSkills = parseRequiredSkills(businessProfile.requiredSkills)
   const demoCandidates = COMPANY_DEMO_TALENT
     .map(person => ({
@@ -1229,6 +1281,7 @@ async function getCompanyTalentProfiles(token, filters = {}) {
     }
     total += 1
   }
+  const availableLocations = await availableLocationsRequest
 
   return {
     talentProfiles: normalizedFilters.page === 1
@@ -1301,7 +1354,11 @@ module.exports = {
     const demoProfile = COMPANY_DEMO_TALENT.find(item => item.id === studentId)
     if (demoProfile) return clone(demoNetworkProfile({ ...demoProfile, relationship: { status: 'connected' } }))
     if (!/^[a-f0-9]{24}$/i.test(studentId)) throw buildAuthError('Invalid student ID', 400)
-    const student = await Student.findById(studentId).lean()
+    const query = Student.findById(studentId)
+    const compactQuery = typeof query.select === 'function'
+      ? query.select('_id name avatar trustScore trustScoreState location contactMethod verificationMethod about collaborationFocus workStyle skills skillHubSkills skillHubState.skillLog projects githubLink videoUrl contactInfo gigState')
+      : query
+    const student = await compactQuery.lean()
     if (!student) throw buildAuthError('Student profile not found', 404)
     return require('../utils/publicStudentProfile').publicStudentProfile(student, true)
   },
@@ -1316,6 +1373,7 @@ module.exports = {
   createCompanyGig,
   deleteCompanyGig,
   getCurrentCompany,
+  getCurrentCompanyProfileMedia,
   getCurrentCompanyTaskLibraryState,
   getCurrentCompanyDashboard,
   getCurrentCompanyGigManagementState,
@@ -1327,6 +1385,9 @@ module.exports = {
   sanitizeTalentProfile,
   sanitizeTaskLibraryState,
   validateCompanyProfile,
+  withDemoGigState,
+  withDemoTaskLibraryState,
+  withDemoWorkspace,
   logoutCurrentCompany,
   signInCompany,
   signUpCompany,

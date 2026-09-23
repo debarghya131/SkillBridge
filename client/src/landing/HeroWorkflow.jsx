@@ -6,7 +6,7 @@ const steps = [
     text: 'Add skills, project links, demos, and your contribution. A listed skill starts unverified.', outcome: 'Your work becomes inspectable' },
   { title: 'Submit skill evidence', role: 'Student / Skill Hub', icon: FolderGit2,
     text: 'Complete a skill assessment. Explain your approach, testing, and results, with an evidence link where useful.', outcome: 'Evidence enters the review queue' },
-  { title: 'Earn verification', role: 'Platform reviewer / Blind review', icon: BadgeCheck,
+  { title: 'Earn verification', role: 'Admin review team / Blind review', icon: BadgeCheck,
     text: 'A reviewer assesses your work without seeing your identity or college. They approve, request revisions, or reject it.', outcome: 'Approval updates verification and TrustScore' },
   { title: 'Apply, interview, get selected', role: 'Student + company / GIG Center', icon: BriefcaseBusiness,
     text: 'Companies post GIGs and search profiles. Apply or accept a direct invite, submit the interview task, and await the company\'s decision.', outcome: 'Company selection opens the work stage' },

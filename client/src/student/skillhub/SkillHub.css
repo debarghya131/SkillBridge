@@ -1,6 +1,8 @@
 .skillhub-page { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; min-width: 0; }
 .sh-toolbar, .sh-section-heading, .sh-skill, .sh-activity, .sh-assessment header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sh-toolbar { flex-wrap: wrap; flex-shrink: 0; }
+.skillhub-page .sh-demo-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.skillhub-page .sh-demo-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
 .sh-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); }
 .sh-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; }
 .sh-tabs button[aria-pressed=true] { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
@@ -64,6 +66,9 @@
 .sh-status-expired { color: #991b1b; background: #fee2e2; }
 .sh-status-unverified { color: #475569; background: #f1f5f9; }
 .sh-status-archived { color: #475569; background: #e2e8f0; }
+.sh-source { padding: 3px 7px; border: 1px solid #c7d2fe; border-radius: 4px; background: #eef2ff; color: #4338ca; font-size: 10px; font-weight: 700; }
+.sh-source-self_declared { border-color: #cbd5e1; background: #f8fafc; color: #64748b; }
+.sh-source-legacy { border-color: #bae6fd; background: #f0f9ff; color: #0369a1; }
 .sh-skill-actions { display: inline-flex; align-items: center; gap: 8px; }
 .sh-verified-icon { color: #059669; }
 .sh-skill-actions .btn-secondary { min-height: 36px; padding: 7px 14px; font-size: 12px; white-space: nowrap; }
@@ -86,6 +91,21 @@
 .sh-assessment footer button { width: auto; min-width: 140px; min-height: 36px; flex: 0 0 auto; margin: 0; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
 .sh-assessment > .btn-secondary { width: auto; min-width: 140px; min-height: 36px; padding: 7px 12px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
 .sh-empty { padding: 28px 0; color: var(--muted); font-size: 14px; }
+.sh-gap-report { display:flex; min-width:0; min-height:0; height:100%; flex-direction:column; gap:18px; overflow-y:auto; padding-right:3px; }
+.sh-gap-search { display:grid; flex:0 0 auto; gap:6px; }
+.sh-gap-search > span { color:var(--muted); font-size:11px; font-weight:700; }
+.sh-gap-columns { height:auto; min-height:280px; flex:0 0 auto; }
+.sh-live-data-badge { display:inline-flex; margin-left:7px; padding:2px 6px; border:1px solid #6ee7b7; border-radius:999px; background:#ecfdf5; color:#047857; font-size:9px; font-weight:800; line-height:1.3; vertical-align:2px; text-transform:uppercase; }
+.sh-gap-preview { display:grid; gap:12px; margin-top:2px; padding:14px; border:1px dashed #f59e0b; border-radius:8px; background:#fffaf1; }
+.sh-gap-preview > header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.sh-gap-preview h3 { margin:7px 0 0; font-size:14px; }
+.sh-gap-preview > header > span { color:#92400e; font-size:10px; font-weight:700; white-space:nowrap; }
+.sh-gap-preview > p { margin:0; color:#78716c; font-size:11px; line-height:1.5; }
+.sh-gap-preview-skills { display:grid; gap:8px; }
+.sh-gap-preview-skills > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; border:1px solid #fde7bd; border-radius:7px; background:white; }
+.sh-gap-preview-skills > div > span { display:flex; align-items:center; gap:7px; min-width:0; color:#047857; }
+.sh-gap-preview-skills strong { color:var(--dark); font-size:12px; }
+.sh-gap-preview-skills small { color:var(--muted); font-size:10px; text-align:right; }
 .sh-policy { margin: 0; padding: 9px 11px; border-left: 3px solid #93c5fd; background: #eff6ff; color: #475569; font-size: 12px; line-height: 1.55; }
 .sh-inline-streak { display: flex; align-items: center; gap: 4px; width: fit-content; margin: 0 0 7px; color: #64748b; font-size: 11px; font-weight: 700; }
 .sh-inline-streak.is-active { color: #c2410c; }
@@ -263,6 +283,39 @@
 .sh-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
 .sh-actions > .btn-primary { min-height: 36px; padding: 7px 18px; font-size: 13px; }
 .sh-actions > .btn-secondary { width: 38px; min-height: 36px; padding: 0; font-size: 13px; }
+.sh-catalog-add { border-block: 1px solid var(--border); background: #f8fafc; }
+.sh-catalog-add fieldset { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+.sh-add-mode { display: flex; gap: 6px; }
+.sh-add-mode button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #64748b; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.sh-add-mode button[aria-selected="true"] { border-color: #4f46e5; background: #eef2ff; color: #4338ca; }
+.sh-catalog-picker, .sh-custom-skill { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 180px); gap: 10px; min-width: 0; }
+.sh-catalog-picker > label, .sh-catalog-picker > div, .sh-catalog-picker > p, .sh-custom-skill > p, .sh-custom-skill > .sh-request-toggle, .sh-custom-skill > .sh-request-note { grid-column: 1 / -1; }
+.sh-catalog-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: 180px; overflow-y: auto; padding-right: 3px; }
+.sh-catalog-options > label { display: flex; grid-template-columns: none; align-items: flex-start; gap: 9px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; }
+.sh-catalog-options > label.is-selected { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79,70,229,.12); }
+.sh-catalog-options input { width: auto; margin-top: 2px; accent-color: #4f46e5; }
+.sh-catalog-options span { min-width: 0; }
+.sh-catalog-options strong, .sh-catalog-options small { display: block; }
+.sh-catalog-options strong { color: #172033; font-size: 12px; }
+.sh-catalog-options small { margin-top: 3px; line-height: 1.35; }
+.sh-catalog-options > p { grid-column: 1 / -1; margin: 4px 0; color: #64748b; font-size: 12px; }
+.sh-source-note { margin: 0; padding: 8px 10px; border-left: 3px solid #6366f1; background: #eef2ff; color: #475569; font-size: 11px; line-height: 1.45; }
+.sh-request-toggle { display: flex !important; grid-template-columns: none !important; align-items: flex-start; gap: 9px !important; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.sh-request-toggle input { width: auto; margin-top: 2px; accent-color: #4f46e5; }
+.sh-request-toggle strong, .sh-request-toggle small { display: block; }
+.sh-request-toggle small { margin-top: 2px; }
+.sh-request-note textarea { resize: vertical; }
+.sh-request-pending { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: #92400e; font-size: 11px; font-weight: 700; }
+.sh-request-history { display: grid; gap: 7px; padding: 10px; border: 1px solid #dbe3ee; border-radius: 7px; background: #f8fafc; }
+.sh-request-history h3 { margin: 0 0 2px; color: #475569; font-size: 11px; text-transform: uppercase; }
+.sh-request-history article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
+.sh-request-history strong, .sh-request-history small { display: block; }
+.sh-request-history strong { color: #172033; font-size: 12px; }
+.sh-request-history small { margin-top: 2px; }
+.sh-request-history p { grid-column: 1 / -1; margin: 2px 0 0; color: #475569; font-size: 11px; line-height: 1.4; }
+.sh-request-status { padding: 3px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 9px; font-weight: 800; text-transform: capitalize; }
+.sh-request-status-approved, .sh-request-status-merged { background: #d1fae5; color: #065f46; }
+.sh-request-status-rejected { background: #fee2e2; color: #991b1b; }
 .skillhub-page .btn-primary, .skillhub-page .btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; white-space: normal; }
 @media (max-width: 1150px) {
   .sh-streak-overview { grid-template-columns: minmax(210px, .7fr) minmax(360px, 1.3fr); gap: 10px 18px; }
@@ -305,6 +358,7 @@
   .sh-guide-copy { gap: 10px; }
   .sh-guide-icon { width: 34px; height: 34px; flex-basis: 34px; }
   .sh-filters, .sh-add-form fieldset { grid-template-columns: minmax(0, 1fr); }
+  .sh-catalog-picker, .sh-custom-skill, .sh-catalog-options { grid-template-columns: minmax(0, 1fr); }
   .sh-actions { grid-column: auto; }
   .sh-assessment { padding: 13px 12px 12px; }
   .sh-assessment footer { align-items: stretch; flex-direction: column; }
@@ -335,8 +389,13 @@
   .sh-actions { display: grid; grid-template-columns: 1fr 44px; }
   .sh-actions button { min-height: 36px; }
   .sh-skill { align-items: stretch; gap: 10px; padding: 13px; }
-  .sh-skill > .btn-secondary { width: 100%; min-height: 42px; }
-  .sh-assessment > .btn-secondary { width: 100%; min-height: 42px; }
+  .sh-skill > .btn-secondary,
+  .sh-assessment > .btn-secondary {
+    width:min(100%, 168px);
+    min-height:42px;
+    align-self:flex-end;
+    padding-inline:16px;
+  }
   .sh-activity { align-items: flex-start; }
   .sh-activity > span { white-space: nowrap; }
   .sh-summary { grid-template-columns: 1fr; }
@@ -344,6 +403,10 @@
   .sh-summary > div:nth-child(3), .sh-summary > div:nth-child(4) { border-left: 0; }
   .sh-habit-controls { padding: 10px 12px; }
   .sh-habit-scroll { padding: 10px; }
+  .sh-gap-report { overflow:visible; }
+  .sh-gap-columns { min-height:0; }
+  .sh-gap-preview > header, .sh-gap-preview-skills > div { align-items:flex-start; flex-direction:column; }
+  .sh-gap-preview-skills small { text-align:left; }
 }
 @media (max-height: 650px) {
   .student-viewport.student-section-skillhub { overflow-y: auto !important; }
@@ -380,6 +443,8 @@
   .skillhub-page .skillhub-subnav { width: 100%; max-width: 100%; box-sizing: border-box; }
   .skillhub-page .responsive-pill-nav-header { width: 100%; box-sizing: border-box; }
   .skillhub-page .sh-refresh { width: 42px; min-width: 42px; margin: 0; }
+  .skillhub-page .sh-demo-toggle { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
+  .skillhub-page .sh-refresh { grid-column: 2; grid-row: 1; }
 
   .skillhub-page .sh-section-heading { width: 100%; max-width: 100%; box-sizing: border-box; }
   .skillhub-page .sh-skills-heading .sh-status-summary { flex: 1 1 100%; display: flex; flex-wrap: wrap; width: 100%; overflow: visible; gap: 5px; }

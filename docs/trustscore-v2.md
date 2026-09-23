@@ -4,8 +4,9 @@
 
 The score is a measure of reviewed evidence, not identity assurance, personal worth,
 passion, or a guarantee of future performance. No credit is awarded for profile
-uploads, connections, invites, joining teams, or self-reported achievements.
-Collaborative work can earn credit through reviewed Skill Hub evidence or GIGs.
+uploads, individual connection requests, invites, joining teams, or self-reported
+achievements. Server-confirmed collaboration milestones use separate capped pools;
+reviewed Skill Hub evidence and completed GIGs provide the main evidence credits.
 
 ## Calculation
 
@@ -18,15 +19,16 @@ deduplicated case-insensitively for tier eligibility. Activity and lifetime tota
 use the same normalized ledger. Raw records remain intact for investigation.
 
 Lifetime positive base-credit caps: practice 500; skills 1500; completed GIGs 1500;
-review quality 500; practice milestones 200. The first 500 eligible base points
+review quality 500; practice milestones 200; network milestones 250; team-up milestones
+250. The first 500 eligible base points
 count at 100%, the next 500 at 40%, the next 1000 at 20%, and the next 1000 at 10%.
 Thus 3000 eligible base points are required for 1000 before evidence gates and penalties.
 
 Evidence ceilings:
 
 - 500 until two skills are actively verified.
-- 700 until one active Pro skill, two completed GIGs, and 30 approved practice days.
-- 899 until two active Pro skills, five completed GIGs, 90 approved practice days,
+- 700 until one active Pro or Pro Mastery skill, two completed GIGs, and 30 approved practice days.
+- 899 until two active Pro Mastery skills, five completed GIGs, 90 approved practice days,
   and ten high-quality reviewed assessments.
 - 1000 when all gates are met.
 
@@ -44,6 +46,19 @@ also removes that skill from active evidence eligibility.
 
 These events run inside the existing review transaction. Pending reviews, requested
 revisions, peer reports, missed logins and broken streaks do not create penalties.
+
+Assessment results include `rewardBreakdown` (new ledger events), `rewardPoints`
+(their net base credits), and `trustScoreChange` (the actual materialized score
+change during review). For example, a high-quality first verification records
+60 verification credits plus 25 quality credits. It raises an uncapped initial
+score by 85; the same credit total need not add 85 after caps or tier gates apply.
+Historical results without these fields retain their original recorded reward.
+
+Practice credits and streaks use the original IST submission day, including after
+revision or a delayed review. New daily submissions require active verification;
+already-submitted evidence remains reviewable after expiry. An early renewal adds
+the catalog renewal period to the existing expiry, preserving remaining valid days.
+Approval requires 70/100 overall and 3/5 in correctness, evidence, and understanding.
 
 ## Compatibility and Limits
 

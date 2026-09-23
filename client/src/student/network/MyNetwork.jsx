@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Clock3, UserMinus, Users, X } from 'lucide-react'
-import { decideNetworkConnection, fetchNetworkProfile, removeNetworkConnection } from '../studentApi'
+import { decideNetworkConnection, removeNetworkConnection } from '../studentApi'
 import { toast } from '../../ui/toast'
 import { useNetworkState } from './NetworkContext'
 import NetworkProfileModal from '../../ui/PublicStudentProfile'
@@ -19,7 +19,7 @@ function ShowMore({ shown, total, onShowMore, label }) {
 }
 
 export default function MyNetwork() {
-  const { networkState, reload, token } = useNetworkState()
+  const { networkState, reload, token, loadProfile } = useNetworkState()
   const [busy, setBusy] = useState('')
   const [profile, setProfile] = useState(null)
   const [incomingVisible, setIncomingVisible] = useState(REQUEST_PAGE_SIZE)
@@ -71,7 +71,7 @@ export default function MyNetwork() {
     setBusy(`profile-${person.id}`)
     setProfile({ ...person, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true })
     try {
-      const response = await fetchNetworkProfile(token, person.id)
+      const response = await loadProfile(person.id)
       if (request === profileRequest.current) setProfile({ ...response.profile, loading: false })
     } catch (error) {
       if (request === profileRequest.current) {

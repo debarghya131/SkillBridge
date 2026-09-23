@@ -775,9 +775,16 @@ async function submitStudentCompanyInterviewTask(token, payload) {
 
 async function getCompanyTaskSubmissions(token) {
   const company = await findCompanyByToken(token)
-  const submissions = await TaskSubmission.find({
+  const query = TaskSubmission.find({
     companyId: company._id,
-  }).sort({ submittedAt: -1, updatedAt: -1 })
+  })
+  const compactQuery = typeof query.select === 'function'
+    ? query.select('_id studentId companyId companyGigId companyGigPublicId studentName opportunityId gigTitle companyName companyLocation taskTitle taskType taskDetails score interviewSubmission externalPayment completedAt taskInstructions taskDeadline taskPoints matchedSkills submissionLink submissionContent note status revisionReturnStatus feedback submittedAt reviewedAt createdAt updatedAt workBrief')
+    : query
+  const sortedQuery = compactQuery.sort({ submittedAt: -1, updatedAt: -1 })
+  const submissions = typeof sortedQuery.lean === 'function'
+    ? await sortedQuery.lean()
+    : await sortedQuery
 
   return [...submissions.map(submission => ({ ...sanitizeTaskSubmission(submission, { includeStudentProfile: false }),
     reviewGuide: company.taskReviewGuides?.[`${submission.studentId}:${submission.opportunityId}`] || {},

@@ -85,7 +85,12 @@
   .trust-view-tabs { flex:0 0 auto; gap:18px; padding-right:8px; }
   .trust-view-tabs button { min-height:44px; flex:0 0 auto; }
   .trust-ledger-table { margin:0 -2px; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; }
-  .trust-ledger table { min-width:620px; }
+  .trust-ledger table, .trust-ledger tbody { display:block; width:100%; min-width:0; }
+  .trust-ledger thead { display:none; }
+  .trust-ledger tr { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; padding:14px 0; border-bottom:1px solid #e7ecf3; }
+  .trust-ledger td, .trust-ledger td:first-child { display:flex; align-items:baseline; justify-content:space-between; gap:12px; min-width:0; width:100%; padding:0; border:0; overflow-wrap:anywhere; }
+  .trust-ledger td[data-label]::before { content:attr(data-label); color:#708097; font-weight:500; }
+  .trust-ledger td:last-child { white-space:normal; }
   .trust-ledger-footer { align-items:stretch; flex-direction:column; }
   .trust-ledger-footer button { min-height:40px; justify-content:center; }
   .trustscore-criteria-shell { padding:0 !important; align-items:stretch !important; }

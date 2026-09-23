@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, ShieldCheck, Star, MapPin, CalendarDays, Flame, BriefcaseBusiness, Users, Mail, Fingerprint, Video } from 'lucide-react'
 import PublicProfileHeatmap from './PublicProfileHeatmap'
 import { safeExternalUrl, safeVideoUrl } from '../lib/safeExternalUrl'
+import { ProfileLinkIcon } from '../lib/profileLinkIcon'
 import studentIntroVideo from '../assets/studentintro.mp4'
 import './PublicStudentProfile.css'
 
@@ -35,7 +37,7 @@ export default function PublicStudentProfile({ profile, onClose, action, loading
   // The bundled clip is a preview when an account has not published a recording.
   // It never writes video data back to either demo or real accounts.
   const video = safeVideoUrl(profile.videoUrl) || studentIntroVideo
-  return <div className="public-profile-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
+  return createPortal(<div className="public-profile-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
     <section className="public-profile" role="dialog" aria-modal="true" aria-label={`${profile.name} profile`}>
       <header>{profile.avatar ? <button type="button" className="public-profile-avatar public-profile-avatar-button" aria-label={`View ${profile.name}'s profile photo`} title="View profile photo" onClick={() => setPhotoOpen(true)}><img src={profile.avatar} alt={`${profile.name}'s profile`}/></button> : <div className="public-profile-avatar">{profile.name?.[0]}</div>}<div><h2>{profile.name}{profile.demoData && <span className="demo-data-badge">Demo</span>}</h2><div className="public-profile-score"><span><Star size={15} fill="currentColor"/><strong>{profile.trustScore ?? 0}</strong><small>/ 1000</small></span><small>TrustScore</small></div><p className="public-profile-location"><MapPin size={13}/>{profile.location || 'Location not provided'}</p>
         <div className="public-profile-metrics"><span><CalendarDays size={13}/>{profile.practiceDays ?? 0} practice days</span><span><Flame size={13}/>{profile.trustStreak ?? 0} Trust Streak</span><span><BriefcaseBusiness size={13}/>{profile.completedGigs ?? 0} completed GIGs</span><span><Users size={13}/>{profile.teamUps ?? 0} team-ups</span></div>
@@ -47,12 +49,12 @@ export default function PublicStudentProfile({ profile, onClose, action, loading
         <section><div className="public-profile-section-heading"><h3><ShieldCheck size={16}/>Skills</h3><div className="public-profile-filters">{['All', 'Pro Mastery', 'Pro', 'Intermediate', 'Beginner'].map(v => <button key={v} aria-pressed={level === v} onClick={() => setLevel(v)}>{v}</button>)}</div></div><div className="public-profile-skills">{skills.map(s => <span key={s.name}><strong>{s.name}</strong> {s.verified ? <><ShieldCheck size={13}/><small data-level={s.stage}>{s.stage}</small>{s.streak > 0 && <small className="public-profile-skill-streak"><Flame size={11}/>{s.streak}d</small>}</> : <small className="public-profile-skill-status">{s.renewalStatus === 'expired' ? 'Expired' : 'Unverified'}</small>}</span>)}</div>{!skills.length && <p>No skills in this category.</p>}</section>
         <PublicProfileHeatmap key={profile.id} activityDays={profile.activityDays}/>
         {video && <section><h3><Video size={16}/>Intro video{profile.demoData && <span className="demo-data-badge">Demo preview</span>}</h3><video controls preload="metadata" src={video}>Your browser cannot play this video.</video></section>}
-        <section><h3>Profile links</h3>{profile.githubLink?.filter(l => safeExternalUrl(l.url)).map(l => <p key={l.url} className="public-profile-link"><span aria-hidden="true">{l.icon || '🌐'}</span><a href={safeExternalUrl(l.url)} target="_blank" rel="noreferrer">{l.url}</a></p>)}{!profile.githubLink?.length && <p>No links published.</p>}</section>
+        <section><h3>Profile links</h3>{profile.githubLink?.filter(l => safeExternalUrl(l.url)).map(l => <p key={l.url} className="public-profile-link"><span><ProfileLinkIcon url={l.url} size={15} /></span><a href={safeExternalUrl(l.url)} target="_blank" rel="noreferrer">{l.url}</a></p>)}{!profile.githubLink?.length && <p>No links published.</p>}</section>
         <section><h3>Contact</h3>{profile.contactVisible ? profile.contactInfo?.length ? profile.contactInfo.map((c, i) => <p key={i}><strong>{c.label}</strong><br/>{c.value}</p>) : <p>No contact details published.</p> : <p>Contact details become available after both students connect.</p>}</section>
         <section><h3>Projects</h3><div className="public-profile-projects">{profile.projects?.map((p,i) => <article key={i}><h4>{p.name}</h4><p>{p.desc}</p>{safeExternalUrl(p.link) && <a href={safeExternalUrl(p.link)} target="_blank" rel="noreferrer">View project</a>}{safeExternalUrl(p.demoLink) && <a href={safeExternalUrl(p.demoLink)} target="_blank" rel="noreferrer">Open demo</a>}</article>)}</div>{!profile.projects?.length && <p>No projects published.</p>}</section>
         </>}
       </div><footer><button type="button" onClick={onClose}>Close</button>{action}</footer>
     </section>
     {photoOpen && <div className="public-profile-photo-overlay" role="dialog" aria-modal="true" aria-label={`${profile.name}'s profile photo`} onMouseDown={event => event.target === event.currentTarget && setPhotoOpen(false)}><img src={profile.avatar} alt={`${profile.name}'s profile`}/><button type="button" aria-label="Close photo viewer" title="Close photo viewer" onClick={() => setPhotoOpen(false)}><X size={20}/></button></div>}
-  </div>
+  </div>, document.body)
 }

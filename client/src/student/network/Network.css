@@ -202,7 +202,7 @@
 .network-request-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 12px; }
 .network-request-strip article { display: grid; gap: 4px; padding: 10px; border: 1px solid #e3e8f0; border-radius: 6px; background: #f8fafc; font-size: 10px; }
 .network-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(15,23,42,.58); backdrop-filter: blur(3px); }
-.network-invite-modal { width: min(460px, 100%); display: grid; gap: 14px; padding: 18px; border-radius: 8px; background: #fff; box-shadow: 0 24px 70px rgba(15,23,42,.3); }
+.network-invite-modal { width: min(460px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; display: grid; gap: 14px; padding: 18px; border-radius: 8px; background: #fff; box-shadow: 0 24px 70px rgba(15,23,42,.3); }
 .network-team-modal { width: min(760px, 100%); }
 .network-team-modal .network-form-grid { grid-template-columns: 2fr 1fr 2fr 100px; margin: 0; }
 .network-invite-modal > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -331,7 +331,7 @@
   .network-managed-member .btn-secondary { grid-column: 1 / -1; width: 100%; min-height: 38px; }
   .network-modal-backdrop { padding:0; place-items:stretch; }
   .network-invite-modal, .network-team-modal, .network-profile-modal { width:100%; max-width:none; max-height:100dvh; min-height:100dvh; border-radius:0; }
-  .network-invite-modal, .network-team-modal { align-content:start; padding:18px 16px; overflow-y:auto; }
+  .network-invite-modal, .network-team-modal { align-content:start; padding:max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow-y:auto; }
   .network-team-modal { gap:9px; padding:14px 12px; overflow:hidden; }
   .network-team-modal > header { gap:8px; }
   .network-team-modal > header h2 { font-size:16px; }

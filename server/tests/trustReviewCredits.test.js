@@ -7,7 +7,7 @@ const { reviewSkillAssessment } = require('../controllers/skillAssessmentControl
 const { evaluateTrust } = require('../utils/trustPolicy')
 
 test('assigned reviewer rubric awards quality credit and records a low-score rejection penalty transactionally', async t => {
-  const student = new Student({ name: 'Reviewer test', passwordHash: 'test', skillHubSkills: [{ name: 'React', verified: false }] })
+  const student = new Student({ name: 'Reviewer test', passwordHash: 'test', skillHubSkills: [{ name: 'React', source: 'catalog', verified: false }] })
   student.save = async options => { assert.equal(options.session, 'transaction') }
   let assessment = new SkillAssessment({ studentId: student._id, skillName: 'React', mode: 'verify', attemptKey: 'test', earnedDay: '2026-09-12', response: 'I implemented the original solution and tested all the documented edge cases with evidence.' })
   const reviewerId = new mongoose.Types.ObjectId()

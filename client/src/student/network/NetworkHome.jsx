@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { Check, Clock3, Rocket, Search, UserPlus, X } from 'lucide-react'
-import { fetchNetworkProfile, inviteNetworkStudentToTeam, sendNetworkConnection } from '../studentApi'
+import { inviteNetworkStudentToTeam, sendNetworkConnection } from '../studentApi'
 import { toast } from '../../ui/toast'
 import { useNetworkState } from './NetworkContext'
 import NetworkProfileModal from '../../ui/PublicStudentProfile'
@@ -20,7 +20,7 @@ function NetworkSkillPicker({ value, options, onChange }) {
 }
 
 export default function NetworkHome() {
-  const { networkState, reload, token, setActiveTab } = useNetworkState()
+  const { networkState, reload, token, setActiveTab, loadProfile } = useNetworkState()
   const [query, setQuery] = useState('')
   const [skill, setSkill] = useState('All skills')
   const [busy, setBusy] = useState('')
@@ -54,7 +54,7 @@ export default function NetworkHome() {
     setBusy(`profile-${person.id}`)
     setProfile({ ...person, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true })
     try {
-      const response = await fetchNetworkProfile(token, person.id)
+      const response = await loadProfile(person.id)
       if (request === profileRequest.current) setProfile({ ...response.profile, loading: false })
     } catch (error) {
       if (request === profileRequest.current) {

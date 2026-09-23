@@ -1,7 +1,8 @@
-.student-external-earnings { display: flex; flex-direction: column; gap: 16px; }
 .student-external-earnings { display:flex; flex-direction:column; gap:16px; height:100%; min-height:0; min-width:0; }
 .student-external-earnings .work-heading { margin:0; }
 .student-external-earnings .earning-header-actions .btn-secondary { width:54px; height:46px; min-height:46px; padding:0; justify-content:center; }
+.student-external-earnings .earning-header-actions .is-spinning { animation:earning-refresh-spin .8s linear infinite; }
+@keyframes earning-refresh-spin { to { transform:rotate(360deg); } }
 .student-external-earnings .work-muted { margin:0; }
 .external-earning-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; flex-shrink:0; }
 .external-earning-summary > div { padding: 16px; background: white; border: 1px solid var(--border); border-radius: 8px; }
@@ -36,21 +37,23 @@
   .earning-tabs button { flex:0 0 auto; min-height:42px; }
   .student-viewport.student-section-earning > .student-external-earnings > .external-earning-records { flex:none; min-height:0; overflow:visible; }
   .external-earning-records { overflow:hidden; border:0; background:transparent; }
-  .external-earning-records .work-table-scroll { overflow:visible; }
-  .external-earning-records .work-table { display:block; min-width:0; }
-  .external-earning-records .work-table thead { display:none; }
-  .external-earning-records .work-table tbody { display:grid; gap:8px; }
-  .external-earning-records .work-table tr { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:10px 14px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#fff; }
-  .external-earning-records .work-table td { display:flex; min-width:0; padding:0; border:0; flex-direction:column; gap:3px; overflow-wrap:anywhere; }
-  .external-earning-records .work-table td::before { content:attr(data-label); color:var(--muted); font-size:10px; font-weight:600; }
-  .external-earning-records .work-table .earning-payment-title { grid-column:1 / -1; padding-bottom:9px; border-bottom:1px solid var(--border); }
-  .external-earning-records .earning-payment-title span { color:var(--muted); font-size:11px; }
+  .student-external-earnings .work-table-scroll { overflow:visible; }
+  .student-external-earnings .work-table { display:block; min-width:0; }
+  .student-external-earnings .work-table thead { display:none; }
+  .student-external-earnings .work-table tbody { display:grid; gap:8px; }
+  .student-external-earnings .work-table tr { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px 14px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#fff; }
+  .student-external-earnings .work-table td { display:flex; min-width:0; padding:0; border:0; flex-direction:column; gap:3px; overflow-wrap:anywhere; }
+  .student-external-earnings .work-table td::before { content:attr(data-label); color:var(--muted); font-size:10px; font-weight:600; }
+  .student-external-earnings .work-table .earning-payment-title { grid-column:1 / -1; padding-bottom:9px; border-bottom:1px solid var(--border); }
+  .student-external-earnings .earning-payment-title span { color:var(--muted); font-size:11px; }
   .earning-pagination { justify-content:space-between; gap:8px; }
   .earning-pagination button { flex:1; min-height:42px; }
   .earning-demo-heading { gap:10px; }
 }
 
 @media (max-width: 360px) {
+  .student-external-earnings .work-table tr { grid-template-columns:minmax(0, 1fr); }
+  .student-external-earnings .work-table .earning-payment-title { grid-column:auto; }
   .external-earning-summary { grid-template-columns:1fr; }
   .external-earning-summary > div:first-child { grid-column:auto; }
   .external-earning-summary > div { padding-inline:6px; }
@@ -66,4 +69,35 @@
   .student-external-earnings .earning-compact-header { grid-template-columns:minmax(0, 1fr) max-content; gap:12px; }
   .earning-compact-header .external-earning-summary { grid-column:1 / -1; grid-row:2; grid-template-columns:repeat(3, minmax(0, 1fr)); }
   .earning-compact-header .external-earning-summary > div:first-child { grid-column:auto; }
+}
+
+/* Keep these phone rules after the compact-header rules above so the wider
+   tablet breakpoint cannot force three compressed cards back onto one row. */
+@media (max-width:600px) {
+  .student-external-earnings .earning-compact-header { width:100%; min-width:0; }
+  .student-external-earnings .earning-header-actions { justify-self:end; }
+  .earning-compact-header .external-earning-summary {
+    width:100%;
+    min-width:0;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+  .earning-compact-header .external-earning-summary > div:first-child { grid-column:auto; }
+  .earning-compact-header .external-earning-summary > div:last-child { grid-column:1 / -1; }
+  .earning-compact-header .external-earning-summary > div {
+    min-height:58px;
+    display:grid;
+    grid-template-columns:auto auto minmax(0, 1fr);
+    align-content:center;
+    justify-content:start;
+    gap:3px 7px;
+    padding:8px 10px;
+  }
+  .earning-compact-header .external-earning-summary strong,
+  .earning-compact-header .external-earning-summary span { min-width:0; margin:0; }
+  .earning-compact-header .external-earning-summary span { overflow-wrap:anywhere; }
+}
+
+@media (max-width:360px) {
+  .earning-compact-header .external-earning-summary { grid-template-columns:minmax(0, 1fr); }
+  .earning-compact-header .external-earning-summary > div:last-child { grid-column:auto; }
 }

@@ -3,16 +3,21 @@ const mongoose = require('mongoose')
 const schema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
   skillName: { type: String, required: true, maxlength: 100 },
+  catalogSkillId: { type: mongoose.Schema.Types.ObjectId, ref: 'SkillCatalog', default: null },
+  catalogVersion: { type: Number, min: 1, default: null },
   mode: { type: String, enum: ['verify', 'reverify', 'upgrade', 'retain', 'challenge'], required: true },
   targetStage: { type: String, default: '' },
-  challengeId: { type: Number, default: null },
+  challengeId: { type: mongoose.Schema.Types.Mixed, default: null },
   attemptKey: { type: String, required: true },
   // A daily practice/challenge submission reserves its mode for that student
   // and IST day while it is awaiting review. Non-daily assessments omit it.
   dailySubmissionKey: { type: String, default: undefined },
   earnedDay: { type: String, default: '' },
   brief: { type: String, default: '' },
+  criteriaSnapshot: { type: mongoose.Schema.Types.Mixed, default: undefined },
   rewardPoints: { type: Number, default: 0 },
+  rewardBreakdown: { type: [{ type: { type: String }, points: Number, referenceId: String }], default: [] },
+  trustScoreChange: { type: Number, default: null },
   evidenceLink: { type: String, default: '', maxlength: 500 },
   response: { type: String, required: true, maxlength: 10000 },
   status: { type: String, enum: ['pending', 'needs_revision', 'approved', 'rejected'], default: 'pending' },

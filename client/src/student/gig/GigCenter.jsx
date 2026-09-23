@@ -246,10 +246,17 @@ export default function GigCenter() {
   }, [sessionToken, refresh, navigate])
 
   useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === 'visible') setRefresh(value => value + 1) }
+    // Keep the recently loaded state when returning to this tab. The cache is
+    // short-lived, and every successful GIG action replaces it, so refetching
+    // on every focus only adds a full loading cycle without improving freshness.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && !readStudentSectionCache('gig', sessionToken)) {
+        setRefresh(value => value + 1)
+      }
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  }, [sessionToken])
 
   const browseGigs = useMemo(() => gigState.browseGigs || [], [gigState.browseGigs])
   const opportunities = useMemo(() => gigState.opportunities || [], [gigState.opportunities])

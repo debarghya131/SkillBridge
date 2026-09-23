@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { CalendarDays, Flame } from 'lucide-react'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 
@@ -7,9 +8,29 @@ export default function StudentNav({
   trustScore,
   practiceStats,
   onOpenProfile,
+  onPrefetchProfile,
   onToggleSidebar,
 }) {
+  const [activeMetric, setActiveMetric] = useState(null)
+  const metricDetails = {
+    practiceDays: {
+      icon: <CalendarDays size={15} />,
+      label: 'Approved practice days',
+      value: practiceStats.totalPracticeDays,
+      description: 'Total unique days with reviewer-approved practice.',
+    },
+    trustStreak: {
+      icon: <Flame size={15} />,
+      label: 'Current trust streak',
+      value: practiceStats.overallCurrent,
+      description: 'Consecutive approved practice days ending today or yesterday.',
+    },
+  }
+  const selectedMetric = activeMetric ? metricDetails[activeMetric] : null
+  const toggleMetric = metric => setActiveMetric(current => current === metric ? null : metric)
+
   return (
+    <>
     <nav className="dashboard-nav" style={{
       height: 52, background: 'var(--white)',
       borderBottom: '1px solid var(--border)',
@@ -25,12 +46,14 @@ export default function StudentNav({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div className="dashboard-activity-metrics" aria-label="SkillBridge practice activity">
-          <span className="dashboard-metric-tooltip" tabIndex={0} data-tooltip="Total unique days with reviewer-approved practice." aria-label="Total approved practice days"><CalendarDays size={15}/><strong>{practiceStats.totalPracticeDays}</strong><small>days</small></span>
-          <span className="dashboard-metric-tooltip" tabIndex={0} data-tooltip="Consecutive approved practice days ending today or yesterday." aria-label="Current trust streak"><Flame size={15}/><strong>{practiceStats.overallCurrent}</strong><small>trust streak</small></span>
+          <span className="dashboard-metric-tooltip" tabIndex={0} role="button" data-tooltip="Total unique days with reviewer-approved practice." aria-label="Total approved practice days" aria-expanded={activeMetric === 'practiceDays'} onClick={() => toggleMetric('practiceDays')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleMetric('practiceDays') } }}><CalendarDays size={15}/><strong>{practiceStats.totalPracticeDays}</strong><small>days</small></span>
+          <span className="dashboard-metric-tooltip" tabIndex={0} role="button" data-tooltip="Consecutive approved practice days ending today or yesterday." aria-label="Current trust streak" aria-expanded={activeMetric === 'trustStreak'} onClick={() => toggleMetric('trustStreak')} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleMetric('trustStreak') } }}><Flame size={15}/><strong>{practiceStats.overallCurrent}</strong><small>trust streak</small></span>
         </div>
         <div
           className="dashboard-user-meta"
           onClick={onOpenProfile}
+          onFocus={onPrefetchProfile}
+          onPointerEnter={onPrefetchProfile}
           role="button"
           tabIndex={0}
           onKeyDown={event => {
@@ -62,5 +85,13 @@ export default function StudentNav({
         </div>
       </div>
     </nav>
+    {selectedMetric && (
+      <div className="dashboard-mobile-metric-detail" role="status">
+        {selectedMetric.icon}
+        <strong>{selectedMetric.value} {selectedMetric.label}</strong>
+        <span>{selectedMetric.description}</span>
+      </div>
+    )}
+    </>
   )
 }

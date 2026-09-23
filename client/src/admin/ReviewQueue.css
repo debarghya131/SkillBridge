@@ -6,9 +6,12 @@
 .reviewer-topbar button, .reviewer-icon-button { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #dbe3ee; border-radius: 6px; background: #fff; color: #475569; cursor: pointer; }
 .reviewer-icon-button { border-color: #4f46e5; color: #4f46e5; }
 .reviewer-workspace { max-width: 1440px; margin: auto; padding: 22px 24px; }
+.reviewer-workspace-embedded { max-width: none; }
 .reviewer-heading, .reviewer-controls, .reviewer-detail > header, .reviewer-actions, .reviewer-rubric-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .reviewer-heading span, .reviewer-auth-kicker { color: #4f46e5; font-size: 11px; font-weight: 800; }
 .reviewer-heading h1 { margin: 4px 0 0; font-size: 23px; }
+.reviewer-heading .reviewer-demo-toggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: #64748b; white-space: nowrap; }
+.reviewer-demo-toggle input { width: 16px; height: 16px; margin: 0; accent-color: #4f46e5; }
 .reviewer-controls { margin-top: 16px; }
 .reviewer-controls nav { display: flex; gap: 4px; padding: 4px; border: 1px solid #dbe3ee; border-radius: 7px; background: #fff; }
 .reviewer-controls button { padding: 8px 13px; border: 0; border-radius: 5px; background: transparent; color: #64748b; font-weight: 700; cursor: pointer; }
@@ -49,7 +52,7 @@
 .reviewer-status-approved { background: #d1fae5; color: #065f46; }
 .reviewer-status-rejected { background: #fee2e2; color: #991b1b; }
 .reviewer-rubric-heading strong { font-size: 22px; color: #4338ca; }
-.reviewer-rubric > div:nth-child(2) { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; }
+.reviewer-rubric > div:nth-child(2) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; }
 .reviewer-rubric label { display: grid; gap: 6px; color: #475569; font-size: 12px; font-weight: 700; }
 .reviewer-rubric label span { display: flex; justify-content: space-between; }
 .reviewer-rubric label small { color: #94a3b8; font-weight: 600; }
@@ -74,6 +77,14 @@
 .reviewer-auth-card p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
 .reviewer-auth-card label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 .reviewer-auth-card button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; }
+.reviewer-heading, .reviewer-controls, .reviewer-detail > header, .reviewer-actions { flex-wrap: wrap; }
+.reviewer-controls nav { min-width: 0; max-width: 100%; overflow-x: auto; }
+.reviewer-controls nav button { flex-shrink: 0; }
+.reviewer-list, .reviewer-list button div, .reviewer-detail fieldset { min-width: 0; }
+.reviewer-list button div { flex-wrap: wrap; }
+.reviewer-decision > div { max-width: 100%; flex-wrap: wrap; }
+.reviewer-heading .reviewer-demo-toggle { white-space: normal; }
+.reviewer-heading > div { min-width: 0; }
 @media (max-width: 900px) { .reviewer-layout { grid-template-columns: 260px minmax(0, 1fr); } .reviewer-rubric > div:nth-child(2) { grid-template-columns: repeat(2, minmax(120px, 1fr)); } }
 @media (max-width: 650px) { .reviewer-workspace { padding: 14px 12px; } .reviewer-controls { align-items: stretch; flex-direction: column; } .reviewer-controls nav { overflow-x: auto; } .reviewer-layout { display: block; } .reviewer-list { max-height: 220px; border-right: 0; border-bottom: 1px solid #dbe3ee; } .reviewer-rubric > div:nth-child(2) { grid-template-columns: 1fr; } .reviewer-decision > div { width: 100%; } .reviewer-decision button { flex: 1; min-width: 0; } .reviewer-topbar { padding: 0 12px; } }
 @media (max-width: 650px) {

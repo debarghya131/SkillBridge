@@ -73,6 +73,10 @@ taskSubmissionSchema.index(
   },
 )
 taskSubmissionSchema.index({ companyId: 1, submittedAt: -1 })
+taskSubmissionSchema.index({ companyId: 1, companyGigId: 1, companyGigPublicId: 1 })
+// Supports the student Earning read without scanning every historical task
+// submission before filtering and sorting approved/completed work.
+taskSubmissionSchema.index({ studentId: 1, status: 1, updatedAt: -1 })
 taskSubmissionSchema.index({ companyId: 1, 'externalPayment.reference': 1 }, {
   unique: true,
   partialFilterExpression: { 'externalPayment.reference': { $type: 'string' } },

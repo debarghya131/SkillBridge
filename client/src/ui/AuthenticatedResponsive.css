@@ -1,0 +1,74 @@
+/* Intrinsic sizing keeps long user content inside its grid or flex track. */
+body:has(.dashboard-shell, .admin-shell, .assessment-page) { overflow-x: visible; }
+.trustscore-criteria-page { min-height: 100dvh; padding: clamp(12px, 2%, 24px); overflow-wrap: anywhere; }
+.trustscore-criteria-page .trustscore-criteria-content { padding-inline: 0 !important; }
+:where(.dashboard-shell, .assessment-page, .company-task-page) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+:where(.dashboard-shell, .assessment-page, .company-task-page) :where(div, section, article, form, fieldset, label, header, footer, nav) {
+  min-width: 0;
+}
+:where(.dashboard-shell, .assessment-page, .company-task-page) :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+:where(.dashboard-shell, .assessment-page, .company-task-page, .responsive-modal-shell) :where(img, video, canvas) { max-width: 100%; }
+:where(.dashboard-shell, .assessment-page, .company-task-page) pre { max-width: 100%; overflow: auto; }
+.dashboard-shell .dashboard-sidebar { overflow-y: auto; overscroll-behavior: contain; }
+.dashboard-shell .dashboard-main { min-width: 0; }
+.dashboard-shell .dashboard-user-meta { min-width: 0; }
+.dashboard-shell .company-section-tabs { max-width: 100%; overflow-x: auto; }
+.dashboard-shell .company-section-tabs button { flex-shrink: 0; }
+.company-dashboard .workspace-project-top { flex-wrap: wrap; }
+.company-dashboard .workspace-project-student { flex: 1 1 140px; min-width: 0; }
+.company-dashboard .workspace-project-student strong { white-space: normal; overflow-wrap: anywhere; }
+.company-dashboard .workspace-status { max-width: 100%; white-space: normal; }
+.responsive-modal-shell { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+.responsive-modal-shell > :is(.responsive-modal-panel, .modal, [role="dialog"]) { max-width: 100%; max-height: calc(100dvh - 24px); min-width: 0; overflow-y: auto; overflow-wrap: anywhere; }
+.responsive-modal-shell > .responsive-modal-card:has(> .responsive-modal-header):not(.project-editor-dialog) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100dvh - 40px) !important;
+  overflow-wrap: anywhere;
+}
+.responsive-modal-card > .responsive-modal-header { flex-shrink: 0; }
+.responsive-modal-card > .responsive-modal-body { min-height: 0; overflow-y: auto; }
+.responsive-modal-card > .responsive-modal-body + div { flex-shrink: 0; }
+@media (max-width: 1023px) {
+  .dashboard-shell .dashboard-sidebar { height: calc(100dvh - 52px) !important; padding-bottom: max(16px, env(safe-area-inset-bottom)) !important; visibility: hidden; }
+  .dashboard-shell .dashboard-sidebar.is-open { visibility: visible; }
+  .dashboard-shell .dashboard-main { padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)) !important; }
+}
+@media (max-width: 600px) {
+  .responsive-modal-shell > .responsive-modal-card:has(> .responsive-modal-header):not(.project-editor-dialog) { max-height: 100dvh !important; padding-bottom: env(safe-area-inset-bottom); }
+  .company-dashboard .company-viewport.section-gig .gig-pipeline-content { display: grid; grid-template-columns: minmax(0, 1fr); overflow: visible; }
+  .company-dashboard .company-viewport.section-gig .gig-pipeline-stage { width: 100%; min-width: 0; }
+  .company-dashboard .company-viewport.section-gig .gig-pipeline-mobile-hint { display: none; }
+  .company-dashboard .company-viewport.section-talent .talent-search-filters > div:last-child { flex-wrap: wrap !important; }
+}
+/* Short landscape windows need document scrolling rather than squeezed panels. */
+@media (max-height: 540px) {
+  .company-dashboard.dashboard-shell { height: auto; min-height: 100dvh !important; overflow: visible; }
+  .company-dashboard .dashboard-body { overflow: visible; }
+  .company-dashboard .company-viewport { height: auto; overflow: visible !important; }
+  .company-viewport > div, .company-viewport > section,
+  .company-viewport .task-assignment-panels, .company-viewport .payment-panel { height: auto !important; max-height: none !important; overflow: visible !important; }
+  .responsive-modal-shell { align-items: center; }
+  .student-dashboard.dashboard-shell { height: auto; min-height: 100dvh !important; grid-template-rows: 52px auto; overflow: visible; }
+  .student-dashboard .dashboard-body, .student-dashboard .dashboard-main { height: auto !important; overflow: visible !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.admin-shell, .dashboard-shell, .assessment-page) { scroll-behavior: auto; }
+  :where(.admin-shell, .dashboard-shell, .assessment-page, .company-task-page, .responsive-modal-shell) *,
+  :where(.admin-shell, .dashboard-shell, .assessment-page, .company-task-page, .responsive-modal-shell) *::before,
+  :where(.admin-shell, .dashboard-shell, .assessment-page, .company-task-page, .responsive-modal-shell) *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

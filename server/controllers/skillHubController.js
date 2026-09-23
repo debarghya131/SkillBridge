@@ -1,10 +1,13 @@
+const mongoose = require('mongoose')
 const Student = require('../models/Student')
 const Company = require('../models/Company')
+const SkillCatalog = require('../models/SkillCatalog')
 const { buildAuthError, findModelByActiveToken, getSessionTtlMs } = require('../utils/session')
 const { reconcileTrustScore, recordTrustScoreEvent } = require('./trustScoreController')
 const { DAY_MS, CATEGORIES, STAGES, REWARDS, CHALLENGES, dayKey, expiryDay, skillStatus, isVerifiedSkill, isArchivedSkill, isDiscoverableVerifiedSkill, activeStreak } = require('../utils/skillPolicy')
 const { DEMO_CHALLENGE_STATES, DEMO_DAILY_PRACTICE, DEMO_SKILL_ACTIVITY, DEMO_SKILL_GAP_REPORT, DEMO_SKILLS, DEMO_STREAK_DAYS, clone } = require('../config/showcaseFixtures')
 const { demoReadOnlyError } = require('../utils/demoProtection')
+const { normalizeSkillName, practiceInstructionsFor } = require('../utils/skillCatalog')
 
 const SKILL_HUB_STUDENT_FIELDS = '_id sessions skills skillHubSkills skillHubState trustScore trustScoreState'
 const findStudentByToken = token => findModelByActiveToken(Student, token, 'Student', getSessionTtlMs(Number(process.env.SESSION_TTL_DAYS) || 30), SKILL_HUB_STUDENT_FIELDS)
@@ -16,6 +19,8 @@ function sanitizeSkill(input) {
   const storedStreak = Math.max(0, Number(skill.streak) || 0)
   return {
     name: String(skill.name || '').trim(), category: CATEGORIES.includes(skill.category) ? skill.category : 'Other',
+    source: ['catalog', 'self_declared', 'legacy'].includes(skill.source) ? skill.source : 'legacy',
+    catalogSkillId: skill.catalogSkillId ? String(skill.catalogSkillId) : null, catalogVersion: Number(skill.catalogVersion) || null,
     stage: STAGES.includes(skill.stage) ? skill.stage : 'Beginner', level: Number(skill.level) || 0,
     verified: isVerifiedSkill(skill), archived: isArchivedSkill(skill), archivedAt: skill.archivedAt || '', renewalStatus: status, renewalDue: expiryDay(skill.renewalDue) || '-',
     verifiedAt: skill.verifiedAt || '', assessmentId: skill.assessmentId || '',
@@ -23,8 +28,9 @@ function sanitizeSkill(input) {
     lastEvent: skill.lastEvent || 'created', streak: activeStreak(skill),
     longestStreak: Math.max(storedStreak, Number(skill.longestStreak) || 0),
     missedDays: 0, wrongAnswers: 0,
-    trustGain: status === 'unverified' ? REWARDS.verify : REWARDS.reverify,
+    trustGain: status === 'unverified' && skill.source === 'catalog' ? REWARDS.verify : status !== 'unverified' ? REWARDS.reverify : 0,
     trustLoss: status === 'expired' && skill.verifiedAt ? -REWARDS.expiry : 0,
+    assessmentEligible: skill.source === 'catalog' || skill.source === 'legacy' && Boolean(skill.verified || skill.verifiedAt),
   }
 }
 
@@ -66,9 +72,9 @@ function buildStreakSummary(skills, log, today = dayKey()) {
     overallCurrent: overall.lastDay && (Date.parse(today) - Date.parse(overall.lastDay)) <= DAY_MS ? overall.latest : 0,
     overallLongest: overall.longest,
     totalPracticeDays: overall.days.length,
-    activeSkills: skills.filter(skill => !skill.archived && Number(skill.streak) > 0).length,
+    activeSkills: skills.filter(skill => !skill.archived && isVerifiedSkill(skill) && Number(skill.streak) > 0).length,
     completedToday: week.at(-1)?.count || 0,
-    nextMilestone: milestones.find(value => value > current) || null,
+    nextMilestone: milestones.find(value => value > (overall.lastDay && Date.parse(today) - Date.parse(overall.lastDay) <= DAY_MS ? overall.latest : 0)) || null,
     week,
   }
 }
@@ -177,12 +183,15 @@ function buildSkillGapReport(skills, companies) {
     const storedGigs = company.gigManagementState?.gigs
     const gigs = Array.isArray(storedGigs) ? storedGigs : (storedGigs ? [storedGigs] : [])
     for (const gig of gigs) {
+      // Showcase fixtures use their own read-only report and must never
+      // contribute to live demand, coverage, or matching percentages.
+      if (gig?.demoData === true || String(gig?.id || '').startsWith('demo-')) continue
       if (!gig.title || !['Hiring', 'Reviewing', 'In Progress'].includes(gig.status)) continue
       const tags = [...new Set((gig.skills || []).filter(name => typeof name === 'string' && name.trim()).map(name => name.trim().toLowerCase()))]
       if (!tags.length) continue
       activeGigs++
       for (const name of tags) {
-        const skill = skills.find(item => item.name.toLowerCase() === name)
+        const skill = skills.find(item => [item.name, ...(item.catalogAliases || [])].some(term => normalizeSkillName(term) === name))
         const covered = Boolean(skill && isDiscoverableVerifiedSkill(skill))
         totalRequirements++
         if (covered) matchedRequirements++
@@ -213,25 +222,53 @@ function buildSkillHubResponse(student) {
       demoSkillGapReport: clone(DEMO_SKILL_GAP_REPORT) } }
 }
 
-async function getStudentSkillHub(token) {
+async function getStudentSkillHub(token, { includeSkillGap = true } = {}) {
   const student = await findStudentByToken(token)
   await reconcileSkillExpiry(student)
   if (reconcileTrustScore(student)) await saveSkillStudent(student)
   const response = buildSkillHubResponse(student)
-  const activeGigs = await Company.aggregate([
-    { $unwind: '$gigManagementState.gigs' },
-    { $match: {
-      'gigManagementState.gigs.status': { $in: ['Hiring', 'Reviewing', 'In Progress'] },
-      'gigManagementState.gigs.skills.0': { $exists: true },
-    } },
-    { $project: {
-      _id: 0,
-      'gigManagementState.gigs.title': 1,
-      'gigManagementState.gigs.status': 1,
-      'gigManagementState.gigs.skills': 1,
-    } },
-  ])
-  response.skillHubState.skillGapReport = buildSkillGapReport(response.skills, activeGigs)
+  const catalogIds = response.skills.map(skill => skill.catalogSkillId).filter(mongoose.isObjectIdOrHexString)
+  if (catalogIds.length) {
+    const catalog = await SkillCatalog.find({ _id: { $in: catalogIds }, status: 'published' })
+    const byId = new Map(catalog.map(item => [String(item._id), item]))
+    const catalogNames = new Set(catalog.map(item => item.name.toLowerCase()))
+    response.skills = response.skills.map(skill => {
+      if (!skill.catalogSkillId) return skill
+      const definition = byId.get(skill.catalogSkillId)
+      return { ...skill, assessmentEligible: Boolean(definition), catalogAvailable: Boolean(definition),
+        certifiedCatalogVersion: skill.verifiedAt ? skill.catalogVersion : null, catalogVersion: definition?.version || skill.catalogVersion,
+        catalogSummary: definition?.summary || '', catalogAliases: definition ? [definition.name, ...(definition.aliases || [])] : [], renewalDays: definition?.renewalDays || null,
+        catalogStages: definition?.stages || [], verificationInstructions: definition?.verificationInstructions || '',
+        practiceInstructions: practiceInstructionsFor(definition || skill),
+        upgradeRequirements: (definition?.upgradeRequirements || []).map(item => ({ stage: item.stage, instructions: item.instructions })) }
+    })
+    const catalogChallenges = catalog.flatMap(definition => (definition.dailyTasks || [])
+      .filter(task => task.active !== false)
+      .map(task => ({ id: String(task._id), skill: definition.name, title: task.title, instructions: task.instructions,
+        kind: task.kind, reviewMode: task.reviewMode, catalogSkillId: String(definition._id), catalogVersion: definition.version })))
+    response.challenges = [...CHALLENGES.filter(item => !catalogNames.has(item.skill.toLowerCase())), ...catalogChallenges]
+  }
+  // The My Skills, verification, and daily-practice tabs do not need market
+  // demand data. Defer this cross-company aggregate until the student opens
+  // Skill Gap Report, keeping the initial Skill Hub response lightweight.
+  if (includeSkillGap) {
+    const activeGigs = await Company.aggregate([
+      { $unwind: '$gigManagementState.gigs' },
+      { $match: {
+        'gigManagementState.gigs.status': { $in: ['Hiring', 'Reviewing', 'In Progress'] },
+        'gigManagementState.gigs.skills.0': { $exists: true },
+        'gigManagementState.gigs.demoData': { $ne: true },
+        'gigManagementState.gigs.id': { $not: /^demo-/ },
+      } },
+      { $project: {
+        _id: 0,
+        'gigManagementState.gigs.title': 1,
+        'gigManagementState.gigs.status': 1,
+        'gigManagementState.gigs.skills': 1,
+      } },
+    ])
+    response.skillHubState.skillGapReport = buildSkillGapReport(response.skills, activeGigs)
+  }
   const realNames = new Set(response.skills.map(item => item.name.toLowerCase()))
   response.skills = [...clone(DEMO_SKILLS).filter(item => !realNames.has(item.name.toLowerCase())), ...response.skills]
   response.skillHubState.skillLog = [...clone(DEMO_SKILL_ACTIVITY), ...response.skillHubState.skillLog]
@@ -246,17 +283,40 @@ async function updateStudentSkillHub(token, payload) {
   const skills = buildStudentSkillHubSkills(student)
   const seen = new Set()
   for (const input of payload.skills) {
-    if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 100) throw buildAuthError('Skill names must contain 1 to 100 characters')
-    const name = input.name.trim()
+    if (!input || typeof input !== 'object') throw buildAuthError('Choose a valid skill')
+    let catalog = null
+    if (input.catalogSkillId) {
+      if (!mongoose.isObjectIdOrHexString(input.catalogSkillId)) throw buildAuthError('Choose a valid platform skill')
+      catalog = await SkillCatalog.findOne({ _id: input.catalogSkillId, status: 'published' })
+      if (!catalog) throw buildAuthError('This platform skill is no longer available.', 409)
+    }
+    if (!catalog && (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 100)) throw buildAuthError('Skill names must contain 1 to 100 characters')
+    const name = catalog ? catalog.name : input.name.trim().replace(/\s+/g, ' ')
     const key = name.toLowerCase()
     if (seen.has(key)) throw buildAuthError('Skill names must be unique')
     seen.add(key)
-    if (input.category !== undefined && !CATEGORIES.includes(input.category)) throw buildAuthError('Choose a valid skill category')
-    const previous = skills.find(skill => skill.name.toLowerCase() === key)
+    const category = catalog ? catalog.category : input.category
+    if (category !== undefined && !CATEGORIES.includes(category)) throw buildAuthError('Choose a valid skill category')
+    const previous = skills.find(skill => skill.name.toLowerCase() === key
+      || catalog && !skill.catalogSkillId && (catalog.normalizedTerms || []).includes(normalizeSkillName(skill.name))
+      || catalog && skill.catalogSkillId === String(catalog._id))
+    if (!catalog && !previous) {
+      const normalizedName = normalizeSkillName(name)
+      const platformMatch = await SkillCatalog.findOne({ status: 'published', $or: [{ normalizedName }, { normalizedAliases: normalizedName }] })
+      if (platformMatch) throw buildAuthError(`${platformMatch.name} already exists in the platform catalog. Add the platform skill instead.`, 409)
+    }
     if (previous) {
-      if (input.category) previous.category = input.category
+      if (catalog && previous.source !== 'catalog' && !previous.verified && !previous.verifiedAt) {
+        previous.name = catalog.name
+        previous.category = catalog.category
+        previous.source = 'catalog'
+        previous.catalogSkillId = String(catalog._id)
+        previous.catalogVersion = catalog.version
+        previous.assessmentEligible = true
+      } else if (category && previous.source !== 'catalog') previous.category = category
     } else {
-      skills.push(sanitizeSkill({ name, category: input.category, createdOn: dayKey() }))
+      skills.push(sanitizeSkill({ name, category, source: catalog ? 'catalog' : 'self_declared',
+        catalogSkillId: catalog?._id || null, catalogVersion: catalog?.version || null, createdOn: dayKey() }))
       appendLog(student, { eventType: 'created', skillName: name, occurredAt: new Date().toISOString(), points: 0 })
     }
   }
@@ -311,8 +371,11 @@ async function applyReviewedSkillAssessment(student, payload, session) {
     skill.renewalStatus = 'valid'
     skill.verifiedAt = new Date().toISOString()
     skill.assessmentId = payload.assessmentId
-    skill.renewalDue = new Date(Date.parse(today) + 365 * DAY_MS).toISOString().slice(0, 10)
+    const renewalDays = Math.max(30, Math.min(Number(payload.criteriaSnapshot?.renewalDays) || 365, 730))
+    const renewalStart = eventType === 'reverify_completed' && oldExpiry > today ? oldExpiry : today
+    skill.renewalDue = new Date(Date.parse(renewalStart) + renewalDays * DAY_MS).toISOString().slice(0, 10)
     skill.lastEvent = eventType === 'verify_completed' ? 'verified' : 'renewed'
+    if (payload.criteriaSnapshot?.catalogVersion) skill.catalogVersion = payload.criteriaSnapshot.catalogVersion
     result = recordTrustScoreEvent(student, eventType === 'verify_completed' ? 'skill_verified' : 'skill_reverified',
       eventType === 'verify_completed' ? key : `${key}:${oldExpiry}`)
   } else if (eventType === 'upgrade_completed') {
@@ -320,6 +383,7 @@ async function applyReviewedSkillAssessment(student, payload, session) {
     skill.level = 0
     skill.assessmentId = payload.assessmentId
     skill.lastEvent = 'upgraded'
+    if (payload.criteriaSnapshot?.catalogVersion) skill.catalogVersion = payload.criteriaSnapshot.catalogVersion
     result = recordTrustScoreEvent(student, 'skill_level_upgraded', `${key}:${skill.stage}`)
   } else if (eventType === 'challenge_completed' || eventType === 'retention_completed') {
     if (eventType === 'retention_completed') {

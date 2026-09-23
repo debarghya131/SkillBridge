@@ -6,6 +6,7 @@ import { fetchCompanyGigApplicants, fetchCompanyStudentProfile, getCompanySessio
 import PublicStudentProfile from '../ui/PublicStudentProfile'
 import { toast } from '../ui/toast'
 import { getCompanyTaskTypeLabel } from './companyTaskDefaults'
+import { clearCompanySectionCache, loadCompanySectionCache, readCompanySectionCache } from './sectionCache'
 
 const statusMeta = {
   Closed: { bg: '#F1F5F9', color: '#475569' },
@@ -342,7 +343,7 @@ function CreateGigModal({ open, initialData, onClose, onCreate, onUpdate, onDele
   )
 }
 
-function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, onViewProfile }) {
+function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, onViewProfile, onPrefetchProfile }) {
   if (!gig) return null
 
   return (
@@ -427,7 +428,7 @@ function ApplicantsModal({ gig, applicants, loading, error, onRetry, onClose, on
                   <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--dark)', lineHeight: 1 }}>{applicant.score ?? applicant.trustScore ?? 0}</div>
                   <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, fontWeight: 700 }}>TRUSTSCORE</div>
                 </div>
-                <button className="btn-accent" onClick={() => onViewProfile(buildApplicantProfile(applicant))} style={{ padding: '8px 13px', fontSize: 12, whiteSpace: 'nowrap' }}>
+                <button className="btn-accent" onFocus={() => onPrefetchProfile?.(applicant)} onPointerEnter={() => onPrefetchProfile?.(applicant)} onClick={() => onViewProfile(buildApplicantProfile(applicant))} style={{ padding: '8px 13px', fontSize: 12, whiteSpace: 'nowrap' }}>
                   View Profile
                 </button>
               </div>
@@ -982,16 +983,28 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
 
   useEffect(() => {
     if (selectedGigId === null) return
+    const gig = localState.gigs.find(item => item.id === selectedGigId)
+    if (gig?.demoData) {
+      setApplicantResponse({ gigId: selectedGigId, applicants: localState.applicantsByGig?.[gig.id] || [], error: '' })
+      return
+    }
     let cancelled = false
-    fetchCompanyGigApplicants(getCompanySessionToken(), selectedGigId)
-      .then(result => {
-        if (!cancelled) setApplicantResponse({ gigId: selectedGigId, applicants: result.applicants || [], error: '' })
+    const token = getCompanySessionToken()
+    const cacheSection = `gig-applicants-${selectedGigId}`
+    const cached = applicantRequest === 0 ? readCompanySectionCache(cacheSection, token) : null
+    if (cached) {
+      setApplicantResponse({ gigId: selectedGigId, applicants: cached, error: '' })
+      return
+    }
+    loadCompanySectionCache(cacheSection, token, () => fetchCompanyGigApplicants(token, selectedGigId).then(result => result.applicants || []))
+      .then(applicants => {
+        if (!cancelled) setApplicantResponse({ gigId: selectedGigId, applicants, error: '' })
       })
       .catch(error => {
         if (!cancelled) setApplicantResponse({ gigId: selectedGigId, applicants: [], error: error.message || 'Could not load applicants.' })
       })
     return () => { cancelled = true }
-  }, [selectedGigId, applicantRequest])
+  }, [selectedGigId, applicantRequest, localState.applicantsByGig, localState.gigs])
 
   useEffect(() => {
     setLocalState(mergeCompanyGigManagementState(gigManagementState || buildDefaultCompanyGigManagementState()))
@@ -1016,6 +1029,39 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
   }, [applicantResponse, selectedGigId, taskSubmissions])
   const realGigs = useMemo(() => localState.gigs.filter(gig => !gig.demoData), [localState.gigs])
   const demoGigs = useMemo(() => localState.gigs.filter(gig => gig.demoData), [localState.gigs])
+
+  const prefetchApplicants = gig => {
+    if (!gig || gig.demoData) return
+    const token = getCompanySessionToken()
+    const cacheSection = `gig-applicants-${gig.id}`
+    if (!token || readCompanySectionCache(cacheSection, token)) return
+    loadCompanySectionCache(cacheSection, token, () => fetchCompanyGigApplicants(token, gig.id).then(result => result.applicants || [])).catch(() => {})
+  }
+
+  const prefetchApplicantProfile = applicant => {
+    const studentId = applicant?.studentId || applicant?.id
+    if (!studentId || applicant?.demoData || localState.demoProfiles?.[studentId]) return
+    const token = getCompanySessionToken()
+    const cacheSection = `student-profile-${studentId}`
+    if (!token || readCompanySectionCache(cacheSection, token)) return
+    loadCompanySectionCache(cacheSection, token, () => fetchCompanyStudentProfile(token, studentId).then(result => result.profile)).catch(() => {})
+  }
+
+  const viewApplicantProfile = async applicant => {
+    const studentId = applicant?.studentId || applicant?.id
+    const demoProfile = localState.demoProfiles?.[studentId]
+    if (demoProfile) {
+      setPublicApplicant({ profile: demoProfile, applicant })
+      return
+    }
+    try {
+      const token = getCompanySessionToken()
+      const profile = await loadCompanySectionCache(`student-profile-${studentId}`, token, () => fetchCompanyStudentProfile(token, studentId).then(result => result.profile))
+      setPublicApplicant({ profile, applicant })
+    } catch (error) {
+      toast.error(error.message || 'Could not load this profile.')
+    }
+  }
 
   const createGig = async data => {
     const persistedState = await onCreateGig(data)
@@ -1078,6 +1124,7 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
           : candidate
       )),
     }))
+    clearCompanySectionCache(`gig-applicants-${selectedGig?.id}`, getCompanySessionToken())
     setSelectedApplicant(current => current ? { ...current, ...sentTask } : current)
     return opportunity
   }
@@ -1172,6 +1219,8 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                   <div className="responsive-company-gig-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
                       className="btn-accent"
+                      onFocus={() => prefetchApplicants(gig)}
+                      onPointerEnter={() => prefetchApplicants(gig)}
                       onClick={() => {
                         setSelectedGigId(gig.id)
                         setSelectedApplicant(null)
@@ -1199,11 +1248,12 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
           <div className="gig-insight-panel">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
               <h3 id="gig-pipeline-heading">Hiring Pipeline</h3>
-              <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>Live view</span>
+              <span className="gig-pipeline-live-label" style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>Live view</span>
+              <span className="gig-pipeline-mobile-hint">Swipe stages →</span>
             </div>
-            <div className="gig-insight-content" role="region" tabIndex={0} aria-labelledby="gig-pipeline-heading">
+            <div className="gig-insight-content gig-pipeline-content" role="region" tabIndex={0} aria-labelledby="gig-pipeline-heading">
               {localState.pipeline.map(item => (
-                <div key={item.label} style={{ background: item.bg, color: item.color, borderRadius: 10, padding: '13px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, border: '1px solid rgba(255,255,255,0.7)' }}>
+                <div className="gig-pipeline-stage" key={item.label} style={{ background: item.bg, color: item.color, borderRadius: 10, padding: '13px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, border: '1px solid rgba(255,255,255,0.7)' }}>
                   <span style={{ fontSize: 13 }}>{item.label}</span>
                   <span style={{ fontSize: 20, fontWeight: 900 }}>{item.value}</span>
                 </div>
@@ -1242,12 +1292,8 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
           setSelectedGigId(null)
           setApplicantResponse({ gigId: null, applicants: [], error: '' })
         }}
-        onViewProfile={async applicant => {
-          try {
-            const result = await fetchCompanyStudentProfile(getCompanySessionToken(), applicant.studentId || applicant.id)
-            setPublicApplicant({ profile: result.profile, applicant })
-          } catch (error) { toast.error(error.message || 'Could not load this profile.') }
-        }}
+        onViewProfile={viewApplicantProfile}
+        onPrefetchProfile={prefetchApplicantProfile}
       />
       {publicApplicant && (
         <PublicStudentProfile

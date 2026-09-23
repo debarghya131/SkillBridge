@@ -136,7 +136,7 @@ test('direct talent invite appears in Opportunity and opens after student accept
 
 test('students cannot self-award verification through events or skill profile edits', async t => {
   const student = new Student({ name: 'Student', passwordHash: 'test', sessions: [{ token: 's', createdAt: new Date() }],
-    skillHubSkills: [{ name: 'Python', verified: false, stage: 'Beginner', level: 0 }] })
+    skillHubSkills: [{ name: 'Python', source: 'catalog', verified: false, stage: 'Beginner', level: 0 }] })
   student.save = async () => student
   t.mock.method(Student, 'findOne', async () => student)
   await assert.rejects(recordStudentSkillHubEvent('s', { eventType: 'verify_completed', skillName: 'Python' }), error => error.statusCode === 403)
@@ -148,7 +148,7 @@ test('students cannot self-award verification through events or skill profile ed
 
 test('Skill Hub submission, revision and operator approval require ownership and a pending assessment', async t => {
   const student = new Student({ name: 'Student', passwordHash: 'test', sessions: [{ token: 's', createdAt: new Date() }],
-    skillHubSkills: [{ name: 'Python', verified: false, stage: 'Beginner', level: 0 }] })
+    skillHubSkills: [{ name: 'Python', source: 'catalog', verified: false, stage: 'Beginner', level: 0 }] })
   student.save = async options => { assert.equal(options.session, 'transaction') }
   t.mock.method(Student, 'findOne', async () => student)
   let record
@@ -176,7 +176,10 @@ test('Skill Hub submission, revision and operator approval require ownership and
   await assert.rejects(submitSkillAssessment('s', payload), error => error.statusCode === 409)
   assert.equal((await listStudentAssessments('s')).filter(item => !item.demoData).length, 1)
   t.mock.method(mongoose.connection, 'transaction', async callback => callback('transaction'))
-  t.mock.method(SkillAssessment, 'findOne', filter => ({ session: async () => record.status === filter.status ? record : null }))
+  t.mock.method(SkillAssessment, 'findOne', filter => {
+    const result = String(record._id) === String(filter._id) && record.status === filter.status ? record : null
+    return { session: async () => result, then: resolve => Promise.resolve(result).then(resolve) }
+  })
   t.mock.method(Student, 'findById', () => ({ session: async () => student }))
   await reviewSkillAssessment(created.id, { status: 'needs_revision', feedback: 'Add test evidence', reviewer: 'Operator' })
   assert.equal(student.skillHubSkills[0].verified, false)

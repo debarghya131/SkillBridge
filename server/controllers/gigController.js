@@ -118,7 +118,14 @@ function incrementLabeledValue(items, label, delta) {
 async function buildCompanyManagedGigs(student) {
   // Listing GIGs must never load company descriptions, contact data, or an
   // uploaded introduction video. Those are fetched only after View Company.
-  const companies = await Company.find().select('_id businessName location businessProfile.logo businessProfile.location gigManagementState.gigs gigManagementState.applicantsByGig').lean()
+  // Skip companies with no browsable listing before pulling their embedded
+  // GIG/applicant state. This keeps the student browse endpoint fast as the
+  // number of registered companies grows.
+  const companies = await Company.find({
+    'gigManagementState.gigs': { $elemMatch: { status: { $in: ['Hiring', 'Reviewing', 'In Progress'] } } },
+  })
+    .select('_id businessName location businessProfile.logo businessProfile.location gigManagementState.gigs gigManagementState.applicantsByGig')
+    .lean()
   const studentSkills = publishedSkillNames(student.skills, student.skillHubSkills)
   const managedGigs = []
 
@@ -382,9 +389,7 @@ function persistGigState(student, gigState) {
   })
 }
 
-async function getStudentGigState(token) {
-  const student = await findStudentByToken(token)
-  const real = await buildGigState(student)
+function mergeGigStateWithDemo(real) {
   const demo = demoStudentGigState()
   return {
     ...real,
@@ -396,6 +401,11 @@ async function getStudentGigState(token) {
     activeGigBase: mergeUniqueGigs([...real.activeGigBase, ...demo.activeGigBase]),
     completedGigs: mergeUniqueGigs([...real.completedGigs, ...demo.completedGigs]),
   }
+}
+
+async function getStudentGigState(token) {
+  const student = await findStudentByToken(token)
+  return mergeGigStateWithDemo(await buildGigState(student))
 }
 
 async function applyToGig(token, gigId) {
@@ -587,6 +597,7 @@ module.exports = {
   declineOpportunity,
   getStudentGigState,
   isBrowsableGigStatus,
+  mergeGigStateWithDemo,
   saveGig,
   unsaveGig,
 }

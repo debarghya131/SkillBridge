@@ -9,7 +9,7 @@
 .login-option:hover { border-color: #a5b4fc; box-shadow: 0 5px 14px rgba(15, 23, 42, .08); transform: translateY(-1px); }
 .login-option > span:first-child { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; background: #eef2ff; color: #4338ca; }
 .login-option-company > span:first-child { background: #fff7ed; color: #c2410c; }
-.login-option-reviewer > span:first-child { background: #ecfdf5; color: #047857; }
+.login-option-admin > span:first-child { background: #fef3c7; color: #92400e; }
 .login-option strong, .login-option small { display: block; }
 .login-option strong { margin-bottom: 2px; font-size: 14px; }
 .login-option small { color: #64748b; font-size: 12px; line-height: 1.45; }

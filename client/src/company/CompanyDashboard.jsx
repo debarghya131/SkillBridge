@@ -20,6 +20,7 @@ import {
   fetchCompanyTalent,
   fetchCompanyStudentProfile,
   fetchCompanyPayment,
+  fetchCompanyProfileMedia,
   recordCompanyExternalPayment,
   logoutCompany,
   reviewCompanyTaskSubmission,
@@ -52,10 +53,31 @@ import { talentFilterOptions } from './talentFilterOptions'
 import PublicStudentProfile from '../ui/PublicStudentProfile'
 import DirectOpportunityModal from './DirectOpportunityModal'
 import { ChevronDown, ExternalLink, Flame, Send, ShieldCheck, X } from 'lucide-react'
-import { readCompanySectionCache, writeCompanySectionCache } from './sectionCache'
+import { clearAllCompanySectionCache, clearCompanySectionCache, clearCompanySectionCachePrefix, loadCompanySectionCache, readCompanySectionCache, writeCompanySectionCache } from './sectionCache'
 
 const SKILL_LEVELS = ['All', 'Beginner', 'Intermediate', 'Pro', 'Pro Mastery']
 const TALENT_PAGE_SIZE = 12
+
+function talentSearchCacheKey(filters, page) {
+  return `talent-search-${JSON.stringify([
+    String(filters.query || '').trim().toLowerCase(),
+    Number(filters.minTrustScore) || 0,
+    filters.location || 'All',
+    filters.skill || 'All',
+    filters.level || 'All',
+    Number(page) || 1,
+  ])}`
+}
+
+function loadCachedStudentProfile(token, studentId) {
+  return loadCompanySectionCache(`student-profile-${studentId}`, token, () => (
+    fetchCompanyStudentProfile(token, studentId).then(result => result.profile)
+  ))
+}
+
+function loadCachedBusinessProfileMedia(token) {
+  return loadCompanySectionCache('business-profile-media', token, () => fetchCompanyProfileMedia(token))
+}
 
 const COMPANY_REGISTRATION_METHODS = {
   email: { icon: '📧', label: 'Business email' },
@@ -500,6 +522,8 @@ export default function CompanyDashboard() {
   const [selectedTalent, setSelectedTalent] = useState(null)
   const talentProfileRequest = useRef(0)
   const [showBusinessProfile, setShowBusinessProfile] = useState(false)
+  const [profileMediaLoaded, setProfileMediaLoaded] = useState(false)
+  const [profileMediaLoading, setProfileMediaLoading] = useState(false)
   const [directOpportunityTalent, setDirectOpportunityTalent] = useState(null)
   const [talentFilters, setTalentFilters] = useState({
     minTrustScore: 0,
@@ -529,6 +553,27 @@ export default function CompanyDashboard() {
     setActive(current => current === requestedSection ? current : requestedSection)
   }, [requestedSection])
 
+  useEffect(() => {
+    if (profileMediaLoaded || (active !== 'profile' && !showBusinessProfile)) return undefined
+    const token = sessionTokenRef.current
+    if (!token) return undefined
+    let cancelled = false
+    setProfileMediaLoading(true)
+    loadCachedBusinessProfileMedia(token)
+      .then(media => {
+        if (cancelled) return
+        setBusinessProfile(current => mergeCompanyProfile({ ...current, introVideoUrl: media.introVideoUrl }))
+        setProfileMediaLoaded(true)
+      })
+      .catch(error => {
+        if (!cancelled && error.status !== 401) toast.error(error.message || 'The business introduction video could not be loaded.')
+      })
+      .finally(() => {
+        if (!cancelled) setProfileMediaLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [active, profileMediaLoaded, showBusinessProfile])
+
   const selectSection = section => {
     if (!NAV_ITEMS.some(item => item.key === section)) return
     setActive(section)
@@ -536,14 +581,69 @@ export default function CompanyDashboard() {
     navigate(`/company/dashboard?section=${encodeURIComponent(section)}`)
   }
 
-  const openStudentProfile = async student => {
+  const prefetchSection = (section, token) => {
+    if (!token) return
+    if (section === 'profile') {
+      if (readCompanySectionCache('business-profile-media', token)) return
+      loadCachedBusinessProfileMedia(token).catch(() => {})
+      return
+    }
+    if (section === 'talent') {
+      const cacheKey = talentSearchCacheKey(talentFilters, talentPage)
+      if (readCompanySectionCache(cacheKey, token)) return
+      loadCompanySectionCache(cacheKey, token, () => fetchCompanyTalent(token, {
+        ...talentFilters,
+        page: talentPage,
+        pageSize: TALENT_PAGE_SIZE,
+      })).catch(() => {})
+      return
+    }
+    if (section === 'workspace') {
+      const requests = []
+      if (!readCompanySectionCache('workspace', token)) requests.push(loadCompanySectionCache('workspace', token, () => fetchCompanyWorkspace(token).then(result => result.projectWorkspaceState)))
+      if (!readCompanySectionCache('submissions', token)) requests.push(loadCompanySectionCache('submissions', token, () => fetchCompanyTaskSubmissions(token).then(result => result.taskSubmissions || [])))
+      Promise.all(requests).catch(() => {})
+      return
+    }
+    if (section === 'payment') {
+      if (readCompanySectionCache('payment', token)) return
+      loadCompanySectionCache('payment', token, () => fetchCompanyPayment(token).then(result => result.paymentState)).catch(() => {})
+      return
+    }
+    if (section === 'gig') {
+      if (readCompanySectionCache('gigs', token)) return
+      loadCompanySectionCache('gigs', token, () => fetchCompanyGigManagement(token).then(result => result.gigManagementState)).catch(() => {})
+      return
+    }
+    if (section !== 'tasks') return
+    const requests = []
+    if (!readCompanySectionCache('gigs', token)) requests.push(loadCompanySectionCache('gigs', token, () => fetchCompanyGigManagement(token).then(result => result.gigManagementState)))
+    if (!readCompanySectionCache('task-library', token)) requests.push(loadCompanySectionCache('task-library', token, () => fetchCompanyTaskLibrary(token).then(result => result.taskLibraryState)))
+    if (!readCompanySectionCache('submissions', token)) requests.push(loadCompanySectionCache('submissions', token, () => fetchCompanyTaskSubmissions(token).then(result => result.taskSubmissions || [])))
+    Promise.all(requests).catch(() => {})
+  }
+
+  const prefetchStudentProfile = student => {
+    const studentId = student?.studentId || student?.id
+    const token = sessionTokenRef.current
+    if (!studentId || !token || readCompanySectionCache(`student-profile-${studentId}`, token)) return
+    loadCachedStudentProfile(token, studentId).catch(() => {})
+  }
+
+  const openStudentProfile = async (student, opportunityProfile = null) => {
     const studentId = student?.studentId || student?.id
     if (!studentId) return toast.error('This student profile is unavailable.')
+    const token = sessionTokenRef.current
+    const cachedProfile = readCompanySectionCache(`student-profile-${studentId}`, token)
     const request = ++talentProfileRequest.current
-    setSelectedTalent({ ...student, id: studentId, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true })
+    if (cachedProfile) {
+      setSelectedTalent({ ...cachedProfile, loading: false, ...(opportunityProfile ? { opportunityProfile } : {}) })
+      return
+    }
+    setSelectedTalent({ ...student, id: studentId, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true, ...(opportunityProfile ? { opportunityProfile } : {}) })
     try {
-      const result = await fetchCompanyStudentProfile(sessionTokenRef.current, studentId)
-      if (request === talentProfileRequest.current) setSelectedTalent({ ...result.profile, loading: false })
+      const profile = await loadCachedStudentProfile(token, studentId)
+      if (request === talentProfileRequest.current) setSelectedTalent({ ...profile, loading: false, ...(opportunityProfile ? { opportunityProfile } : {}) })
     } catch (error) {
       if (request === talentProfileRequest.current) setSelectedTalent(null)
       toast.error(error.message || 'Could not load this profile.')
@@ -554,11 +654,15 @@ export default function CompanyDashboard() {
     if (!sidebarOpen) return undefined
     const previousOverflow = document.body.style.overflow
     const closeOnEscape = event => event.key === 'Escape' && setSidebarOpen(false)
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => { if (desktop.matches) setSidebarOpen(false) }
+    desktop.addEventListener('change', closeOnDesktop)
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', closeOnEscape)
     return () => {
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', closeOnEscape)
+      desktop.removeEventListener('change', closeOnDesktop)
     }
   }, [sidebarOpen])
 
@@ -597,13 +701,6 @@ export default function CompanyDashboard() {
   ]
   const completedFields = businessFields.filter(Boolean).length
   const profileCompletion = Math.round((completedFields / businessFields.length) * 100)
-  const checklist = [
-    { label: 'Business name and location', done: Boolean(businessProfile.businessName && businessProfile.location) },
-    { label: 'Industry, website, and team size', done: Boolean(businessProfile.industry && businessProfile.website && businessProfile.teamSize) },
-    { label: 'Work mode and hiring categories', done: Boolean(businessProfile.workModes.length > 0 && businessProfile.hiringCategories) },
-    { label: 'Company description and required skills', done: Boolean(businessProfile.description && businessProfile.requiredSkills) },
-    { label: 'Contact details for applicants', done: Boolean(businessProfile.contactEmail && businessProfile.contactPhone) },
-  ]
   const activeGigCount = gigManagementState.gigs.filter(gig => (
     ['active', 'in progress', 'hiring', 'reviewing'].includes(String(gig.status).toLowerCase())
   )).length
@@ -635,7 +732,6 @@ export default function CompanyDashboard() {
     : dashboardState.recentHiringActivity)
   const displayedOverviewStats = dashboardOverview?.stats || overviewStats
   const displayedProfileCompletion = dashboardOverview?.profileCompletion ?? profileCompletion
-  const displayedChecklist = dashboardOverview?.checklist || checklist
 
   useEffect(() => {
     let cancelled = false
@@ -646,7 +742,11 @@ export default function CompanyDashboard() {
     // GIG Management has its own persisted list, and My Business receives its
     // recent activity from /dashboard. Only Task Center needs full reviews.
     const needsSubmissions = ['tasks', 'workspace'].includes(active)
+    const needsGigs = ['gig', 'tasks'].includes(active)
+    const cachedGigs = needsGigs ? readCompanySectionCache('gigs', token) : null
     const cachedSubmissions = needsSubmissions ? readCompanySectionCache('submissions', token) : null
+    const cachedTaskLibrary = active === 'tasks' ? readCompanySectionCache('task-library', token) : null
+    const cachedWorkspace = active === 'workspace' ? readCompanySectionCache('workspace', token) : null
     const cachedPayment = active === 'payment' ? readCompanySectionCache('payment', token) : null
     setIsLoading(initialLoad && !cachedCompany)
     setLoadError('')
@@ -655,11 +755,11 @@ export default function CompanyDashboard() {
         const [result, overview, gigs, taskLibrary, workspace, submissions, payments] = await Promise.all([
           initialLoad && !cachedCompany ? fetchCurrentCompany(token) : null,
           active === 'business' ? fetchCompanyDashboard(token) : null,
-          ['gig', 'tasks'].includes(active) ? fetchCompanyGigManagement(token) : null,
-          active === 'tasks' ? fetchCompanyTaskLibrary(token) : null,
-          active === 'workspace' ? fetchCompanyWorkspace(token) : null,
-          needsSubmissions && !cachedSubmissions ? fetchCompanyTaskSubmissions(token) : null,
-          active === 'payment' && !cachedPayment ? fetchCompanyPayment(token) : null,
+          needsGigs ? (cachedGigs || loadCompanySectionCache('gigs', token, () => fetchCompanyGigManagement(token).then(response => response.gigManagementState))) : null,
+          active === 'tasks' ? (cachedTaskLibrary || loadCompanySectionCache('task-library', token, () => fetchCompanyTaskLibrary(token).then(response => response.taskLibraryState))) : null,
+          active === 'workspace' ? (cachedWorkspace || loadCompanySectionCache('workspace', token, () => fetchCompanyWorkspace(token).then(response => response.projectWorkspaceState))) : null,
+          needsSubmissions ? (cachedSubmissions || loadCompanySectionCache('submissions', token, () => fetchCompanyTaskSubmissions(token).then(response => response.taskSubmissions || []))) : null,
+          active === 'payment' ? (cachedPayment || loadCompanySectionCache('payment', token, () => fetchCompanyPayment(token).then(response => response.paymentState))) : null,
         ])
         if (cancelled) return
         const companySnapshot = result?.company || cachedCompany
@@ -674,26 +774,24 @@ export default function CompanyDashboard() {
           if (result?.company) writeCompanySectionCache('shell', token, result.company)
           didLoadCompanyRef.current = true
         }
-        if (gigs?.gigManagementState) {
-          setGigManagementState(mergeCompanyGigManagementState(gigs.gigManagementState))
+        if (gigs) {
+          setGigManagementState(mergeCompanyGigManagementState(gigs))
         }
-        if (taskLibrary?.taskLibraryState) {
-          setTaskLibraryState(mergeCompanyTaskLibraryState(taskLibrary.taskLibraryState))
+        if (taskLibrary) {
+          setTaskLibraryState(mergeCompanyTaskLibraryState(taskLibrary))
         }
-        if (workspace?.projectWorkspaceState) {
-          setProjectWorkspaceState(mergeCompanyWorkspaceState(workspace.projectWorkspaceState))
+        if (workspace) {
+          setProjectWorkspaceState(mergeCompanyWorkspaceState(workspace))
         }
-        const submissionSnapshot = submissions?.taskSubmissions || cachedSubmissions
+        const submissionSnapshot = submissions || cachedSubmissions
         if (submissionSnapshot) {
           const nextSubmissions = submissionSnapshot.filter(item => item?.id)
           setTaskSubmissions(nextSubmissions)
-          if (submissions) writeCompanySectionCache('submissions', token, nextSubmissions)
         }
         if (overview) setDashboardOverview(overview.dashboard)
-        const paymentSnapshot = payments?.paymentState || cachedPayment
+        const paymentSnapshot = payments || cachedPayment
         if (paymentSnapshot) {
           setPaymentState(mergeCompanyPaymentState(paymentSnapshot))
-          if (payments) writeCompanySectionCache('payment', token, payments.paymentState)
         }
       } catch (error) {
         if (cancelled) return
@@ -716,26 +814,39 @@ export default function CompanyDashboard() {
     const token = sessionTokenRef.current
     if (!token) return undefined
 
+    const cacheKey = talentSearchCacheKey(talentFilters, talentPage)
+    const cachedTalent = readCompanySectionCache(cacheKey, token)
+    const showTalent = talent => {
+      setTalentProfiles(talent.talentProfiles || [])
+      setTalentSearchMeta({
+        availableLocations: talent.availableLocations || [],
+        availableSkills: talent.availableSkills || [],
+        total: talent.total || 0,
+        realTotal: talent.realTotal ?? talent.total ?? 0,
+        demoTotal: talent.demoTotal || 0,
+        page: talent.page || talentPage,
+        pageSize: talent.pageSize || TALENT_PAGE_SIZE,
+      })
+    }
+
+    if (cachedTalent) {
+      showTalent(cachedTalent)
+      setIsTalentLoading(false)
+      setTalentError('')
+      return () => { cancelled = true }
+    }
+
     setIsTalentLoading(true)
     setTalentError('')
     const requestTimer = window.setTimeout(async () => {
       try {
-        const talent = await fetchCompanyTalent(token, {
+        const talent = await loadCompanySectionCache(cacheKey, token, () => fetchCompanyTalent(token, {
           ...talentFilters,
           page: talentPage,
           pageSize: TALENT_PAGE_SIZE,
-        })
+        }))
         if (cancelled) return
-        setTalentProfiles(talent.talentProfiles || [])
-        setTalentSearchMeta({
-          availableLocations: talent.availableLocations || [],
-          availableSkills: talent.availableSkills || [],
-          total: talent.total || 0,
-          realTotal: talent.realTotal ?? talent.total ?? 0,
-          demoTotal: talent.demoTotal || 0,
-          page: talent.page || talentPage,
-          pageSize: talent.pageSize || TALENT_PAGE_SIZE,
-        })
+        showTalent(talent)
       } catch (error) {
         if (cancelled) return
         if (error.status === 401) {
@@ -756,28 +867,37 @@ export default function CompanyDashboard() {
   }, [active, talentFilters, talentPage, refreshVersion, navigate])
 
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState === 'visible') setRefreshVersion(value => value + 1) }
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      const token = sessionTokenRef.current
+      if (active === 'talent' && token && readCompanySectionCache(talentSearchCacheKey(talentFilters, talentPage), token)) return
+      if (active === 'gig' && token && readCompanySectionCache('gigs', token)) return
+      if (active === 'workspace' && token
+        && readCompanySectionCache('workspace', token)
+        && readCompanySectionCache('submissions', token)) return
+      if (active === 'payment' && token && readCompanySectionCache('payment', token)) return
+      if (active === 'tasks' && token
+        && readCompanySectionCache('gigs', token)
+        && readCompanySectionCache('task-library', token)
+        && readCompanySectionCache('submissions', token)) return
+      setRefreshVersion(value => value + 1)
+    }
     document.addEventListener('visibilitychange', refresh)
     return () => document.removeEventListener('visibilitychange', refresh)
-  }, [])
+  }, [active, talentFilters, talentPage])
 
   const handleSaveTaskLibrary = async nextState => {
     const result = await saveCompanyTaskLibrary(sessionTokenRef.current, { taskLibraryState: nextState, revision: taskLibraryState.revision || 0 })
-    let displayedState = result.taskLibraryState
-    try {
-      const refreshed = await fetchCompanyTaskLibrary(sessionTokenRef.current)
-      displayedState = refreshed.taskLibraryState
-    } catch {
-      // The real mutation has already succeeded; the next section refresh can
-      // restore read-only examples without reporting a false save failure.
-    }
+    const displayedState = result.taskLibraryState
     setTaskLibraryState(mergeCompanyTaskLibraryState(displayedState))
+    writeCompanySectionCache('task-library', sessionTokenRef.current, displayedState)
     return displayedState
   }
 
   const handleLogout = async () => {
     const token = sessionTokenRef.current
 
+    clearAllCompanySectionCache(token)
     clearCompanySessionToken()
     sessionTokenRef.current = ''
 
@@ -807,17 +927,25 @@ export default function CompanyDashboard() {
       throw new Error('The review response was incomplete. Please refresh and try again.')
     }
 
-    setTaskSubmissions(current => current.map(item => (
+    const nextSubmissions = taskSubmissions.map(item => (
       item.id === reviewedSubmission.id ? { ...item, ...reviewedSubmission } : item
-    )))
+    ))
+    setTaskSubmissions(nextSubmissions)
+    writeCompanySectionCache('submissions', token, nextSubmissions)
 
     if (result.gigManagementState) {
-      setGigManagementState(mergeCompanyGigManagementState(result.gigManagementState))
+      const nextGigState = mergeCompanyGigManagementState(result.gigManagementState)
+      setGigManagementState(nextGigState)
+      writeCompanySectionCache('gigs', token, nextGigState)
+      clearCompanySectionCachePrefix('gig-applicants-', token)
     }
 
     if (result.projectWorkspaceState) {
-      setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
+      const nextWorkspaceState = mergeCompanyWorkspaceState(result.projectWorkspaceState)
+      setProjectWorkspaceState(nextWorkspaceState)
+      writeCompanySectionCache('workspace', token, nextWorkspaceState)
     }
+    if (payload.status === 'approved') clearCompanySectionCache('payment', token)
 
     if (payload.status === 'selected') {
       toast.success('Student selected. Open Project Workspace to define and start the actual GIG Work.', { title: 'Ready for GIG Work' })
@@ -844,7 +972,10 @@ export default function CompanyDashboard() {
     })
 
     if (result.gigManagementState) {
-      setGigManagementState(mergeCompanyGigManagementState(result.gigManagementState))
+      const nextGigState = mergeCompanyGigManagementState(result.gigManagementState)
+      setGigManagementState(nextGigState)
+      writeCompanySectionCache('gigs', token, nextGigState)
+      clearCompanySectionCachePrefix('gig-applicants-', token)
     }
     if (result.alreadyExists) {
       toast.info('This student already has the opportunity. The original task was not changed.', { title: 'Opportunity Already Sent' })
@@ -873,7 +1004,10 @@ export default function CompanyDashboard() {
     })
 
     if (result.gigManagementState) {
-      setGigManagementState(mergeCompanyGigManagementState(result.gigManagementState))
+      const nextGigState = mergeCompanyGigManagementState(result.gigManagementState)
+      setGigManagementState(nextGigState)
+      writeCompanySectionCache('gigs', token, nextGigState)
+      clearCompanySectionCachePrefix('gig-applicants-', token)
     }
     if (result.alreadyExists) {
       toast.info(`${student.name} already has this opportunity. The original accepted task was not changed.`, { title: 'Opportunity Already Sent' })
@@ -893,6 +1027,7 @@ export default function CompanyDashboard() {
       const result = await createCompanyGig(token, gig)
       const nextState = mergeCompanyGigManagementState(result.gigManagementState)
       setGigManagementState(nextState)
+      writeCompanySectionCache('gigs', token, nextState)
       toast.success('The new GIG is saved and visible to students.', { title: 'GIG Created' })
       return nextState
     } catch (error) {
@@ -911,6 +1046,8 @@ export default function CompanyDashboard() {
       const result = await updateCompanyGig(token, gig.id, gig)
       const nextState = mergeCompanyGigManagementState(result.gigManagementState)
       setGigManagementState(nextState)
+      writeCompanySectionCache('gigs', token, nextState)
+      clearCompanySectionCachePrefix('gig-applicants-', token)
       toast.success('GIG details updated.', { title: 'GIG Updated' })
       return nextState
     } catch (error) {
@@ -927,6 +1064,8 @@ export default function CompanyDashboard() {
       const result = await deleteCompanyGig(token, gigId)
       const nextState = mergeCompanyGigManagementState(result.gigManagementState)
       setGigManagementState(nextState)
+      writeCompanySectionCache('gigs', token, nextState)
+      clearCompanySectionCachePrefix('gig-applicants-', token)
       toast.success('The GIG was removed from student Browse GIGs.', { title: 'GIG Deleted' })
       return nextState
     } catch (error) {
@@ -935,48 +1074,84 @@ export default function CompanyDashboard() {
     }
   }
 
-  const handleSaveBusinessProfile = async profile => {
+  const handleSaveBusinessProfile = async updates => {
     const token = sessionTokenRef.current
     if (!token) {
-      setBusinessProfile(mergeCompanyProfile(profile))
-      return profile
+      const nextProfile = mergeCompanyProfile({ ...businessProfile, ...updates })
+      setBusinessProfile(nextProfile)
+      return nextProfile
     }
 
-    const profileToSave = {
-      ...profile,
+    const profileToSave = { ...updates }
+    if (Object.hasOwn(profileToSave, 'introVideoUrl')) {
       // Bundled media is a UI fallback and must never become public profile content.
-      introVideoUrl: isBundledCompanyIntroVideoUrl(profile.introVideoUrl) ? null : profile.introVideoUrl,
+      profileToSave.introVideoUrl = isBundledCompanyIntroVideoUrl(profileToSave.introVideoUrl) ? null : profileToSave.introVideoUrl
     }
     const result = await saveCompanyProfile(token, {
       businessProfile: profileToSave,
     })
-    // The API response is authoritative. Do not merge the original sign-in
-    // snapshot here or an edited business name/location will appear to revert.
-    const savedProfile = mergeCompanyProfile(result.company?.businessProfile || profile)
+    const savedProfile = mergeCompanyProfile({
+      ...businessProfile,
+      ...updates,
+      ...(result.company?.businessProfile || {}),
+    })
     setBusinessProfile(savedProfile)
+    const cachedCompany = readCompanySectionCache('shell', token)
+    if (cachedCompany) writeCompanySectionCache('shell', token, {
+      ...cachedCompany,
+      businessName: savedProfile.businessName,
+      location: savedProfile.location,
+      businessProfile: { ...cachedCompany.businessProfile, ...result.company?.businessProfile },
+    })
+    if (Object.hasOwn(updates, 'introVideoUrl')) {
+      writeCompanySectionCache('business-profile-media', token, { introVideoUrl: profileToSave.introVideoUrl })
+      setProfileMediaLoaded(true)
+    }
+    clearCompanySectionCachePrefix('talent-search-', token)
+    clearCompanySectionCache('gigs', token)
     toast.success('Business profile saved successfully.', { title: 'Profile Updated' })
     return savedProfile
   }
 
   const handleRecordPayment = async (submissionId, payload) => {
-    const result = await recordCompanyExternalPayment(sessionTokenRef.current, submissionId, payload)
-    setPaymentState(mergeCompanyPaymentState(result.paymentState))
-    try {
-      const [companySnapshot, submissionSnapshot] = await Promise.all([
-        fetchCurrentCompany(sessionTokenRef.current),
-        fetchCompanyTaskSubmissions(sessionTokenRef.current),
-      ])
-      setGigManagementState(mergeCompanyGigManagementState(companySnapshot.company.gigManagementState))
-      setProjectWorkspaceState(mergeCompanyWorkspaceState(companySnapshot.company.projectWorkspaceState))
-      setTaskLibraryState(mergeCompanyTaskLibraryState(companySnapshot.company.taskLibraryState))
-      setTaskSubmissions((submissionSnapshot.taskSubmissions || []).filter(item => item?.id))
-    } catch {
-      // The payment is already committed; retry the read without showing a
-      // false payment failure to the company.
-      setRefreshVersion(value => value + 1)
-    }
+    const token = sessionTokenRef.current
+    const result = await recordCompanyExternalPayment(token, submissionId, payload)
+    const nextPaymentState = mergeCompanyPaymentState(result.paymentState)
+    setPaymentState(nextPaymentState)
+    writeCompanySectionCache('payment', token, nextPaymentState)
+
+    clearCompanySectionCache('gigs', token)
+    clearCompanySectionCache('workspace', token)
+    clearCompanySectionCache('submissions', token)
+    Promise.all([
+      loadCompanySectionCache('gigs', token, () => fetchCompanyGigManagement(token).then(response => response.gigManagementState)),
+      loadCompanySectionCache('workspace', token, () => fetchCompanyWorkspace(token).then(response => response.projectWorkspaceState)),
+      loadCompanySectionCache('submissions', token, () => fetchCompanyTaskSubmissions(token).then(response => response.taskSubmissions || [])),
+    ]).then(([gigSnapshot, workspaceSnapshot, submissionSnapshot]) => {
+      if (token !== sessionTokenRef.current) return
+      const nextGigState = mergeCompanyGigManagementState(gigSnapshot)
+      const nextWorkspaceState = mergeCompanyWorkspaceState(workspaceSnapshot)
+      const nextSubmissions = submissionSnapshot.filter(item => item?.id)
+      setGigManagementState(nextGigState)
+      setProjectWorkspaceState(nextWorkspaceState)
+      setTaskSubmissions(nextSubmissions)
+      writeCompanySectionCache('gigs', token, nextGigState)
+      writeCompanySectionCache('workspace', token, nextWorkspaceState)
+      writeCompanySectionCache('submissions', token, nextSubmissions)
+    }).catch(() => {})
     toast.success('External payment recorded.', { title: 'Payment Recorded' })
     return result.paymentState
+  }
+
+  const handleRefreshPayment = async () => {
+    const token = sessionTokenRef.current
+    if (!token) throw new Error('Sign in again to refresh payment records.')
+    clearCompanySectionCache('payment', token)
+    const nextPaymentState = mergeCompanyPaymentState(await loadCompanySectionCache('payment', token, () => (
+      fetchCompanyPayment(token).then(response => response.paymentState)
+    )))
+    setPaymentState(nextPaymentState)
+    return nextPaymentState
   }
 
   const handleShareWorkspaceUpdate = async (projectId, message) => {
@@ -986,7 +1161,9 @@ export default function CompanyDashboard() {
     }
 
     const result = await shareCompanyWorkspaceUpdate(token, projectId, message)
-    setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
+    const nextWorkspaceState = mergeCompanyWorkspaceState(result.projectWorkspaceState)
+    setProjectWorkspaceState(nextWorkspaceState)
+    writeCompanySectionCache('workspace', token, nextWorkspaceState)
     toast.success('The project update was saved.', { title: 'Update Shared' })
     return result.projectWorkspaceState
   }
@@ -998,7 +1175,9 @@ export default function CompanyDashboard() {
     }
 
     const result = await setCompanyWorkspaceMilestone(token, projectId, milestone)
-    setProjectWorkspaceState(mergeCompanyWorkspaceState(result.projectWorkspaceState))
+    const nextWorkspaceState = mergeCompanyWorkspaceState(result.projectWorkspaceState)
+    setProjectWorkspaceState(nextWorkspaceState)
+    writeCompanySectionCache('workspace', token, nextWorkspaceState)
     toast.success('The project milestone was saved.', { title: 'Milestone Set' })
     return result.projectWorkspaceState
   }
@@ -1009,7 +1188,7 @@ export default function CompanyDashboard() {
     const isProfileItem = item.key === 'profile'
     const isActive = active === item.key
     return (
-      <button key={item.key} type="button" onClick={() => selectSection(item.key)} style={{
+      <button key={item.key} type="button" onClick={() => selectSection(item.key)} onFocus={() => prefetchSection(item.key, getCompanySessionToken())} onPointerEnter={() => prefetchSection(item.key, getCompanySessionToken())} style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '11px 14px', borderRadius: 10,
         border: isProfileItem && !isActive ? '1px solid rgba(249,115,22,0.34)' : '1px solid transparent',
@@ -1054,6 +1233,8 @@ export default function CompanyDashboard() {
             type="button"
             className="dashboard-user-meta"
             onClick={() => setShowBusinessProfile(true)}
+            onFocus={() => prefetchSection('profile', sessionTokenRef.current)}
+            onPointerEnter={() => prefetchSection('profile', sessionTokenRef.current)}
             title="Open business profile"
             style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)' }}
@@ -1121,9 +1302,9 @@ export default function CompanyDashboard() {
           {!isLoading && !loadError && <>
           {active === 'business' && (
             <BusinessOverview profile={businessProfile} stats={displayedOverviewStats}
-              completion={displayedProfileCompletion} checklist={displayedChecklist}
-              activity={recentHiringActivity} submissions={taskSubmissions}
-              projects={projectWorkspaceState.projects || []} onNavigate={selectSection}
+              completion={displayedProfileCompletion}
+              activity={recentHiringActivity} operations={dashboardOverview?.operations}
+              onNavigate={selectSection}
               formatWhen={formatActivityWhen} />
           )}
 
@@ -1306,17 +1487,9 @@ export default function CompanyDashboard() {
                         <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>TrustScore™</div>
                       </div>
                       <button
-                        onClick={async () => {
-                          const request = ++talentProfileRequest.current
-                          setSelectedTalent({ ...p, practiceDays: 0, trustStreak: 0, completedGigs: 0, teamUps: 0, loading: true, opportunityProfile: p })
-                          try {
-                            const result = await fetchCompanyStudentProfile(getCompanySessionToken(), p.id)
-                            if (request === talentProfileRequest.current) setSelectedTalent({ ...result.profile, loading: false, opportunityProfile: p })
-                          } catch (error) {
-                            if (request === talentProfileRequest.current) setSelectedTalent(null)
-                            toast.error(error.message || 'Could not load this profile.')
-                          }
-                        }}
+                        onClick={() => openStudentProfile(p, p)}
+                        onFocus={() => prefetchStudentProfile(p)}
+                        onPointerEnter={() => prefetchStudentProfile(p)}
                         style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
                       >
                         View Profile
@@ -1357,6 +1530,7 @@ export default function CompanyDashboard() {
           {active === 'profile' && (
             <SetupBusinessProfile profile={businessProfile} onSave={handleSaveBusinessProfile} onDeleteAccount={async payload => {
               await deleteCompanyAccount(sessionTokenRef.current, payload)
+              clearAllCompanySectionCache(sessionTokenRef.current)
               clearCompanySessionToken()
               sessionTokenRef.current = ''
               toast.success('Your company account and associated records were permanently deleted.')
@@ -1399,13 +1573,14 @@ export default function CompanyDashboard() {
               onShareUpdate={handleShareWorkspaceUpdate}
               onSetMilestone={handleSetWorkspaceMilestone}
               onViewStudent={openStudentProfile}
+              onPrefetchStudent={prefetchStudentProfile}
             />
           )}
           {active === 'payment'   && (
             <PaymentSection
               paymentState={paymentState}
               onRecordPayment={handleRecordPayment}
-              onRefresh={() => setRefreshVersion(value => value + 1)}
+              onRefresh={handleRefreshPayment}
             />
           )}
 
@@ -1424,7 +1599,7 @@ export default function CompanyDashboard() {
         }}>Send opportunity</button>}
       />}
       {showBusinessProfile && (
-        <BusinessProfileModal profile={businessProfile} onClose={() => setShowBusinessProfile(false)} contactMethod={contactMethod} verificationMethod={verificationMethod} />
+        <BusinessProfileModal profile={businessProfile} loading={profileMediaLoading} onClose={() => setShowBusinessProfile(false)} contactMethod={contactMethod} verificationMethod={verificationMethod} />
       )}
       {directOpportunityTalent && (
         <DirectOpportunityModal

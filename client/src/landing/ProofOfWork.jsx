@@ -55,7 +55,7 @@ export default function ProofOfWork() {
           </div>
           <div className="sb-proof-context">
             <span className="sb-proof-review-label"><ShieldCheck size={17} aria-hidden="true" />Human review. Evidence first.</span>
-            <p>Submit original work in Skill Hub. Reviewers assess the evidence without seeing your name or college. Approval adds verified proof to your profile.</p>
+            <p>Submit original work in Skill Hub. Admin review staff assess the evidence without seeing your name or college. Approval adds verified proof to your profile.</p>
           </div>
         </div>
         <figure ref={figureRef} className="sb-product-figure sb-review-flow">
@@ -80,7 +80,7 @@ export default function ProofOfWork() {
             </li>
             <li style={{ '--review-delay': '2.8s' }}>
               <span className="sb-review-step-icon"><ClipboardCheck size={22} /></span>
-              <small>Reviewer</small>
+              <small>Admin review</small>
               <h3>Score the rubric</h3>
               <div className="sb-review-criteria" aria-label="Review criteria">
                 <span>Correctness 40%</span><span>Evidence 20%</span><span>Understanding 20%</span><span>Testing 10%</span><span>Communication 10%</span>
@@ -111,7 +111,7 @@ export default function ProofOfWork() {
           <article>
             <BadgeCheck />
             <h3>Evidence-based review</h3>
-            <p>Reviewers score the submitted work against a consistent rubric.</p>
+            <p>Admin review staff score the submitted work against a consistent rubric.</p>
           </article>
           <article>
             <History />

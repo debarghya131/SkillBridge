@@ -1085,15 +1085,15 @@ img, video { max-width: 100%; }
   box-shadow: 0 3px 12px rgba(15, 23, 42, 0.045);
 }
 
-.gig-integrity-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .58); backdrop-filter: blur(3px); }
-.gig-integrity-modal { width: min(520px, 100%); padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--white); box-shadow: 0 24px 70px rgba(15, 23, 42, .3); }
+.gig-integrity-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; overflow-y: auto; overscroll-behavior: contain; padding: 20px; background: rgba(15, 23, 42, .58); backdrop-filter: blur(3px); }
+.gig-integrity-modal { width: min(520px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--white); box-shadow: 0 24px 70px rgba(15, 23, 42, .3); }
 .gig-integrity-icon { width: 38px; height: 38px; display: grid; place-items: center; margin-bottom: 12px; border-radius: 50%; background: #fef3c7; font-size: 20px; }
 .gig-integrity-modal h2 { margin: 0 0 10px; color: var(--dark); font-size: 18px; }
 .gig-integrity-modal p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .gig-integrity-modal .gig-integrity-warning { padding: 11px 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #b91c1c; font-weight: 650; }
 .gig-integrity-modal .gig-integrity-note { margin-top: 12px; padding: 10px; border-radius: 8px; background: #fff7ed; color: #9a3412; }
 .gig-integrity-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-@media (max-width: 560px) { .gig-integrity-backdrop { padding: 12px; } .gig-integrity-modal { padding: 18px; } .gig-integrity-actions { display: grid; grid-template-columns: 1fr; } .gig-integrity-actions button { width: 100%; min-height: 42px; } }
+@media (max-width: 560px) { .gig-integrity-backdrop { padding: 12px; } .gig-integrity-modal { max-height: calc(100dvh - 24px); padding: 18px; } .gig-integrity-actions { display: grid; grid-template-columns: 1fr; } .gig-integrity-actions button { width: 100%; min-height: 42px; } }
 
 .gig-subnav .responsive-pill-nav-list {
   flex: 0 1 auto;
@@ -2857,6 +2857,6 @@ img, video { max-width: 100%; }
 }
 
 @keyframes workspace-enter {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

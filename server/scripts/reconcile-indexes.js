@@ -5,6 +5,8 @@ const NetworkConnection = require('../models/NetworkConnection')
 const Reviewer = require('../models/Reviewer')
 const SiteMetric = require('../models/SiteMetric')
 const SkillAssessment = require('../models/SkillAssessment')
+const SkillCatalog = require('../models/SkillCatalog')
+const SkillRequest = require('../models/SkillRequest')
 const Student = require('../models/Student')
 const TaskSubmission = require('../models/TaskSubmission')
 const TeamPost = require('../models/TeamPost')
@@ -18,6 +20,8 @@ const models = [
   Reviewer,
   SiteMetric,
   SkillAssessment,
+  SkillCatalog,
+  SkillRequest,
   Student,
   TaskSubmission,
   TeamPost,

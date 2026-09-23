@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BadgeCheck, ExternalLink, LogOut, RefreshCw, RotateCcw } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { BadgeCheck, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react'
 import { safeExternalUrl } from '../lib/safeExternalUrl'
-import SkillBridgeBrand from '../ui/SkillBridgeBrand'
-import { claimReview, clearReviewerSessionToken, fetchCurrentReviewer, fetchReviewQueue, getReviewerSessionToken, logoutReviewer, releaseReview, submitReviewDecision } from './reviewerApi'
-import './Reviewer.css'
+import { claimReview, fetchReviewQueue, getAdminSessionToken, releaseReview, submitReviewDecision } from './adminApi'
+import './ReviewQueue.css'
 
 const QUEUES = [['available', 'Available'], ['mine', 'My reviews'], ['completed', 'History']]
 const MODES = { verify: 'Verification', reverify: 'Renewal', upgrade: 'Upgrade', retain: 'Daily practice', challenge: 'Challenge' }
@@ -41,10 +39,7 @@ function ReviewerModePicker({ value, onChange }) {
   </div>
 }
 
-export default function ReviewerDashboard() {
-  const navigate = useNavigate()
-  const token = getReviewerSessionToken()
-  const [reviewer, setReviewer] = useState(null)
+export default function ReviewQueue({ token = getAdminSessionToken(), onUnauthorized }) {
   const [queue, setQueue] = useState('available')
   const [mode, setMode] = useState('all')
   const [records, setRecords] = useState([])
@@ -57,20 +52,20 @@ export default function ReviewerDashboard() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showDemo, setShowDemo] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [identity, result] = await Promise.all([fetchCurrentReviewer(token), fetchReviewQueue(token, { queue, mode, page })])
-      setReviewer(identity.reviewer)
+      const result = await fetchReviewQueue(token, { queue, mode, page, includeDemo: showDemo ? 'true' : '' })
       setRecords(result.assessments || [])
       setTotalCount(result.total || 0)
       setSelectedId(current => result.assessments?.some(item => item.id === current) ? current : result.assessments?.[0]?.id || '')
     } catch (failure) {
-      if (failure.status === 401) { clearReviewerSessionToken(); navigate('/reviewer', { replace: true }); return }
+      if ([401, 403].includes(failure.status)) { onUnauthorized?.(failure); return }
       setError(failure.message || 'Could not load review queue')
     } finally { setLoading(false) }
-  }, [mode, navigate, page, queue, token])
+  }, [mode, onUnauthorized, page, queue, token, showDemo])
   useEffect(() => { load() }, [load])
 
   const selected = records.find(item => item.id === selectedId)
@@ -89,16 +84,8 @@ export default function ReviewerDashboard() {
     finally { setBusy(false) }
   }
 
-  async function signOut() {
-    clearReviewerSessionToken()
-    try { await logoutReviewer(token) } catch { /* Local sign out must still complete. */ }
-    navigate('/reviewer', { replace: true })
-  }
-
-  return <main className="reviewer-shell">
-    <header className="reviewer-topbar"><div className="reviewer-topbar-brand"><SkillBridgeBrand size="compact"/><span>Review</span></div><div className="reviewer-topbar-user"><span>{reviewer?.name}</span><button title="Sign out" aria-label="Sign out" onClick={signOut}><LogOut size={17}/></button></div></header>
-    <section className="reviewer-workspace">
-      <header className="reviewer-heading"><div><span>ASSESSMENT OPERATIONS</span><h1>Review queue</h1></div><button className="reviewer-icon-button" title="Refresh queue" aria-label="Refresh queue" onClick={load} disabled={loading || busy}><RefreshCw size={17}/></button></header>
+  return <section className="reviewer-workspace reviewer-workspace-embedded">
+      <header className="reviewer-heading"><div><span>ASSESSMENT OPERATIONS</span><h1>Review queue</h1></div><label className="reviewer-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => setShowDemo(event.target.checked)}/>Demo examples</label><button className="reviewer-icon-button" title="Refresh queue" aria-label="Refresh queue" onClick={load} disabled={loading || busy}><RefreshCw size={17}/></button></header>
         <div className="reviewer-controls"><nav aria-label="Review queues">{QUEUES.map(([key, label]) => <button key={key} aria-pressed={queue === key} onClick={() => { setQueue(key); setPage(1) }}>{label}</button>)}</nav><ReviewerModePicker value={mode} onChange={value => { setMode(value); setPage(1) }} /></div>
       <div className="reviewer-privacy"><BadgeCheck size={17}/><span>Blind review active: student name, college, location, profile photo, and TrustScore are not included in this queue.</span></div>
       {error && <p role="alert" className="reviewer-error">{error}</p>}
@@ -111,10 +98,12 @@ export default function ReviewerDashboard() {
         <section className="reviewer-detail">
           {!selected ? <div className="reviewer-empty">Select an assessment to inspect its evidence.</div> : <>
             <header><div><span>{MODES[selected.mode] || selected.mode}{selected.demoData ? ' · Read-only demo' : ''}</span><h2>{selected.skillName}{selected.targetStage ? ` · ${selected.targetStage}` : ''}</h2><p>Submitted {formatDate(selected.createdAt)}</p></div><strong className={`reviewer-status reviewer-status-${selected.status}`}>{selected.status.replace('_', ' ')}</strong></header>
-            <section><h3>Assigned requirements</h3><p>{selected.brief || 'Use the standard assessment requirements.'}</p></section>
+            <section><h3>Assigned requirements</h3><p>{selected.criteriaSnapshot?.instructions || selected.brief || 'Use the standard assessment requirements.'}</p>
+              {selected.catalogVersion && <small>Catalog standard v{selected.catalogVersion} captured at submission.</small>}
+            </section>
             <section><h3>Student response</h3><p className="reviewer-response">{selected.response}</p>{safeExternalUrl(selected.evidenceLink) && <a href={safeExternalUrl(selected.evidenceLink)} target="_blank" rel="noreferrer"><ExternalLink size={15}/>Open submitted evidence</a>}</section>
-            {queue === 'available' && <div className="reviewer-actions"><button className="btn-primary" disabled={busy} onClick={() => run(() => claimReview(token, selected.id))}>Claim assessment</button></div>}
-            {queue === 'mine' && <section className="reviewer-rubric"><div className="reviewer-rubric-heading"><div><h3>Review rubric</h3><p>Score observable evidence only.</p></div><strong>{total}/100</strong></div>
+            {queue === 'available' && !selected.demoData && <div className="reviewer-actions"><button className="btn-primary" disabled={busy} onClick={() => run(() => claimReview(token, selected.id))}>Claim assessment</button></div>}
+            {queue === 'mine' && !selected.demoData && <section className="reviewer-rubric"><div className="reviewer-rubric-heading"><div><h3>Review rubric</h3><p>Score observable evidence only.</p></div><strong>{total}/100</strong></div>
               <div>{RUBRIC.map(([key, label, weight]) => <label key={key}><span>{label}<small>{weight}%</small></span><RubricPicker value={rubric[key]} onChange={value => setRubric(current => ({ ...current, [key]: value }))} /></label>)}</div>
               <fieldset className="reviewer-decision"><legend>Decision</legend><div>
                 <button type="button" className="is-approve" aria-pressed={decision === 'approved'} onClick={() => setDecision('approved')}>Approve</button>
@@ -122,13 +111,12 @@ export default function ReviewerDashboard() {
                 <button type="button" className="is-reject" aria-pressed={decision === 'rejected'} onClick={() => setDecision('rejected')}>Reject</button>
               </div></fieldset>
               <label className="reviewer-feedback">Feedback<textarea rows={4} maxLength={2000} required value={feedback} onChange={event => setFeedback(event.target.value)} placeholder="Give specific, actionable evidence-based feedback."/><small>{feedback.length}/2000</small></label>
-              <div className="reviewer-actions"><button className="btn-secondary" disabled={busy} onClick={() => run(() => releaseReview(token, selected.id))}><RotateCcw size={15}/>Release</button><button className="btn-primary" disabled={busy || !feedback.trim() || decision === 'approved' && total < 70} onClick={() => run(() => submitReviewDecision(token, selected.id, { status: decision, feedback, rubric }))}>{busy ? 'Saving...' : 'Submit decision'}</button></div>
-              {decision === 'approved' && total < 70 && <p className="reviewer-score-warning">Approval requires at least 70/100.</p>}
+              <div className="reviewer-actions"><button className="btn-secondary" disabled={busy} onClick={() => run(() => releaseReview(token, selected.id))}><RotateCcw size={15}/>Release</button><button className="btn-primary" disabled={busy || !feedback.trim() || decision === 'approved' && (total < 70 || ['correctness', 'evidence', 'understanding'].some(key => rubric[key] < 3))} onClick={() => run(() => submitReviewDecision(token, selected.id, { status: decision, feedback, rubric }))}>{busy ? 'Saving...' : 'Submit decision'}</button></div>
+              {decision === 'approved' && <p className="reviewer-score-warning">Approval requires 70/100 overall and at least 3/5 each for correctness, evidence, and understanding.</p>}
             </section>}
             {queue === 'completed' && selected.rubric && <section><h3>Recorded decision</h3><p><strong>{selected.rubric.total}/100</strong> · {selected.feedback}</p></section>}
           </>}
         </section>
       </div>
     </section>
-  </main>
 }
