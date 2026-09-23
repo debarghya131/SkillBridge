@@ -59,8 +59,39 @@ function hasPersistedCompanyId(value) {
 async function findExistingCompanyIds(companyIds) {
   const ids = [...new Set(companyIds.filter(hasPersistedCompanyId).map(String))]
   if (!ids.length) return new Set()
-  const companies = await Company.find({ _id: { $in: ids } }).select('_id').lean()
-  return new Set(companies.map(company => String(company._id)))
+  const results = await Promise.all(ids.map(async id => {
+    const query = Company.findById(id)
+    if (query && typeof query.select === 'function') {
+      const selected = query.select('_id businessName')
+      return selected && typeof selected.lean === 'function' ? selected.lean() : selected
+    }
+    return query
+  }))
+  return new Set(results.filter(Boolean).map(company => String(company._id)))
+}
+
+async function findOrphanedLegacyAppliedGigIds(gigs) {
+  const candidates = gigs.filter(item => (
+    Number.isInteger(Number(item?.id))
+    && Number(item.id) >= 100000
+    && Number(item.id) <= 999999
+    && typeof item?.company === 'string'
+    && item.company.trim()
+    && !item.sourceCompanyId
+    && !item.companyId
+  ))
+  const results = await Promise.all(candidates.map(async item => {
+    const query = Company.findOne({ businessName: item.company.trim() })
+    if (query && typeof query.select === 'function') {
+      const selected = query.select('_id businessName')
+      return selected && typeof selected.lean === 'function' ? selected.lean() : selected
+    }
+    return query
+  }))
+  const existingNames = new Set(results.filter(Boolean).map(company => String(company.businessName || '').trim().toLowerCase()))
+  return new Set(candidates
+    .filter(item => !existingNames.has(item.company.trim().toLowerCase()))
+    .map(item => Number(item.id)))
 }
 
 function normalizeOpportunityStatusOverrides(value) {
@@ -246,9 +277,11 @@ async function buildGigState(student) {
     ...storedAppliedGigs.map(item => item?.sourceCompanyId || item?.companyId),
   ]
   const existingCompanyIds = await findExistingCompanyIds(referencedCompanyIds)
+  const orphanedLegacyAppliedGigIds = await findOrphanedLegacyAppliedGigIds(storedAppliedGigs)
   const belongsToDeletedCompany = item => {
     const companyId = item?.companyId || item?.sourceCompanyId
-    return hasPersistedCompanyId(companyId) && !existingCompanyIds.has(String(companyId))
+    return (hasPersistedCompanyId(companyId) && !existingCompanyIds.has(String(companyId)))
+      || orphanedLegacyAppliedGigIds.has(Number(item?.id))
   }
   const liveStoredOpportunities = storedOpportunities.filter(item => !belongsToDeletedCompany(item))
   const liveStoredAppliedGigs = storedAppliedGigs.filter(item => !belongsToDeletedCompany(item))

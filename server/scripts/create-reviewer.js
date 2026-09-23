@@ -13,7 +13,15 @@ async function main() {
   if (!values.password || values.password.length < 12) throw new Error('Provide --password with at least 12 characters')
   if (!['reviewer', 'admin'].includes(values.role)) throw new Error('--role must be reviewer or admin')
   try {
-    await connectToDatabase(getEnvConfig().mongoUrl)
+    const config = getEnvConfig()
+    await connectToDatabase(config.mongoUrl, {
+      nodeEnv: config.nodeEnv,
+      mongoDbName: config.mongoDbName,
+      dbMaxPoolSize: config.dbMaxPoolSize,
+      dbMinPoolSize: config.dbMinPoolSize,
+      dbMaxIdleTimeMs: config.dbMaxIdleTimeMs,
+      dbServerSelectionTimeoutMs: config.dbServerSelectionTimeoutMs,
+    })
     const reviewer = await Reviewer.findOneAndUpdate({ email }, {
       $set: { name, role: values.role, active: true, passwordHash: hashPassword(values.password) },
       $setOnInsert: { sessions: [] },

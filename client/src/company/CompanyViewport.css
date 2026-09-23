@@ -447,7 +447,7 @@
   .company-viewport.section-gig .responsive-company-gig-actions { grid-template-columns: 1fr !important; }
   .company-viewport.section-payment .work-table tr { grid-template-columns: 1fr; }
   .company-viewport.section-talent .talent-search-card-actions { grid-template-columns: 1fr 1fr !important; }
-  .company-viewport.section-talent .talent-search-card-actions > div { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; text-align: left !important; }
+  .company-viewport.section-talent .talent-search-card-actions > div { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: flex-start; gap: 8px; text-align: left !important; }
 }
 /* Tablet widths: the GIG columns stack, so the section scrolls in one region instead of nested panes */
 @media (min-width: 601px) and (max-width: 1023px) {

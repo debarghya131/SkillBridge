@@ -88,6 +88,7 @@ test('orphaned applications are hidden when their company was deleted outside th
     },
   }
   t.mock.method(Student, 'findOne', async () => student)
+  t.mock.method(Company, 'findById', async () => null)
   t.mock.method(Company, 'find', query => ({
     select: () => ({ lean: async () => query._id ? [] : [] }),
   }))
