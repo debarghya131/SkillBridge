@@ -80,7 +80,9 @@ export default function SkillHub({ onProfileChange }) {
   const [filter, setFilter] = useState('all')
   const [mobileTabsOpen, setMobileTabsOpen] = useState(false)
   const [pendingTask, setPendingTask] = useState(null)
-  const [showDemo, setShowDemo] = useState(false)
+  // Keep the guided examples visible on first visit; students can turn them
+  // off whenever they want to focus only on their own records.
+  const [showDemo, setShowDemo] = useState(true)
   const loadVersion = useRef(0)
 
   useEffect(() => {

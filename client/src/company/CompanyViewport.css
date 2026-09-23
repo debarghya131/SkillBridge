@@ -563,7 +563,7 @@
 .company-viewport .payment-compact-header .payment-stat { min-height: 48px; flex-direction: row; justify-content: center; gap: 7px; padding: 6px 10px !important; text-align: left; }
 .company-viewport .payment-compact-header .payment-stat > div { display: flex; align-items: center; gap: 6px; }
 .company-viewport .payment-compact-header .payment-stat div > span { margin-top: 0; }
-.company-viewport .payment-compact-header .payment-stat strong { font-size: 16px; overflow-wrap: anywhere; }
+.company-viewport .payment-compact-header .payment-stat strong { font-size: 16px; white-space: nowrap; overflow-wrap: normal; }
 .company-viewport .payment-compact-header .payment-stat div > span { font-size: 10px; }
 .company-viewport .payment-compact-header .payment-stat-icon { width: 24px; height: 24px; flex-basis: 24px; }
 @media (max-width: 900px) {
@@ -573,6 +573,20 @@
   .gig-inline-stats, .payment-compact-header .payment-summary, .task-center-inline-stats { grid-column: 1 / -1; grid-row: 2; }
 }
 @media (max-width: 600px) {
+  /* Keep each payment value intact on narrow phones.  The previous inline
+     layout allowed the final digit of an INR total to wrap on its own line. */
+  .company-viewport .payment-compact-header .payment-stat > div {
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+  .company-viewport .payment-compact-header .payment-stat div > span {
+    margin-top: 2px;
+    line-height: 1.2;
+  }
   .company-viewport.section-gig .gig-inline-stats,
   .company-viewport .task-center-inline-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .company-viewport.section-gig .gig-inline-stats small { overflow-wrap: anywhere; }

@@ -52,6 +52,17 @@ function toPlainGigStateItem(item) {
   return item && typeof item.toObject === 'function' ? item.toObject() : item
 }
 
+function hasPersistedCompanyId(value) {
+  return /^[a-f\d]{24}$/i.test(String(value || ''))
+}
+
+async function findExistingCompanyIds(companyIds) {
+  const ids = [...new Set(companyIds.filter(hasPersistedCompanyId).map(String))]
+  if (!ids.length) return new Set()
+  const companies = await Company.find({ _id: { $in: ids } }).select('_id').lean()
+  return new Set(companies.map(company => String(company._id)))
+}
+
 function normalizeOpportunityStatusOverrides(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
@@ -227,11 +238,30 @@ async function buildGigState(student) {
   const storedAppliedGigs = Array.isArray(student.gigState?.appliedGigs)
     ? student.gigState.appliedGigs.map(toPlainGigStateItem).filter(item => Number.isFinite(Number(item?.id)))
     : []
+  // An account can occasionally be removed directly from MongoDB, bypassing
+  // the account-deletion endpoint and its dependent-record cleanup. Do not
+  // expose those orphaned applications or invitations to a student.
+  const referencedCompanyIds = [
+    ...storedOpportunities.map(item => item?.companyId),
+    ...storedAppliedGigs.map(item => item?.sourceCompanyId || item?.companyId),
+  ]
+  const existingCompanyIds = await findExistingCompanyIds(referencedCompanyIds)
+  const belongsToDeletedCompany = item => {
+    const companyId = item?.companyId || item?.sourceCompanyId
+    return hasPersistedCompanyId(companyId) && !existingCompanyIds.has(String(companyId))
+  }
+  const liveStoredOpportunities = storedOpportunities.filter(item => !belongsToDeletedCompany(item))
+  const liveStoredAppliedGigs = storedAppliedGigs.filter(item => !belongsToDeletedCompany(item))
+  const removedAppliedGigIds = new Set(
+    storedAppliedGigs
+      .filter(belongsToDeletedCompany)
+      .map(item => Number(item.id)),
+  )
   const appliedManagedGigIds = managedGigs
     .filter(gig => gig.isApplied)
     .map(gig => Number(gig.id))
     .filter(Number.isFinite)
-  const legacyStatuses = storedOpportunities.reduce((acc, item) => {
+  const legacyStatuses = liveStoredOpportunities.reduce((acc, item) => {
       if (item && Number.isFinite(Number(item.id)) && typeof item.status === 'string') {
         acc[item.id] = item.status
       }
@@ -254,9 +284,9 @@ async function buildGigState(student) {
     }
   })
 
-  const storedById = new Map(storedOpportunities.map(item => [Number(item.id), item]))
+  const storedById = new Map(liveStoredOpportunities.map(item => [Number(item.id), item]))
   const defaultOpportunityIds = new Set(defaults.opportunities.map(item => item.id))
-  const normalizedStoredOpportunities = storedOpportunities
+  const normalizedStoredOpportunities = liveStoredOpportunities
     .map(item => {
       const managedGig = managedGigs.find(gig => (
         String(gig.sourceCompanyId || '') === String(item.companyId || '')
@@ -341,9 +371,9 @@ async function buildGigState(student) {
     opportunities,
     browseGigs: [...defaults.browseGigs, ...managedGigs],
     savedGigIds,
-    appliedGigIds: [...new Set([...appliedGigIds, ...appliedManagedGigIds])],
+    appliedGigIds: [...new Set([...appliedGigIds.filter(id => !removedAppliedGigIds.has(id)), ...appliedManagedGigIds])],
     appliedGigs: mergeUniqueGigs([
-      ...storedAppliedGigs,
+      ...liveStoredAppliedGigs,
       ...[...defaults.browseGigs, ...managedGigs].filter(gig => appliedGigIds.includes(Number(gig.id)) || gig.isApplied),
     ]),
     activeGigBase: mergeUniqueGigs([...bridgeActiveGigs, ...storedActiveGigs, ...defaults.activeGigBase]),

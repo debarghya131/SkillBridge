@@ -161,7 +161,7 @@ function GigCard({ gig, isApplied, isSaved, onApply, onToggleSave, onViewCompany
 function CompanyDetailsModal({ gig, onClose }) {
   const [response, setResponse] = useState(null)
   const [retry, setRetry] = useState(0)
-  const companyKey = gig?.companyId || gig?.company
+  const companyKey = gig?.companyId || gig?.sourceCompanyId || gig?.company
   useEffect(() => {
     if (!companyKey) return undefined
     let cancelled = false

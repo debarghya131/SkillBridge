@@ -504,16 +504,25 @@
   .dashboard-metric-tooltip::after { display: none; }
 
   .dashboard-mobile-metric-detail {
+    position: fixed;
+    top: 60px;
+    right: 12px;
+    z-index: 150;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
+    width: min(300px, calc(100vw - 24px));
+    box-sizing: border-box;
     gap: 2px 8px;
     align-items: center;
     padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
     border-bottom: 1px solid var(--border);
     background: #f8fafc;
     color: #475569;
     font-size: 11px;
     line-height: 1.35;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .16);
   }
 
   .dashboard-mobile-metric-detail svg { grid-row: 1 / span 2; color: #4f46e5; }

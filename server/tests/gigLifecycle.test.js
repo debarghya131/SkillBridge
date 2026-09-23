@@ -77,6 +77,28 @@ test('applied GIG history remains visible after the listing is no longer browsea
   assert.equal(state.appliedGigs[0].title, 'Closed listing')
 })
 
+test('orphaned applications are hidden when their company was deleted outside the app', async t => {
+  const deletedCompanyId = '507f1f77bcf86cd799439011'
+  const student = {
+    _id: 'student-orphan',
+    sessions: [{ token: 'orphan-session', createdAt: new Date() }],
+    gigState: {
+      appliedGigIds: [99],
+      appliedGigs: [{ id: 99, sourceCompanyId: deletedCompanyId, title: 'Orphaned GIG', company: 'Deleted company' }],
+    },
+  }
+  t.mock.method(Student, 'findOne', async () => student)
+  t.mock.method(Company, 'find', query => ({
+    select: () => ({ lean: async () => query._id ? [] : [] }),
+  }))
+  t.mock.method(TaskSubmission, 'find', () => ({ sort: async () => [] }))
+
+  const state = await getStudentGigState('orphan-session')
+
+  assert.equal(state.appliedGigs.filter(item => !item.demoData).length, 0)
+  assert.equal(state.appliedGigIds.includes(99), false)
+})
+
 test('accepting a Mongoose-backed opportunity preserves its real opportunity id', async t => {
   const student = new Student({
     name: 'Test Student',

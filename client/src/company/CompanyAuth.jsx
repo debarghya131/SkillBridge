@@ -101,7 +101,7 @@ export default function CompanyAuth() {
 
       setCompanySessionToken(result.token)
       toast.success('Business account created successfully.', { title: 'Company Onboarded' })
-      navigate('/company/dashboard', { state: { company: result.company } })
+      window.location.assign('/company/dashboard')
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -130,7 +130,7 @@ export default function CompanyAuth() {
 
       setCompanySessionToken(result.token)
       toast.success('Signed in successfully.', { title: 'Company Session Active' })
-      navigate('/company/dashboard', { state: { company: result.company } })
+      window.location.assign('/company/dashboard')
     } catch (error) {
       setServerError(error.message)
     } finally {

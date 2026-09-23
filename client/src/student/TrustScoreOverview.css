@@ -61,6 +61,8 @@
 @media(max-width:900px) { .trust-score-band { grid-template-columns:1fr; gap:24px; }.trust-metrics>div:first-child { border:0; padding-left:0; }.trust-detail-columns { gap:24px; }.trust-calculation { padding-left:24px; } }
 @media(max-width:560px) { .trust-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }.trust-metrics>div { padding-left:0; border:0; }.trust-metrics dd { font-size:21px; }.trust-roadmap { grid-template-columns:repeat(2,minmax(0,1fr)); }.trust-detail-columns { grid-template-columns:1fr; }.trust-calculation { padding:20px 0 0; border-left:0; border-top:1px solid #dfe6ef; }.trust-overview h1 { font-size:23px; }.trust-view-tabs { gap:16px; }.trust-ledger-heading>svg { display:none; }.trust-score-number { font-size:34px; } }
 @media(max-width:600px) {
+  /* Keep the fixed criteria sheet tied to the device viewport on mobile. */
+  .trustscore-criteria-shell { width:100vw !important; height:100dvh !important; inset:0 !important; z-index:2000 !important; }
   .student-section-trustscore .trustscore-workspace,
   .student-section-trustscore .trust-overview { min-width:0; width:100%; }
   .trust-overview-heading { align-items:flex-start; margin-bottom:16px; gap:10px; }

@@ -122,7 +122,7 @@ export default function StudentAuth() {
 
       setStudentSessionToken(result.token)
       toast.success('Student account created successfully.', { title: 'Welcome to SkillBridge' })
-      navigate('/student/dashboard', { state: { student: result.student } })
+      window.location.assign('/student/dashboard')
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -154,7 +154,7 @@ export default function StudentAuth() {
 
       setStudentSessionToken(result.token)
       toast.success('Signed in successfully.', { title: 'Student Session Active' })
-      navigate('/student/dashboard', { state: { student: result.student } })
+      window.location.assign('/student/dashboard')
     } catch (error) {
       setServerError(error.message)
     } finally {

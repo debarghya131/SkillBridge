@@ -1035,11 +1035,11 @@ function TrustScoreSection({ trustScore }) {
   if (scoreError) return <div role="alert" className="work-error">{scoreError}<button className="btn-secondary" onClick={() => setRetry(value => value + 1)}>Retry</button></div>
   return (
     <div className="trustscore-workspace">
-      {showCriteria && (
+      {showCriteria && createPortal(
         <div
           className="responsive-modal-shell trustscore-criteria-shell"
           style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
+            position: 'fixed', inset: 0, zIndex: 2000,
             background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
           }}
@@ -1066,7 +1066,8 @@ function TrustScoreSection({ trustScore }) {
             </button>
             <TrustScoreCriteriaContent />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <StudentTrustOverview score={displayedTrustScore} policy={trustScoreData?.policy} earnedPoints={earnedPoints}
