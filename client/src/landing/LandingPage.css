@@ -220,11 +220,8 @@
   justify-content: center;
   margin-bottom: 14px;
 }
-.sb-status-dot {
-  width: 7px;
-  height: 7px;
-  background: #27815b;
-  border-radius: 50%;
+.sb-hero-eyebrow-icon {
+  color: #27815b;
 }
 .sb-hero h1 {
   font-size: 80px;
@@ -255,6 +252,23 @@
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
+}
+.sb-demo-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 640px;
+  margin: 14px auto 0;
+  color: var(--sb-muted);
+  font-size: 12px;
+  line-height: 1.5 !important;
+}
+.sb-demo-note svg {
+  color: var(--sb-green);
+}
+.sb-demo-note strong {
+  color: var(--sb-ink);
 }
 .sb-hero-product {
   max-width: 940px;
@@ -306,15 +320,6 @@
     transform: translateY(0) scale(1);
   }
 }
-@keyframes sb-status-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(39, 129, 91, 0.25);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(39, 129, 91, 0);
-  }
-}
 @media (prefers-reduced-motion: no-preference) {
   .sb-hero-copy .sb-eyebrow,
   .sb-hero h1,
@@ -337,9 +342,6 @@
   }
   .sb-hero-product {
     animation: sb-hero-preview-reveal 0.75s cubic-bezier(0.22, 1, 0.36, 1) 520ms both;
-  }
-  .sb-status-dot {
-    animation: sb-status-pulse 2.4s ease-in-out 900ms infinite;
   }
 }
 .sb-section-heading {
@@ -1265,6 +1267,14 @@
 .sb-final-cta p {
   margin: 22px 0;
 }
+.sb-final-cta .sb-demo-note {
+  color: #e3eee6;
+  margin: 16px auto 0;
+}
+.sb-final-cta .sb-demo-note strong,
+.sb-final-cta .sb-demo-note svg {
+  color: #dcefa1;
+}
 @media (prefers-reduced-motion: no-preference) {
   .sb-final-cta--animated.is-visible .sb-eyebrow,
   .sb-final-cta--animated.is-visible h2,
@@ -1351,7 +1361,7 @@
 }
 .sb-footer-grid {
   display: grid;
-  grid-template-columns: 1.7fr 1fr 1fr 1fr;
+  grid-template-columns: 1.5fr repeat(4, 1fr);
   gap: 36px;
 }
 .sb-footer-grid > div > p {
@@ -1425,9 +1435,6 @@
   }
   .sb-footer-grid {
     grid-template-columns: 1.5fr 1fr 1fr;
-  }
-  .sb-footer-grid > nav:last-child {
-    grid-column: 2 / 4;
   }
 }
 @media (max-width: 800px) {
@@ -1514,6 +1521,10 @@
   }
   .sb-hero .sb-actions {
     gap: 8px;
+  }
+  .sb-demo-note {
+    align-items: flex-start;
+    text-align: left;
   }
   .sb-hero .sb-button {
     padding: 10px 12px;
@@ -1661,9 +1672,6 @@
     gap: 32px 18px;
   }
   .sb-footer-grid > div {
-    grid-column: 1 / -1;
-  }
-  .sb-footer-grid > nav:last-child {
     grid-column: 1 / -1;
   }
   .sb-footer nav a {

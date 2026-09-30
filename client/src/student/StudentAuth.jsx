@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { setStudentSessionToken, signInStudent, signUpStudent } from './studentApi'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Info } from 'lucide-react'
+import { getStudentSessionToken, setStudentSessionToken, signInStudent, signUpStudent } from './studentApi'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 import { toast } from '../ui/toast'
 
@@ -54,7 +55,7 @@ function LanguagePicker({ value, onChange }) {
     if (!pickerRef.current?.contains(document.activeElement)) setOpen(false)
   })
   return <div ref={pickerRef} style={{ position: 'relative' }} onBlur={closeWhenFocusLeaves}>
-    <button type="button" onClick={() => setOpen(current => !current)} aria-haspopup="listbox" aria-expanded={open} style={{ ...inputStyle, appearance: 'none', textAlign: 'left', background: 'var(--white)', color: value ? 'var(--text)' : 'var(--muted)', cursor: 'pointer' }}>
+    <button type="button" onClick={() => setOpen(current => !current)} aria-label="Preferred language" aria-haspopup="listbox" aria-expanded={open} style={{ ...inputStyle, appearance: 'none', textAlign: 'left', background: 'var(--white)', color: value ? 'var(--text)' : 'var(--muted)', cursor: 'pointer' }}>
       {value || 'Select language...'}<span style={{ float: 'right', color: 'var(--muted)' }}>v</span>
     </button>
     {open && <div role="listbox" aria-label="Preferred language" style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: 'calc(100% + 4px)', maxHeight: 210, overflowY: 'auto', padding: 4, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--white)', boxShadow: '0 10px 24px rgba(15,23,42,.16)' }}>
@@ -80,6 +81,8 @@ export default function StudentAuth() {
   const [showPassword, setShowPassword] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  if (getStudentSessionToken()) return <Navigate to="/student/dashboard" replace />
 
   const update = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -122,7 +125,7 @@ export default function StudentAuth() {
 
       setStudentSessionToken(result.token)
       toast.success('Student account created successfully.', { title: 'Welcome to SkillBridge' })
-      window.location.assign('/student/dashboard')
+      navigate('/student/dashboard', { replace: true })
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -154,7 +157,7 @@ export default function StudentAuth() {
 
       setStudentSessionToken(result.token)
       toast.success('Signed in successfully.', { title: 'Student Session Active' })
-      window.location.assign('/student/dashboard')
+      navigate('/student/dashboard', { replace: true })
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -188,7 +191,7 @@ export default function StudentAuth() {
               {mode === 'signup' ? 'Create Student Account' : 'Student Sign In'}
             </h2>
             <p style={{ color: 'var(--muted)', fontSize: 12 }}>
-              {mode === 'signup' ? 'Join thousands of students finding real opportunities' : 'Welcome back! Continue where you left off'}
+              {mode === 'signup' ? 'Build evidence of your skills and find real opportunities' : 'Welcome back! Continue where you left off'}
             </p>
           </div>
 
@@ -197,7 +200,7 @@ export default function StudentAuth() {
               {/* 1. Name */}
               <Field label="Full Name" error={errors.name} required>
                 <input
-                  type="text" placeholder="e.g. Riya Sharma"
+                  type="text" aria-label="Full name" placeholder="e.g. Riya Sharma"
                   value={form.name} onChange={e => update('name', e.target.value)}
                   style={inputStyle} onFocus={focusStyle} onBlur={blurStyle}
                 />
@@ -211,7 +214,7 @@ export default function StudentAuth() {
                 />
                 {contactMethod === 'email' ? (
                   <input
-                    type="email" placeholder="yourname@college.edu"
+                    type="email" aria-label="College email" placeholder="yourname@college.edu"
                     value={form.email} onChange={e => update('email', e.target.value)}
                     style={inputStyle} onFocus={focusStyle} onBlur={blurStyle}
                   />
@@ -219,7 +222,7 @@ export default function StudentAuth() {
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 14, fontWeight: 600 }}>+91</span>
                     <input
-                      type="tel" placeholder="10-digit mobile number"
+                      type="tel" aria-label="Phone number" placeholder="10-digit mobile number"
                       value={form.phone} onChange={e => update('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
                       style={{ ...inputStyle, paddingLeft: 46 }} onFocus={focusStyle} onBlur={blurStyle}
                     />
@@ -227,15 +230,15 @@ export default function StudentAuth() {
                 )}
               </Field>
 
-              {/* 3. ID verification */}
-              <Field label="Identity Verification" error={errors.aadhaarNumber || errors.digilockerToken} required>
+              {/* 3. Identity reference */}
+              <Field label="Identity Reference" error={errors.aadhaarNumber || errors.digilockerToken} required>
                 <TogglePill
                   options={[{ value: 'aadhaar', label: '🪪 Aadhaar' }, { value: 'digilocker', label: '🔐 DigiLocker' }]}
                   value={idMethod} onChange={setIdMethod}
                 />
                 {idMethod === 'aadhaar' ? (
                   <input
-                    type="text" placeholder="1234 5678 9012"
+                    type="text" aria-label="Aadhaar reference" placeholder="1234 5678 9012"
                     value={form.aadhaarNumber}
                     onChange={e => {
                       const raw = e.target.value.replace(/\D/g, '').slice(0, 12)
@@ -246,7 +249,7 @@ export default function StudentAuth() {
                 ) : (
                   <div>
                     <input
-                      type="text" placeholder="DigiLocker username / ID"
+                      type="text" aria-label="DigiLocker username or ID" placeholder="DigiLocker username / ID"
                       value={form.digilockerToken} onChange={e => update('digilockerToken', e.target.value)}
                       style={{ ...inputStyle, marginBottom: 6 }} onFocus={focusStyle} onBlur={blurStyle}
                     />
@@ -255,7 +258,7 @@ export default function StudentAuth() {
                       padding: '6px 10px', background: 'var(--primary-light)',
                       borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
                     }}>
-                      🔗 You'll be redirected to DigiLocker for verification
+                      🔗 Your DigiLocker reference is stored securely; live verification is not connected.
                     </div>
                   </div>
                 )}
@@ -269,7 +272,7 @@ export default function StudentAuth() {
               {/* 5. Location */}
               <Field label="Location" error={errors.location} required>
                 <input
-                  type="text" placeholder="City, State (e.g. Ranchi, Jharkhand)"
+                  type="text" aria-label="Location" placeholder="City, State (e.g. Ranchi, Jharkhand)"
                   value={form.location} onChange={e => update('location', e.target.value)}
                   style={inputStyle} onFocus={focusStyle} onBlur={blurStyle}
                 />
@@ -279,13 +282,13 @@ export default function StudentAuth() {
               <Field label="Password" error={errors.password} required>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? 'text' : 'password'} aria-label="Create password"
                     placeholder="Minimum 8 characters"
                     value={form.password} onChange={e => update('password', e.target.value)}
                     style={{ ...inputStyle, paddingRight: 44 }} onFocus={focusStyle} onBlur={blurStyle}
                   />
                   <button
-                    type="button" onClick={() => setShowPassword(v => !v)}
+                    type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, cursor: 'pointer', padding: 0 }}
                   >{showPassword ? '🙈' : '👁️'}</button>
                 </div>
@@ -319,15 +322,21 @@ export default function StudentAuth() {
               )}
 
               <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
-                By registering you agree to our Terms of Service and Privacy Policy
+                By registering, you agree to the <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Terms of Service</Link> and acknowledge the <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>Privacy Policy</Link>.
               </p>
               <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>Already registered?{' '}<button onClick={() => navigate('/login')} style={{ background: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 700 }}>Log in</button></p>
             </div>
           ) : (
             <div>
+              <aside aria-label="About demo examples" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 12px', marginBottom: 18, border: '1px solid #DDE6FA', borderRadius: 8, background: '#F5F8FF', color: 'var(--text)' }}>
+                <Info size={17} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: 'var(--primary)' }} />
+                <p style={{ fontSize: 12, lineHeight: 1.5, margin: 0 }}>
+                  <strong>Demo examples are read-only, not demo accounts.</strong> Sign in with your own account. Demo profiles and GIGs do not affect your TrustScore, applications, or payment totals.
+                </p>
+              </aside>
               <Field label="Email or Phone" error={errors.signInContact} required>
                 <input
-                  type="text" placeholder="Enter your registered email or phone"
+                  type="text" aria-label="Email or phone" placeholder="Enter your registered email or phone"
                   value={form.signInContact} onChange={e => {
                     update('signInContact', e.target.value)
                     setErrors(current => ({ ...current, signInContact: '' }))
@@ -340,25 +349,19 @@ export default function StudentAuth() {
               <Field label="Password" error={errors.signInPassword} required>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? 'text' : 'password'} aria-label="Password"
                     placeholder="Your password"
                     value={form.signInPassword} onChange={e => update('signInPassword', e.target.value)}
                     style={{ ...inputStyle, paddingRight: 44 }} onFocus={focusStyle} onBlur={blurStyle}
                   />
                   <button
-                    type="button" onClick={() => setShowPassword(v => !v)}
+                    type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, cursor: 'pointer', padding: 0 }}
                   >{showPassword ? '🙈' : '👁️'}</button>
                 </div>
               </Field>
 
-              <div style={{ textAlign: 'right', marginBottom: 20 }}>
-                <button style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Forgot password?
-                </button>
-              </div>
-
-              <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '13px' }}
+              <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '13px', marginTop: 10 }}
                 onClick={handleSignin} disabled={isSubmitting}>
                 {isSubmitting ? 'Signing In...' : 'Sign In →'}
               </button>

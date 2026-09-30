@@ -4,14 +4,16 @@ import {
   ArrowDown,
   ArrowUpRight,
   BriefcaseBusiness,
-  GraduationCap
+  GraduationCap,
+  Info,
+  Sparkles
 } from 'lucide-react'
 export default function Hero() {
   return (
     <section id="home" className="sb-hero" aria-labelledby="sb-hero-title">
       <div className="sb-wrap sb-hero-copy">
         <p className="sb-eyebrow">
-          <span className="sb-status-dot" />
+          <Sparkles className="sb-hero-eyebrow-icon" size={15} aria-hidden="true" />
           Built for ability. Open to opportunity.
         </p>
         <h1 id="sb-hero-title">
@@ -41,6 +43,7 @@ export default function Hero() {
             <ArrowUpRight size={18} />
           </Link>
         </div>
+        <p className="sb-demo-note"><Info size={16} aria-hidden="true" /><span><strong>Demo examples are read-only.</strong> They do not affect your TrustScore, applications, or payment totals.</span></p>
       </div>
       <div className="sb-hero-product sb-wrap">
         <div className="sb-preview-label">

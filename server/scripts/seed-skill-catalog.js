@@ -1,6 +1,6 @@
 const crypto = require('crypto')
 const { parseArgs } = require('node:util')
-const { getEnvConfig } = require('../config/env')
+const { databaseNameFromMongoUrl, getEnvConfig, isValidDatabaseName } = require('../config/env')
 const { connectToDatabase, disconnectFromDatabase } = require('../config/db')
 const { buildDemoSkillCatalog } = require('../config/demoSkillCatalog')
 const { normalizeCatalogPayload } = require('../controllers/adminController')
@@ -17,17 +17,20 @@ async function main() {
   const { values } = parseArgs({
     options: {
       'admin-email': { type: 'string', default: 'admin@example.com' },
+      'db-name': { type: 'string' },
       confirm: { type: 'boolean', default: false },
     },
   })
   if (!values.confirm) {
-    throw new Error('Usage: npm run seed:skill-catalog -- --admin-email admin@example.com --confirm')
+    throw new Error('Usage: npm run seed:skill-catalog -- --admin-email admin@example.com --db-name skillbridge --confirm')
   }
 
   const adminEmail = values['admin-email'].trim().toLowerCase()
   const config = getEnvConfig()
+  const databaseName = values['db-name']?.trim() || config.mongoDbName || databaseNameFromMongoUrl(config.mongoUrl)
+  if (!isValidDatabaseName(databaseName)) throw new Error('Choose an explicit valid MongoDB database with --db-name or MONGO_DB_NAME')
   try {
-    await connectToDatabase(config.mongoUrl, config)
+    await connectToDatabase(config.mongoUrl, { ...config, mongoDbName: databaseName, autoCreate: false, autoIndex: false })
     const admin = await Reviewer.findOne({ email: adminEmail, role: 'admin', active: true })
     if (!admin) throw new Error(`Active admin account not found: ${adminEmail}`)
 
@@ -54,7 +57,7 @@ async function main() {
     }
 
     const publishedTotal = await SkillCatalog.countDocuments({ status: 'published' })
-    console.log(JSON.stringify({ ...result, publishedTotal }, null, 2))
+    console.log(JSON.stringify({ database: databaseName, ...result, publishedTotal }, null, 2))
   } finally {
     await disconnectFromDatabase()
   }

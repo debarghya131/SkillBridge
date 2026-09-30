@@ -191,6 +191,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
   const [localState, setLocalState] = useState(() => mergeCompanyTaskLibraryState(taskLibraryState))
   const [showForm, setShowForm] = useState(false)
   const [view, setView] = useState('Interview Tasks')
+  const [showDemo, setShowDemo] = useState(true)
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [selectedTaskId, setSelectedTaskId] = useState(null)
@@ -206,11 +207,13 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
   }, [taskLibraryState])
 
   const gigs = Array.isArray(gigManagementState?.gigs) ? gigManagementState.gigs : []
+  const visibleGigs = showDemo ? gigs : gigs.filter(gig => !gig.demoData)
   const realTasks = localState.tasks.filter(task => !task.demoData)
   const demoTasks = localState.tasks.filter(task => task.demoData)
+  const visibleTasks = showDemo ? localState.tasks : realTasks
   const realSubmissions = taskSubmissions.filter(submission => !submission.demoData)
-  const selectedTask = localState.tasks.find(task => task.id === selectedTaskId) || null
-  const selectedGig = gigs.find(gig => String(gig.id) === String(selectedGigId)) || null
+  const selectedTask = visibleTasks.find(task => task.id === selectedTaskId) || null
+  const selectedGig = visibleGigs.find(gig => String(gig.id) === String(selectedGigId)) || null
   const interviewSubmissions = taskSubmissions.flatMap(submission => {
     if (submission.interviewSubmission) return [{ ...submission, ...submission.interviewSubmission, status: 'selected', workBrief: '', interviewSubmission: null, archived: true }]
     if (['work_started', 'delivered', 'approved', 'completed'].includes(submission.status)
@@ -218,7 +221,8 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
     return [submission]
   })
   const reviewQueue = realSubmissions.filter(submission => submission.status === 'submitted')
-  const visibleSubmissions = interviewSubmissions.filter(submission => (reviewFilter === 'All' || submission.status === reviewFilter)
+  const visibleSubmissions = interviewSubmissions.filter(submission => (showDemo || !submission.demoData)
+    && (reviewFilter === 'All' || submission.status === reviewFilter)
     && `${submission.studentName} ${submission.gigTitle} ${submission.taskTitle}`.toLowerCase().includes(search.toLowerCase()))
   const visibleRealSubmissions = visibleSubmissions.filter(submission => !submission.demoData)
   const visibleDemoSubmissions = visibleSubmissions.filter(submission => submission.demoData)
@@ -232,8 +236,18 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
       id: applicant.studentId || applicant.id,
       name: applicant.name || applicant.studentName || 'Applicant',
       demoData: applicant.demoData === true,
-    })).filter(applicant => applicant.id)
-  }, [gigManagementState?.applicantsByGig, selectedGig])
+    })).filter(applicant => applicant.id && (showDemo || !applicant.demoData))
+  }, [gigManagementState?.applicantsByGig, selectedGig, showDemo])
+
+  const toggleDemo = checked => {
+    setShowDemo(checked)
+    if (!checked) setSelectedStudentId('')
+    if (!checked && (selectedTask?.demoData || selectedGig?.demoData)) {
+      setSelectedTaskId(null)
+      setSelectedGigId('')
+      setAssignmentMessage('')
+    }
+  }
 
   const updateState = async nextState => {
     const mergedState = mergeCompanyTaskLibraryState(nextState)
@@ -361,6 +375,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
           </div>
         ))}
       </div>
+        <label className="task-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => toggleDemo(event.target.checked)} />Demo examples</label>
         <button className="btn-primary task-create-button" onClick={openCreateForm} disabled={Boolean(busyAction)}>Create Task</button>
       </header>
 
@@ -370,10 +385,10 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
 
       {view === 'Interview Tasks' && <div className="responsive-split-main task-assignment-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 0.9fr', gap: 16, marginBottom: 20 }}>
         <section className="task-template-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Saved Interview Task Templates</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{realTasks.length} saved{demoTasks.length ? ` · ${demoTasks.length} demo examples` : ''}</span></div>
-          {localState.tasks.length === 0 && <div style={{ padding: '34px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Create a practical work sample to send to a GIG applicant.</div>}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Saved Interview Task Templates</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{realTasks.length} saved{showDemo && demoTasks.length ? ` · ${demoTasks.length} demo examples` : ''}</span></div>
+          {visibleTasks.length === 0 && <div style={{ padding: '34px 12px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Create a practical work sample to send to a GIG applicant.</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {localState.tasks.map(task => (
+            {visibleTasks.map(task => (
               <div key={task.id} style={{ border: `1px solid ${selectedTaskId === task.id ? '#818CF8' : 'var(--border)'}`, background: selectedTaskId === task.id ? '#F8FAFF' : 'var(--white)', borderRadius: 8, padding: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div><div style={{ fontWeight: 800, color: 'var(--dark)', marginBottom: 5 }}>{task.title}{task.demoData && <span className="demo-data-badge">Demo</span>}</div><div style={{ fontSize: 12, color: 'var(--muted)' }}>{getCompanyTaskTypeLabel(task.type)} · Due {formatDate(task.deadline)} · {task.points} points</div></div>
@@ -394,7 +409,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
             <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 9, padding: '10px 12px', fontSize: 13, fontWeight: 800, color: '#3730A3' }}>{selectedTask.title}</div>
             <div className="task-assignment-field"><span>GIG</span><TaskTypePicker inline label="GIG" value={selectedGigId}
               onChange={value => { setSelectedGigId(value); setSelectedStudentId('') }}
-              options={[{ value: '', label: 'Choose a GIG' }, ...gigs.filter(gig => gig.status !== 'Closed').map(gig => ({ value: String(gig.id), label: gig.title }))]} /></div>
+              options={[{ value: '', label: 'Choose a GIG' }, ...visibleGigs.filter(gig => gig.status !== 'Closed').map(gig => ({ value: String(gig.id), label: gig.title }))]} /></div>
             <div className="task-assignment-field"><span>Applicant</span><TaskTypePicker key={selectedGigId} inline label="Applicant" value={selectedStudentId}
               onChange={setSelectedStudentId} disabled={!selectedGigId || !applicantOptions.length}
               options={[{ value: '', label: selectedGig ? (applicantOptions.length ? 'Choose an applicant' : 'No applicants yet') : 'Choose a GIG first' }, ...applicantOptions.map(applicant => ({ value: String(applicant.id), label: applicant.name }))]} /></div>
@@ -408,7 +423,7 @@ export default function TaskCenter({ taskLibraryState, onSaveState, gigManagemen
       </div>}
 
       {view === 'Interview Submissions' && <section className="task-submission-panel" style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Interview Task Submissions</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{visibleRealSubmissions.length} real submissions{visibleDemoSubmissions.length ? ` · ${visibleDemoSubmissions.length} demo examples` : ''}</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><div style={{ fontSize: 17, fontWeight: 800 }}>Interview Task Submissions</div><span style={{ fontSize: 12, color: 'var(--muted)' }}>{visibleRealSubmissions.length} real submissions{showDemo && visibleDemoSubmissions.length ? ` · ${visibleDemoSubmissions.length} demo examples` : ''}</span></div>
         <div className="work-form-grid" style={{ marginBottom: 12 }}>
           <input type="search" aria-label="Search submissions" placeholder="Search student or interview task" value={search} onChange={event => setSearch(event.target.value)} />
           <TaskTypePicker

@@ -29,6 +29,12 @@ test('production database options use bounded pools and explicit index deploymen
   assert.equal(options.serverSelectionTimeoutMS, 60000)
 })
 
+test('maintenance scripts can disable automatic collection and index creation in development', () => {
+  const options = buildDatabaseOptions({ nodeEnv: 'development', autoCreate: false, autoIndex: false })
+  assert.equal(options.autoCreate, false)
+  assert.equal(options.autoIndex, false)
+})
+
 test('database selection is explicit and MongoDB URI paths are recognized', () => {
   assert.equal(buildDatabaseOptions({ mongoDbName: 'skillbridge' }).dbName, 'skillbridge')
   assert.equal(databaseNameFromMongoUrl('mongodb+srv://user:pass@example.mongodb.net/skillbridge?retryWrites=true'), 'skillbridge')

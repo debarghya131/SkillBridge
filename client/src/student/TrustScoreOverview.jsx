@@ -4,13 +4,14 @@ import './TrustScoreOverview.css'
 
 export default function TrustScoreOverview({ score, policy, earnedPoints, penalties, approvedActions, activity, factors, demoActivity = [], demoPenalties = [], onCriteria, formatDate }) {
   const [view, setView] = useState('Activity')
+  const [showDemo, setShowDemo] = useState(true)
   const tiers = policy?.tiers || []
   const realRows = view === 'Activity'
     ? activity
     : factors.filter(item => view === 'Penalties'
       ? item.category === 'Penalty' && item.earned
       : item.category !== 'Penalty')
-  const previewRows = view === 'Activity'
+  const previewRows = !showDemo ? [] : view === 'Activity'
     ? [...demoActivity].sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt))
     : view === 'Penalties' ? demoPenalties : []
   const rows = [...realRows, ...previewRows]
@@ -45,7 +46,7 @@ export default function TrustScoreOverview({ score, policy, earnedPoints, penalt
       </dl></section>
     </div>
     </div>
-    <section className="trust-ledger"><div className="trust-ledger-heading"><div className="trust-view-tabs" role="group" aria-label="TrustScore views">{['Activity', 'Opportunities', 'Penalties'].map(tab => <button key={tab} aria-pressed={view === tab} onClick={() => setView(tab)}>{tab}<span>{tab === 'Activity' ? activity.length : tab === 'Penalties' ? incurredPenaltyCount : factors.filter(item => item.category !== 'Penalty').length}</span></button>)}</div><Activity size={18}/></div>
+    <section className="trust-ledger"><div className="trust-ledger-controls"><label className="trust-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => setShowDemo(event.target.checked)}/>Demo examples</label></div><div className="trust-ledger-heading"><div className="trust-view-tabs" role="group" aria-label="TrustScore views">{['Activity', 'Opportunities', 'Penalties'].map(tab => <button key={tab} aria-pressed={view === tab} onClick={() => setView(tab)}>{tab}<span>{tab === 'Activity' ? activity.length : tab === 'Penalties' ? incurredPenaltyCount : factors.filter(item => item.category !== 'Penalty').length}</span></button>)}</div><Activity size={18}/></div>
       <div className="trust-ledger-table" role="region" aria-label={view} tabIndex={0}><table><thead><tr><th>{view === 'Activity' ? 'Recent activity' : 'Score factor'}</th><th>Category</th><th>{view === 'Activity' ? 'Date' : 'Status'}</th><th>Base points</th></tr></thead><tbody>{rows.map(item => <tr key={item.id || item.label}>
         <td><div className="trust-event-label"><span className={`trust-event-icon ${item.points < 0 ? 'is-negative' : ''}`}>{item.points < 0 ? <ArrowDownRight size={17}/> : <ArrowUpRight size={17}/>}</span><div><strong>{item.label}{item.demoData && <span className="demo-data-badge">Demo</span>}</strong>{view !== 'Activity' && <p>{item.desc}</p>}</div></div></td><td data-label="Category"><span className="trust-category">{item.category}</span></td><td data-label={view === 'Activity' ? 'Date' : 'Status'}>{view === 'Activity' ? formatDate(item.occurredAt) : item.demoData ? 'Demo preview' : item.category === 'Penalty' ? item.earned ? 'Recorded' : 'Not incurred' : item.points === 0 ? 'No score credit' : item.earned ? 'Recorded' : 'Available'}</td><td data-label="Base points" className={item.points < 0 ? 'trust-negative' : 'trust-positive'}>{item.points > 0 ? '+' : ''}{item.points}</td>
       </tr>)}</tbody></table>{!rows.length && <p className="trust-ledger-empty">{view === 'Activity' ? 'No recorded activity yet.' : view === 'Penalties' ? 'No penalties recorded.' : 'No factors in this category.'}</p>}</div>

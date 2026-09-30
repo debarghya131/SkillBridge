@@ -15,6 +15,7 @@ const CompanyDashboard = lazy(() => import('./company/CompanyDashboard'))
 const AdminAuth = lazy(() => import('./admin/AdminAuth'))
 const AdminDashboard = lazy(() => import('./admin/AdminDashboard'))
 const LoginPortal = lazy(() => import('./auth/LoginPortal'))
+const LegalPage = lazy(() => import('./landing/LegalPage'))
 const NotFound = lazy(() => import('./ui/NotFound'))
 
 function RouteLoading() {
@@ -56,6 +57,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPortal />} />
+          <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+          <Route path="/terms" element={<LegalPage kind="terms" />} />
           <Route path="/student" element={<StudentAuth />} />
           <Route element={<StudentProtectedRoute />}>
             <Route path="/student/dashboard" element={<StudentDashboard />} />

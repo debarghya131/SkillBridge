@@ -98,16 +98,20 @@ function makeSlug(name) {
 
 async function getAdminOverview(token) {
   const admin = await findAdmin(token)
-  const [catalogCounts, pendingRequests, pendingAssessments, activeReviewers] = await Promise.all([
+  const [catalogCounts, pendingRequests, pendingAssessments, activeReviewers, recentPublishedSkills] = await Promise.all([
     SkillCatalog.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
     SkillRequest.countDocuments({ status: 'pending' }),
     SkillAssessment.countDocuments({ status: 'pending' }),
     Reviewer.countDocuments({ active: true, role: 'reviewer' }),
+    SkillCatalog.find({ status: 'published' }).select('_id name category publishedAt createdAt')
+      .sort({ publishedAt: -1, _id: -1 }).limit(5).lean(),
   ])
   const counts = Object.fromEntries(catalogCounts.map(item => [item._id, item.count]))
   return { admin: { id: String(admin._id), name: admin.name, email: admin.email, role: admin.role },
     metrics: { publishedSkills: counts.published || 0, draftSkills: counts.draft || 0, archivedSkills: counts.archived || 0,
-      pendingRequests, pendingAssessments, activeReviewers } }
+      pendingRequests, pendingAssessments, activeReviewers },
+    recentPublishedSkills: recentPublishedSkills.map(skill => ({ id: String(skill._id), name: skill.name,
+      category: skill.category, publishedAt: skill.publishedAt || skill.createdAt || null })) }
 }
 
 async function listAdminSkills(token, filters = {}) {

@@ -52,7 +52,7 @@ export default function ReviewQueue({ token = getAdminSessionToken(), onUnauthor
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [showDemo, setShowDemo] = useState(false)
+  const [showDemo, setShowDemo] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')

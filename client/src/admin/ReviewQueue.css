@@ -93,7 +93,9 @@
   .reviewer-topbar-brand { min-width:0; }
   .reviewer-topbar-brand > span, .reviewer-topbar-user > span { display:none; }
   .reviewer-heading { align-items:flex-start; }
+  .reviewer-heading > div { flex:1 1 100%; }
   .reviewer-heading h1 { font-size:21px; }
+  .reviewer-heading .reviewer-demo-toggle { min-height:44px; margin-left:0; padding:0 10px; border:1px solid #dbe3ee; border-radius:6px; background:#fff; }
   .reviewer-controls { gap:10px; }
   .reviewer-controls nav { width:100%; flex-wrap:nowrap; scrollbar-width:none; }
   .reviewer-controls nav::-webkit-scrollbar { display:none; }
@@ -114,6 +116,6 @@
   .reviewer-rubric-heading strong { font-size:20px; }
   .reviewer-feedback textarea { min-height:110px; }
   .reviewer-actions { justify-content:stretch; }
-  .reviewer-actions .btn-primary { width:100%; min-height:44px; justify-content:center; }
+  .reviewer-actions .btn-primary, .reviewer-actions .btn-secondary { flex:1 1 100%; min-height:44px; justify-content:center; }
   .reviewer-pagination button { min-height:36px; }
 }

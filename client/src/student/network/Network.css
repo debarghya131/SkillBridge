@@ -2,6 +2,9 @@
 .network-tab-content { padding-right: 6px; }
 .network-topbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .network-topbar > .responsive-pill-nav { flex: 0 0 auto; min-height: 52px; box-sizing: border-box; }
+.student-viewport.student-section-network .network-topbar .network-subnav { margin-bottom: 0 !important; }
+.network-demo-toggle { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; min-height: 52px; padding: 0 13px; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: 0 3px 12px rgba(15,23,42,.045); color: var(--muted); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.network-demo-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); }
 .network-trust-progress { flex: 0 1 540px; min-height: 52px; box-sizing: border-box; display: grid; grid-template-columns: minmax(190px, 1fr) repeat(2, minmax(104px, auto)); align-items: center; gap: 10px; margin: 0 0 0 auto; padding: 7px 12px; border: 1px solid #c7d2fe; border-radius: 8px; background: #f8faff; }
 .network-trust-progress > div:first-child { min-width: 0; display: flex; align-items: center; gap: 7px; }
 .network-trust-progress svg { color: #4f46e5; }
@@ -245,6 +248,9 @@
 .network-private-note { display: flex; align-items: center; gap: 7px; padding: 10px; border: 1px solid #dbeafe; border-radius: 6px; background: #eff6ff; color: #1d4ed8; font-size: 10px; }
 @media (max-width: 1050px) { .network-team-layout { grid-template-columns: 1fr; } .network-team-sidebar .network-team-activity-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
 @media (max-width: 800px) { .network-columns,.network-team-columns { grid-template-columns: 1fr; } .network-form-grid { grid-template-columns: 1fr 1fr; } .network-team-overview { grid-template-columns: 1fr 1fr; } .network-topbar { align-items: stretch; } .network-trust-progress { flex-basis: 100%; margin-left: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); } .network-trust-progress > div:first-child { grid-column: 1 / -1; } }
+@media (max-width: 600px) {
+  .network-topbar .network-demo-toggle { min-height: 44px; margin-left: auto; }
+}
 @media (max-width: 560px) { .network-page-header { align-items: flex-start; flex-direction: column; } .network-header-stat { border-left: 0; padding-left: 0; } .network-toolbar,.network-form-grid { grid-template-columns: 1fr; } .network-card-grid { grid-template-columns: 1fr; } .network-profile-modal > header { grid-template-columns: auto 1fr auto; } .network-profile-score { display: none; } .network-team-controls { align-items: stretch; flex-direction: column; } .network-team-controls .network-team-tabs { width: 100%; } .network-team-controls > .btn-primary { width: 100%; min-height: 42px; } }
 @media (max-width: 600px) {
   .student-viewport.student-section-network .network-subnav,

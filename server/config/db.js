@@ -24,13 +24,15 @@ function buildDatabaseOptions({
   dbMaxIdleTimeMs = 30_000,
   dbServerSelectionTimeoutMs = 10_000,
   mongoDbName = '',
+  autoCreate = nodeEnv !== 'production',
+  autoIndex = nodeEnv !== 'production',
 } = {}) {
   const maxPoolSize = asBoundedInteger(dbMaxPoolSize, 20, 1, 100)
   const minPoolSize = Math.min(asBoundedInteger(dbMinPoolSize, 0, 0, maxPoolSize), maxPoolSize)
 
   return {
-    autoCreate: nodeEnv !== 'production',
-    autoIndex: nodeEnv !== 'production',
+    autoCreate,
+    autoIndex,
     bufferCommands: false,
     maxPoolSize,
     minPoolSize,

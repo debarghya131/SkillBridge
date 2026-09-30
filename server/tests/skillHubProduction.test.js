@@ -70,7 +70,13 @@ test('renewal preserves unexpired days and does not overwrite the verified level
   assert.equal(student.trustScore, 50)
 })
 
-test('approval cannot compensate for missing evidence with high scores elsewhere', async () => {
+test('all review decisions require a rubric and approval cannot compensate for missing evidence', async () => {
+  await assert.rejects(reviewSkillAssessment(String(new mongoose.Types.ObjectId()), { status: 'approved',
+    feedback: 'No rubric provided.', reviewer: 'Operator' }), /Complete every rubric score/)
+  await assert.rejects(reviewSkillAssessment(String(new mongoose.Types.ObjectId()), { status: 'rejected',
+    feedback: 'No rubric provided.', reviewer: 'Operator' }), /Complete every rubric score/)
+  await assert.rejects(reviewSkillAssessment(String(new mongoose.Types.ObjectId()), { status: 'needs_revision',
+    feedback: 'No rubric provided.', reviewer: 'Operator' }), /Complete every rubric score/)
   await assert.rejects(reviewSkillAssessment(String(new mongoose.Types.ObjectId()), { status: 'approved',
     feedback: 'High scores but missing evidence.', reviewer: 'Reviewer', reviewerId: new mongoose.Types.ObjectId(),
     rubric: { correctness: 5, evidence: 0, understanding: 5, testing: 5, communication: 5 } }), /at least 3\/5/)

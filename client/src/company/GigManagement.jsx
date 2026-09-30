@@ -644,8 +644,8 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                 <div id="applicant-review-title" style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{applicant.name}</div>
-                <span style={{ fontSize: 10, fontWeight: 800, background: '#10B981', color: 'white', padding: '2px 10px', borderRadius: 100 }}>
-                  ✓ Verified
+                <span style={{ fontSize: 10, fontWeight: 800, background: '#2563EB', color: 'white', padding: '2px 10px', borderRadius: 100 }}>
+                  Profile
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -972,6 +972,7 @@ function ApplicantProfileModal({ applicant, savedTasks = [], onClose, onReviewSu
 
 export default function GigManagement({ gigManagementState, taskLibraryState, taskSubmissions = [], onReviewTaskSubmission, onSendInterviewTask, onOpenTaskCenter, onOpenWorkspace, onCreateGig, onUpdateGig, onDeleteGig }) {
   const [localState, setLocalState] = useState(() => mergeCompanyGigManagementState(gigManagementState || buildDefaultCompanyGigManagementState()))
+  const [showDemo, setShowDemo] = useState(true)
   const [isCreateGigOpen, setIsCreateGigOpen] = useState(false)
   const [editingGig, setEditingGig] = useState(null)
   const [selectedGigId, setSelectedGigId] = useState(null)
@@ -1029,6 +1030,20 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
   }, [applicantResponse, selectedGigId, taskSubmissions])
   const realGigs = useMemo(() => localState.gigs.filter(gig => !gig.demoData), [localState.gigs])
   const demoGigs = useMemo(() => localState.gigs.filter(gig => gig.demoData), [localState.gigs])
+  const visibleGigs = showDemo ? localState.gigs : realGigs
+  const visibleActivity = showDemo
+    ? localState.recentActivity
+    : localState.recentActivity.filter(item => !String(item).startsWith('Demo preview ·'))
+
+  const toggleDemo = checked => {
+    setShowDemo(checked)
+    if (!checked) {
+      setSelectedGigId(null)
+      setSelectedApplicant(null)
+      setPublicApplicant(null)
+      setApplicantResponse({ gigId: null, applicants: [], error: '' })
+    }
+  }
 
   const prefetchApplicants = gig => {
     if (!gig || gig.demoData) return
@@ -1142,6 +1157,7 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
             </div>
           ))}
         </div>
+        <label className="gig-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => toggleDemo(event.target.checked)} />Demo examples</label>
         <button className="btn-accent" onClick={() => setIsCreateGigOpen(true)}>+ Create New GIG</button>
       </header>
 
@@ -1150,11 +1166,11 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
             <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--dark)' }}>Posted GIGs</div>
             <span style={{ background: 'var(--accent-light)', color: '#C2410C', borderRadius: 100, padding: '4px 10px', fontSize: 11, fontWeight: 800 }}>
-              {realGigs.length} real {realGigs.length === 1 ? 'role' : 'roles'}{demoGigs.length ? ` · ${demoGigs.length} demo examples` : ''}
+              {realGigs.length} real {realGigs.length === 1 ? 'role' : 'roles'}{showDemo && demoGigs.length ? ` · ${demoGigs.length} demo examples` : ''}
             </span>
           </div>
           <div className="gig-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {localState.gigs.map(gig => {
+            {visibleGigs.map(gig => {
               const meta = statusMeta[gig.status]
               const gigSubmissions = taskSubmissions.filter(submission => (
                 submission.companyGigPublicId
@@ -1241,6 +1257,7 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
                 </div>
               )
             })}
+            {visibleGigs.length === 0 && <p className="work-muted">No live GIGs yet. Create a GIG to start hiring{showDemo ? ', or explore the read-only examples when available' : ''}.</p>}
           </div>
         </div>
 
@@ -1267,11 +1284,12 @@ export default function GigManagement({ gigManagementState, taskLibraryState, ta
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 0 4px #D1FAE5' }} />
             </div>
             <div className="gig-insight-content" role="region" tabIndex={0} aria-labelledby="gig-activity-heading">
-              {localState.recentActivity.map(item => (
+              {visibleActivity.map(item => (
                 <div key={item} style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: 'var(--dark)', lineHeight: 1.55, borderLeft: '3px solid #FDBA74' }}>
                   {item}
                 </div>
               ))}
+              {visibleActivity.length === 0 && <p className="work-muted">No recent live activity yet.</p>}
             </div>
           </div>
         </div>

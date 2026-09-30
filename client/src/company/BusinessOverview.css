@@ -141,9 +141,13 @@
 .business-empty-state span { font-size: 10px; }
 
 .business-quick-actions { gap: 8px; }
-.business-quick-actions button { position: relative; justify-content: center; gap: 7px; min-height: 38px; padding: 0 13px; border: 1px solid var(--border); border-radius: 8px; background: white; color: #334155; font-size: 11px; font-weight: 700; }
-.business-quick-actions button:first-child { border-color: #fed7aa; background: white; color: #c2410c; }
-.business-quick-actions button:first-child::after { position: absolute; right: 12px; bottom: -1px; left: 12px; height: 2px; border-radius: 2px 2px 0 0; background: #f97316; content: ''; }
+.business-quick-actions button { justify-content: center; gap: 7px; min-height: 38px; padding: 0 13px; border: 1px solid var(--quick-border); border-radius: 8px; background: var(--quick-bg); color: var(--quick-color); font-size: 11px; font-weight: 700; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.business-quick-actions button:hover { border-color: var(--quick-hover-border); background: var(--quick-hover-bg); box-shadow: 0 3px 10px rgba(15, 23, 42, .08); }
+.business-quick-actions button:focus-visible { outline: 2px solid var(--quick-color); outline-offset: 2px; }
+.business-quick-gigs { --quick-color: #9a3412; --quick-border: #fed7aa; --quick-bg: #fff7ed; --quick-hover-border: #fb923c; --quick-hover-bg: #ffedd5; }
+.business-quick-tasks { --quick-color: #1d4ed8; --quick-border: #bfdbfe; --quick-bg: #eff6ff; --quick-hover-border: #60a5fa; --quick-hover-bg: #dbeafe; }
+.business-quick-talent { --quick-color: #047857; --quick-border: #a7f3d0; --quick-bg: #ecfdf5; --quick-hover-border: #34d399; --quick-hover-bg: #d1fae5; }
+.business-quick-workspace { --quick-color: #6d28d9; --quick-border: #ddd6fe; --quick-bg: #f5f3ff; --quick-hover-border: #a78bfa; --quick-hover-bg: #ede9fe; }
 
 @media (max-width: 1100px) {
   .business-heading { align-items: flex-start; }
@@ -188,5 +192,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .business-metric { transition: none; }
+  .business-metric, .business-quick-actions button { transition: none; }
 }

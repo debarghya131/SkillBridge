@@ -56,3 +56,55 @@ export function getAdminDemoSkillRequests(status = 'pending') {
   const activeStatus = status === 'all' ? 'pending' : status
   return DEMO_SKILL_REQUESTS.filter(request => request.status === activeStatus)
 }
+
+const DEMO_CATALOG_SKILLS = [
+  {
+    id: 'demo-catalog-accessibility-auditing',
+    demoData: true,
+    name: 'Accessibility Auditing',
+    aliases: ['Web Accessibility Review'],
+    category: 'Quality Assurance',
+    status: 'published',
+    summary: 'Review an interface against accessibility requirements and document reproducible findings.',
+    renewalDays: 365,
+    verificationInstructions: 'Submit an audit of a real interface with keyboard and screen-reader checks, issue severity, reproduction steps, and evidence of at least one verified fix.',
+    upgradeRequirements: [
+      { stage: 'Intermediate', instructions: 'Audit multiple user journeys and verify fixes with repeatable tests.' },
+      { stage: 'Pro', instructions: 'Lead a cross-device audit and prioritize findings by user impact.' },
+      { stage: 'Pro Mastery', instructions: 'Define a reusable accessibility review process and demonstrate measurable improvements.' },
+    ],
+    dailyTasks: [{ title: 'Keyboard journey check', instructions: 'Test a complete keyboard journey and record one actionable finding.', kind: 'evidence' }],
+  },
+  {
+    id: 'demo-catalog-api-observability',
+    demoData: true,
+    name: 'API Observability',
+    aliases: ['Service Monitoring'],
+    category: 'DevOps',
+    status: 'draft',
+    summary: 'An example of a standard still being prepared before publication.',
+    renewalDays: 365,
+    verificationInstructions: 'Draft requirement: show useful service metrics, structured logs, tracing, alert thresholds, and a documented incident investigation.',
+    upgradeRequirements: [],
+    dailyTasks: [],
+  },
+  {
+    id: 'demo-catalog-legacy-layouts',
+    demoData: true,
+    name: 'Legacy Layout Techniques',
+    aliases: [],
+    category: 'Frontend',
+    status: 'archived',
+    summary: 'An example of a retired standard that is no longer offered for new verification.',
+    renewalDays: 365,
+    verificationInstructions: 'Historical example: document a maintained legacy layout, its browser constraints, and a tested migration path.',
+    upgradeRequirements: [],
+    dailyTasks: [],
+  },
+]
+
+export function getAdminDemoCatalogSkills(status = 'all', search = '') {
+  const term = search.trim().toLowerCase()
+  return DEMO_CATALOG_SKILLS.filter(skill => (status === 'all' || skill.status === status)
+    && (!term || `${skill.name} ${skill.aliases.join(' ')} ${skill.category}`.toLowerCase().includes(term)))
+}

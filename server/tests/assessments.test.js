@@ -12,6 +12,7 @@ const { sendCompanyInterviewTask, submitStudentCompanyInterviewTask, getCompanyT
 const { acceptOpportunity } = require('../controllers/gigController')
 
 const response = 'I implemented the project, tested the boundary cases, and documented its limitations.'
+const reviewRubric = { correctness: 4, evidence: 4, understanding: 4, testing: 4, communication: 4 }
 const details = {
   live_project: { deliverables: 'A working page', acceptanceCriteria: 'Responsive' },
   code: { testCases: 'Input 1 returns 2' },
@@ -181,7 +182,7 @@ test('Skill Hub submission, revision and operator approval require ownership and
     return { session: async () => result, then: resolve => Promise.resolve(result).then(resolve) }
   })
   t.mock.method(Student, 'findById', () => ({ session: async () => student }))
-  await reviewSkillAssessment(created.id, { status: 'needs_revision', feedback: 'Add test evidence', reviewer: 'Operator' })
+  await reviewSkillAssessment(created.id, { status: 'needs_revision', feedback: 'Add test evidence', reviewer: 'Operator', rubric: reviewRubric })
   assert.equal(student.skillHubSkills[0].verified, false)
   assert.equal(record.open, true)
   await assert.rejects(submitSkillAssessment('s', payload), /already open/)
@@ -192,9 +193,9 @@ test('Skill Hub submission, revision and operator approval require ownership and
   })
   await assert.rejects(submitSkillAssessment('s', { ...payload, id: String(new mongoose.Types.ObjectId()) }), error => error.statusCode === 409)
   await submitSkillAssessment('s', { ...payload, id: created.id })
-  await reviewSkillAssessment(created.id, { status: 'approved', feedback: 'Evidence verified', reviewer: 'Operator' })
+  await reviewSkillAssessment(created.id, { status: 'approved', feedback: 'Evidence verified', reviewer: 'Operator', rubric: reviewRubric })
   assert.equal(student.skillHubSkills[0].verified, true)
   assert.equal(record.status, 'approved')
   assert.equal(record.open, false)
-  await assert.rejects(reviewSkillAssessment(created.id, { status: 'approved', feedback: 'Again', reviewer: 'Operator' }), error => error.statusCode === 409)
+  await assert.rejects(reviewSkillAssessment(created.id, { status: 'approved', feedback: 'Again', reviewer: 'Operator', rubric: reviewRubric }), error => error.statusCode === 409)
 })

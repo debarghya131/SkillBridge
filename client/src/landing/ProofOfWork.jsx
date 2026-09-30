@@ -55,7 +55,7 @@ export default function ProofOfWork() {
           </div>
           <div className="sb-proof-context">
             <span className="sb-proof-review-label"><ShieldCheck size={17} aria-hidden="true" />Human review. Evidence first.</span>
-            <p>Submit original work in Skill Hub. Admin review staff assess the evidence without seeing your name or college. Approval adds verified proof to your profile.</p>
+            <p>For skills with a published standard, submit original work in Skill Hub. Admin review staff assess the evidence without seeing your name or college. Approval adds verified proof to your profile.</p>
           </div>
         </div>
         <figure ref={figureRef} className="sb-product-figure sb-review-flow">
@@ -100,7 +100,7 @@ export default function ProofOfWork() {
             <div><small>Approved outcome</small><strong>Verified skill on the student profile</strong></div>
             <span>TrustScore updated</span><span>Review history saved</span><span>Renewal date set</span>
           </div>
-          <figcaption>Approval requires observable evidence and a rubric score of at least 70/100. Revision requests return the same assessment to the student.</figcaption>
+          <figcaption>Approval requires observable evidence, at least 70/100 overall, and at least 3/5 in correctness, evidence, and understanding. Revision requests return the same assessment to the student.</figcaption>
         </figure>
         <div ref={pointsRef} className="sb-proof-points">
           <article>

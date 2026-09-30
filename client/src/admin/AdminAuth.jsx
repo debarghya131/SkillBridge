@@ -21,7 +21,7 @@ export default function AdminAuth() {
       const result = await signInAdmin({ email, password })
       if (!['admin', 'reviewer'].includes(result.reviewer?.role)) throw new Error('This account does not have operations access.')
       setAdminSession(result.token, result.reviewer?.role)
-      window.location.assign('/admin/dashboard')
+      navigate('/admin/dashboard', { replace: true })
     } catch (failure) { setError(failure.message || 'Sign in failed') }
     finally { setBusy(false) }
   }

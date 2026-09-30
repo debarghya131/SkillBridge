@@ -129,6 +129,7 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
   const projects = projectWorkspaceState?.projects || EMPTY_PROJECTS
   const realProjects = projects.filter(project => !project.demoData)
   const [filter, setFilter] = useState('All')
+  const [showDemo, setShowDemo] = useState(true)
   const [view, setView] = useState('Overview')
   const [selectedId, setSelectedId] = useState('')
   const [message, setMessage] = useState('')
@@ -139,8 +140,9 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
   const [search, setSearch] = useState('')
   const [expandedGigs, setExpandedGigs] = useState({})
 
-  const visible = useMemo(() => projects.filter(project => (filter === 'All' || project.status === filter)
-    && `${project.title} ${(project.team || []).join(' ')}`.toLowerCase().includes(search.toLowerCase())), [projects, filter, search])
+  const visible = useMemo(() => projects.filter(project => (showDemo || !project.demoData)
+    && (filter === 'All' || project.status === filter)
+    && `${project.title} ${(project.team || []).join(' ')}`.toLowerCase().includes(search.toLowerCase())), [projects, filter, search, showDemo])
   const visibleReal = visible.filter(item => !item.demoData)
   const visibleDemo = visible.filter(item => item.demoData)
   const project = visible.find(item => item.id === selectedId) || visible[0]
@@ -243,6 +245,12 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
               <div><Clock3 size={18} aria-hidden="true" /><strong>{realProjects.filter(item => item.status === 'Review').length}</strong><small>Deliveries to review</small></div>
               <div><CircleCheck size={18} aria-hidden="true" /><strong>{realProjects.filter(item => item.status === 'Completed').length}</strong><small>Completed GIG Work</small></div>
             </div>
+        <div className="workspace-demo-controls">
+          <label className="workspace-demo-toggle">
+            <input type="checkbox" checked={showDemo} onChange={event => { setShowDemo(event.target.checked); resetSelection() }} />
+            Demo examples
+          </label>
+        </div>
         <div className="workspace-filter">Status
           <WorkspaceStatusPicker disabled={busy} value={filter} options={['All', 'Planning', 'In Progress', 'Review', 'Approved', 'Completed']} onChange={value => { setFilter(value); resetSelection() }} />
         </div>
@@ -258,7 +266,7 @@ export default function ProjectWorkspace({ projectWorkspaceState, taskSubmission
             <div className="workspace-project-list">
               {renderAssignments(visibleReal, 'Live GIG Work')}
               {renderAssignments(visibleDemo, 'Read-only examples')}
-              {!visible.length && <p className="work-muted">No GIG Work matches this search or status.</p>}
+              {!visible.length && <p className="work-muted">{showDemo ? 'No GIG Work matches this search or status.' : 'No live GIG Work matches this search or status. Turn on Demo examples to view read-only previews.'}</p>}
             </div>
           </aside>
 

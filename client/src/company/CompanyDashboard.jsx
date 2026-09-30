@@ -45,14 +45,13 @@ import { deleteCompanyAccount } from './companyApi'
 import ProjectWorkspace from './ProjectWorkspace'
 import TaskCenter from './TaskCenter'
 import { toast } from '../ui/toast'
-import { safeExternalUrl, safeVideoUrl } from '../lib/safeExternalUrl'
 import CompanyLogo from '../ui/CompanyLogo'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 import CompanyProfileModal from '../ui/CompanyProfileModal'
 import { talentFilterOptions } from './talentFilterOptions'
 import PublicStudentProfile from '../ui/PublicStudentProfile'
 import DirectOpportunityModal from './DirectOpportunityModal'
-import { ChevronDown, ExternalLink, Flame, Send, ShieldCheck, X } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
 import { clearAllCompanySectionCache, clearCompanySectionCache, clearCompanySectionCachePrefix, loadCompanySectionCache, readCompanySectionCache, writeCompanySectionCache } from './sectionCache'
 
 const SKILL_LEVELS = ['All', 'Beginner', 'Intermediate', 'Pro', 'Pro Mastery']
@@ -89,23 +88,6 @@ const COMPANY_VERIFICATION_METHODS = {
   udyam: { icon: '📋', label: 'Udyam registration' },
 }
 
-const STUDENT_REGISTRATION_METHODS = {
-  email: { icon: '📧', label: 'College Email' },
-  phone: { icon: '📱', label: 'Phone Number' },
-}
-
-const STUDENT_VERIFICATION_METHODS = {
-  aadhaar: { icon: '🪪', label: 'Aadhaar Card' },
-  digilocker: { icon: '🔐', label: 'DigiLocker' },
-}
-
-const LEVEL_META = {
-  'Pro Mastery': { bg: '#fef3c7', color: '#a16207' },
-  Pro: { bg: '#F3E8FF', color: '#7C3AED' },
-  Intermediate: { bg: '#EFF6FF', color: '#1D4ED8' },
-  Beginner: { bg: '#F0FDF4', color: '#15803D' },
-}
-
 function TalentSkillPicker({ value, options, onChange }) {
   const [open, setOpen] = useState(false)
   const pickerRef = useRef(null)
@@ -127,14 +109,6 @@ function TalentSkillPicker({ value, options, onChange }) {
   </div>
 }
 
-function getSkillLevel(profile, skill) {
-  if (!profile.skillsByLevel) return null
-  for (const [level, list] of Object.entries(profile.skillsByLevel)) {
-    if (list.includes(skill)) return level
-  }
-  return null
-}
-
 function CompanyVerificationBadge({ contactMethod = 'email', verificationMethod = 'gstin' }) {
   const [show, setShow] = useState(false)
   const registration = COMPANY_REGISTRATION_METHODS[contactMethod] || COMPANY_REGISTRATION_METHODS.email
@@ -142,46 +116,19 @@ function CompanyVerificationBadge({ contactMethod = 'email', verificationMethod 
 
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <span aria-label="Verified business" style={{ width: 20, height: 20, borderRadius: '50%', background: '#10B981', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>✓</span>
+      <button type="button" aria-label="Show business registration details" aria-expanded={show}
+        onFocus={() => setShow(true)} onBlur={() => setShow(false)} onClick={() => setShow(true)}
+        onKeyDown={event => { if (event.key === 'Escape') setShow(false) }}
+        style={{ width: 20, height: 20, padding: 0, border: 0, borderRadius: '50%', background: '#2563EB', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>i</button>
       {show && (
-        <span style={{ position: 'absolute', top: '130%', left: '50%', transform: 'translateX(-50%)', zIndex: 1300, minWidth: 180, background: 'white', color: 'var(--dark)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)', borderRadius: 8, padding: '8px 10px', fontSize: 12, pointerEvents: 'none' }}>
-          <strong style={{ display: 'block', color: '#059669', marginBottom: 5 }}>Business verified</strong>
+        <span style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 1300, minWidth: 180, maxWidth: 'calc(100vw - 24px)', background: 'white', color: 'var(--dark)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)', borderRadius: 8, padding: '8px 10px', fontSize: 12, pointerEvents: 'none' }}>
+          <strong style={{ display: 'block', color: '#2563EB', marginBottom: 5 }}>Registration details</strong>
           <span style={{ display: 'block' }}>{registration.icon} Registered via {registration.label}</span>
-          <span style={{ display: 'block', marginTop: 3 }}>{verification.icon} Verified via {verification.label}</span>
+          <span style={{ display: 'block', marginTop: 3 }}>{verification.icon} {verification.label} reference on file</span>
         </span>
       )}
     </span>
   )
-}
-
-function StudentVerificationBadge({ contactMethod = 'email', verificationMethod = 'aadhaar' }) {
-  const [show, setShow] = useState(false)
-  const registration = STUDENT_REGISTRATION_METHODS[contactMethod] || STUDENT_REGISTRATION_METHODS.email
-  const identity = STUDENT_VERIFICATION_METHODS[verificationMethod] || STUDENT_VERIFICATION_METHODS.aadhaar
-
-  return (
-    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <span aria-label="Verified account" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#10B981', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 100, cursor: 'default' }}>✓ Verified</span>
-      {show && (
-        <span style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 1300, minWidth: 205, background: 'white', color: 'var(--dark)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)', borderRadius: 8, padding: '8px 10px', fontSize: 12, pointerEvents: 'none' }}>
-          <strong style={{ display: 'block', color: '#059669', marginBottom: 5 }}>Account verification</strong>
-          <span style={{ display: 'block' }}>{registration.icon} Registered via {registration.label}</span>
-          <span style={{ display: 'block', marginTop: 3 }}>{identity.icon} Identity verified via {identity.label}</span>
-        </span>
-      )}
-    </span>
-  )
-}
-
-function getContactHref(item) {
-  const label = String(item?.label || '').toLowerCase()
-  const value = String(item?.value || '').trim()
-  if (label.includes('email') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `mailto:${value}`
-  if (label.includes('phone') || label.includes('mobile') || label.includes('whatsapp')) {
-    const phone = value.replace(/[^+\d]/g, '')
-    return phone.length >= 7 ? `tel:${phone}` : ''
-  }
-  return safeExternalUrl(value)
 }
 
 function formatActivityWhen(value) {
@@ -204,302 +151,6 @@ const NAV_ITEMS = [
 
 function BusinessProfileModal({ profile, onClose, contactMethod, verificationMethod }) {
   return profile ? <CompanyProfileModal profile={{ ...profile, contactMethod, verificationMethod }} onClose={onClose}/> : null
-}
-
-function TalentProfileModal({ profile, onClose, onSendOpportunity }) {
-  const videoRef = useRef(null)
-  const closeButtonRef = useRef(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [levelFilter, setLevelFilter] = useState('All')
-
-  useEffect(() => {
-    if (!profile) return undefined
-    const previousOverflow = document.body.style.overflow
-    const previouslyFocused = document.activeElement
-    const closeOnEscape = event => event.key === 'Escape' && onClose()
-    document.body.style.overflow = 'hidden'
-    document.addEventListener('keydown', closeOnEscape)
-    closeButtonRef.current?.focus()
-    return () => {
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', closeOnEscape)
-      previouslyFocused?.focus?.()
-    }
-  }, [profile, onClose])
-
-  if (!profile) return null
-
-  const levels = ['All', 'Pro Mastery', 'Pro', 'Intermediate', 'Beginner']
-  const skillDetails = Array.isArray(profile.skillDetails) && profile.skillDetails.length > 0
-    ? profile.skillDetails
-    : (profile.skills || []).map(skill => ({
-      name: skill,
-      verified: (profile.verifiedSkills || []).includes(skill),
-      level: getSkillLevel(profile, skill),
-      streak: 0,
-    }))
-  const filteredSkills = levelFilter === 'All'
-    ? skillDetails
-    : skillDetails.filter(skill => skill.level === levelFilter)
-  const verifiedSkillCount = skillDetails.filter(skill => skill.verified).length
-  const githubUrl = safeExternalUrl(profile.github)
-  const introVideoUrl = safeVideoUrl(profile.videoUrl)
-
-  const togglePlay = async () => {
-    if (!videoRef.current) return
-    if (isPlaying) {
-      videoRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      try {
-        await videoRef.current.play()
-        setIsPlaying(true)
-      } catch {
-        setIsPlaying(false)
-      }
-    }
-  }
-
-  return (
-    <div
-      className="responsive-modal-shell"
-      role="presentation"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.55)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        zIndex: 1000,
-      }}
-      onMouseDown={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="responsive-modal-card talent-profile-modal" role="dialog" aria-modal="true" aria-labelledby="talent-profile-title" style={{
-        width: '100%',
-        maxWidth: 760,
-        maxHeight: '90vh',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--white)',
-        borderRadius: 8,
-        border: '1px solid var(--border)',
-        boxShadow: 'var(--shadow-lg)',
-      }}>
-        <div className="responsive-modal-header" style={{
-          background: 'linear-gradient(135deg, var(--dark) 0%, #1E1B4B 100%)',
-          borderRadius: '8px 8px 0 0',
-          padding: '24px 28px',
-          flexShrink: 0,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}>
-          <div className="talent-profile-heading" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #A5B4FC, #60A5FA)',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 22,
-              fontWeight: 900,
-              border: '3px solid rgba(255,255,255,0.2)',
-              overflow: 'hidden',
-              position: 'relative',
-            }}>
-              <span>{profile.name[0]}</span>
-              {profile.avatar && <img src={profile.avatar} alt={`${profile.name} profile`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={event => { event.currentTarget.remove() }} />}
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <div id="talent-profile-title" style={{ fontSize: 18, fontWeight: 800, color: 'white' }}>{profile.name}</div>
-                <StudentVerificationBadge contactMethod={profile.contactMethod} verificationMethod={profile.verificationMethod} />
-                {verifiedSkillCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 800, background: '#D1FAE5', color: '#047857', padding: '3px 8px', borderRadius: 100 }}>
-                  <ShieldCheck size={12} /> {verifiedSkillCount} verified skill{verifiedSkillCount === 1 ? '' : 's'}
-                </span>}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  background: 'linear-gradient(135deg, #6366F1, #818CF8)',
-                  color: 'white', fontSize: 13, fontWeight: 800,
-                  padding: '4px 12px', borderRadius: 100,
-                  boxShadow: '0 0 12px rgba(99,102,241,0.6)',
-                  letterSpacing: '0.01em',
-                }}>
-                  ⭐ {profile.score} <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.85 }}>/ 1000</span>
-                </span>
-                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>TrustScore™</span>
-              </div>
-              <div style={{ marginTop: 7, color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
-                {profile.location} · {profile.projects || 0} published project{profile.projects === 1 ? '' : 's'}
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            ref={closeButtonRef}
-            onClick={onClose}
-            title="Close"
-            aria-label="Close talent profile"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.1)',
-              color: 'white',
-              border: '1px solid rgba(255,255,255,0.12)',
-              fontSize: 16,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <X size={17} />
-          </button>
-        </div>
-
-        <div className="responsive-modal-body" style={{ padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Skills</div>
-              <div className="talent-profile-filters" style={{ display: 'flex', gap: 4 }}>
-                {levels.map(lv => {
-                  const meta = lv === 'All' ? { bg: '#F1F5F9', color: '#475569' } : LEVEL_META[lv]
-                  return (
-                    <button key={lv} onClick={() => setLevelFilter(lv)} style={{
-                      fontSize: 11, fontWeight: 700,
-                      background: levelFilter === lv ? meta.color : meta.bg,
-                      color: levelFilter === lv ? 'white' : meta.color,
-                      padding: '3px 9px', borderRadius: 100, border: 'none', cursor: 'pointer',
-                    }}>
-                      {lv}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {filteredSkills.length === 0
-                ? <span style={{ fontSize: 13, color: 'var(--muted)' }}>No {levelFilter} skills</span>
-                : filteredSkills.map(skill => {
-                  const level = skill.level
-                  const levelMeta = level ? LEVEL_META[level] : null
-                  return (
-                    <span key={skill.name} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: 'var(--primary-light)', color: 'var(--primary)',
-                      padding: '5px 12px', borderRadius: 100, fontSize: 13, fontWeight: 600,
-                    }}>
-                      {skill.name}
-                      {skill.verified && <span title="Skill verified" aria-label="Skill verified" style={{ display: 'inline-flex', color: '#059669' }}><ShieldCheck size={13} /></span>}
-                      {levelMeta && <span style={{ background: levelMeta.bg, color: levelMeta.color, fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 100 }}>{level}</span>}
-                      {skill.streak > 0 && <span title="Current retention streak" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#FFF7ED', color: '#C2410C', fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-                        <Flame size={10} /> {skill.streak}d
-                      </span>}
-                    </span>
-                  )
-                })}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Intro Video</div>
-            {introVideoUrl ? <>
-              <div style={{ background: '#000', borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9', maxWidth: 460 }}>
-                <video ref={videoRef} src={introVideoUrl} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onEnded={() => setIsPlaying(false)} />
-              </div>
-              <button
-                onClick={togglePlay}
-                style={{
-                  marginTop: 8,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '7px 18px',
-                  borderRadius: 7,
-                  border: isPlaying ? '1.5px solid #FCA5A5' : '1.5px solid #DC2626',
-                  background: isPlaying ? '#FEF2F2' : '#EF4444',
-                  color: isPlaying ? '#EF4444' : 'white',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                }}
-              >
-                {isPlaying ? '⏹ Stop' : '▶ Play'}
-              </button>
-            </> : (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '18px', color: 'var(--muted)', fontSize: 13 }}>
-                No introduction video published.
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>GitHub</div>
-            {githubUrl ? (
-              <a href={githubUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', padding: '12px 14px', fontSize: 13, color: 'var(--primary)', overflowWrap: 'anywhere' }}>
-                <span>{profile.github}</span><ExternalLink size={15} style={{ flexShrink: 0 }} />
-              </a>
-            ) : (
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>No links added</span>
-            )}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Contact</div>
-            {profile.contactInfo?.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {profile.contactInfo.map((item, index) => (
-                  <div key={`${item.label}-${index}`} style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{item.label}</div>
-                    {getContactHref(item)
-                      ? <a href={getContactHref(item)} target={getContactHref(item).startsWith('http') ? '_blank' : undefined} rel={getContactHref(item).startsWith('http') ? 'noreferrer' : undefined} style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 600, overflowWrap: 'anywhere' }}>{item.value}</a>
-                      : <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 600, overflowWrap: 'anywhere' }}>{item.value}</div>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span style={{ color: 'var(--muted)', fontSize: 13 }}>No contact details added</span>
-            )}
-          </div>
-
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Projects</div>
-            <div className="responsive-projects-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
-              {(profile.savedProjects || []).map(project => (
-                <div key={project.name} style={{ background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', padding: '14px 16px' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--dark)', marginBottom: 8 }}>{project.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>{project.desc}</div>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    {safeExternalUrl(project.link) && <a href={safeExternalUrl(project.link)} target="_blank" rel="noreferrer">View Project</a>}
-                    {safeExternalUrl(project.demoLink) && <a href={safeExternalUrl(project.demoLink)} target="_blank" rel="noreferrer">Live Preview</a>}
-                  </div>
-                </div>
-              ))}
-              {(profile.savedProjects || []).length === 0 && <span style={{ color: 'var(--muted)', fontSize: 13 }}>No published projects yet.</span>}
-            </div>
-          </div>
-        </div>
-        <div className="talent-profile-actions" style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 28px', borderTop: '1px solid var(--border)', background: 'var(--white)' }}>
-          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
-          <button type="button" className="btn-primary" onClick={() => onSendOpportunity(profile)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            <Send size={15} /> Send opportunity
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default function CompanyDashboard() {
@@ -542,6 +193,7 @@ export default function CompanyDashboard() {
   const [projectWorkspaceState, setProjectWorkspaceState] = useState(() => mergeCompanyWorkspaceState(initialCompany.projectWorkspaceState || buildDefaultCompanyWorkspaceState()))
   const [taskLibraryState, setTaskLibraryState] = useState(() => mergeCompanyTaskLibraryState(initialCompany.taskLibraryState || buildDefaultCompanyTaskLibraryState()))
   const [talentProfiles, setTalentProfiles] = useState([])
+  const [showTalentDemo, setShowTalentDemo] = useState(true)
   const [talentSearchMeta, setTalentSearchMeta] = useState({ availableLocations: [], availableSkills: [], total: 0, realTotal: 0, demoTotal: 0, page: 1, pageSize: TALENT_PAGE_SIZE })
   const [talentPage, setTalentPage] = useState(1)
   const [isTalentLoading, setIsTalentLoading] = useState(false)
@@ -668,6 +320,7 @@ export default function CompanyDashboard() {
 
   const availableLocations = talentFilterOptions('location', talentSearchMeta.availableLocations)
   const availableSkills = talentFilterOptions('skill', talentSearchMeta.availableSkills)
+  const visibleTalentProfiles = showTalentDemo ? talentProfiles : talentProfiles.filter(profile => !profile.demoData)
   const talentTotalPages = Math.max(1, Math.ceil((talentSearchMeta.total || 0) / (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)))
 
   const resetTalentFilters = () => {
@@ -1232,20 +885,21 @@ export default function CompanyDashboard() {
           <button
             type="button"
             className="dashboard-user-meta"
+            aria-label={`Open ${businessProfile.businessName} business profile`}
             onClick={() => setShowBusinessProfile(true)}
             onFocus={() => prefetchSection('profile', sessionTokenRef.current)}
             onPointerEnter={() => prefetchSection('profile', sessionTokenRef.current)}
-            title="Open business profile"
             style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 10px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg)' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             <CompanyLogo logo={businessProfile.logo} name={businessProfile.businessName} size={30} style={{ borderRadius: '50%' }} />
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)', lineHeight: 1.2 }}>{businessProfile.businessName}</div><CompanyVerificationBadge contactMethod={contactMethod} verificationMethod={verificationMethod} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ fontSize: 13, fontWeight: 700, color: 'var(--dark)', lineHeight: 1.2 }}>{businessProfile.businessName}</div></div>
               <div className="dashboard-user-subtitle" style={{ fontSize: 11, color: 'var(--muted)' }}>{businessProfile.location || 'Business'}</div>
             </div>
           </button>
+          <CompanyVerificationBadge contactMethod={contactMethod} verificationMethod={verificationMethod} />
         </div>
       </nav>
 
@@ -1310,10 +964,13 @@ export default function CompanyDashboard() {
 
           {active === 'talent' && (
             <div className="talent-search-page">
-              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 18, fontWeight: 800, color: 'var(--dark)', marginBottom: 16 }}>
-                <span style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--accent-light)', fontSize: 16 }}>🔍</span>
-                Top Talent Matches <span aria-live="polite" style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>({isTalentLoading && talentProfiles.length === 0 ? 'Loading...' : `${talentSearchMeta.realTotal} real · ${talentSearchMeta.demoTotal} demo examples`})</span>
-              </h3>
+              <div className="talent-search-heading">
+                <h3>
+                  <span className="talent-search-heading-icon" aria-hidden="true">🔍</span>
+                  Top Talent Matches <span aria-live="polite" className="talent-search-count">({isTalentLoading && talentProfiles.length === 0 ? 'Loading...' : `${talentSearchMeta.realTotal} real${showTalentDemo ? ` · ${talentSearchMeta.demoTotal} demo examples` : ''}`})</span>
+                </h3>
+                <label className="talent-demo-toggle"><input type="checkbox" checked={showTalentDemo} onChange={event => setShowTalentDemo(event.target.checked)} />Demo examples</label>
+              </div>
 
               <div className="talent-search-filters" style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 12px rgba(15,23,42,0.03)' }}>
                 <div className="responsive-filter-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.1fr) 1.2fr 1fr 1fr auto', gap: 10, alignItems: 'end', marginBottom: 10 }}>
@@ -1424,14 +1081,14 @@ export default function CompanyDashboard() {
               )}
 
               <div aria-busy={isTalentLoading} style={{ display: 'flex', flexDirection: 'column', gap: 12, opacity: isTalentLoading ? 0.65 : 1, transition: 'opacity 0.15s' }}>
-                {isTalentLoading && talentProfiles.length === 0 && (
+                {isTalentLoading && visibleTalentProfiles.length === 0 && (
                   <div role="status" style={{ background: 'var(--white)', borderRadius: 8, border: '1px solid var(--border)', padding: '24px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>
                     Loading talent matches...
                   </div>
                 )}
-                {talentProfiles.map((p, i) => (
+                {visibleTalentProfiles.map((p, i) => (
                   <Fragment key={p.id}>
-                  {p.demoData && !talentProfiles[i - 1]?.demoData && (
+                  {p.demoData && !visibleTalentProfiles[i - 1]?.demoData && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 4, padding: '4px 2px', color: 'var(--muted)', fontSize: 12 }}>
                       <strong style={{ color: 'var(--dark)' }}>Demo talent previews</strong>
                       <span>Read-only examples — real profiles and actions remain database-backed</span>
@@ -1508,15 +1165,15 @@ export default function CompanyDashboard() {
                   </div>
                   </Fragment>
                 ))}
-                {!isTalentLoading && !talentError && talentProfiles.length === 0 && (
+                {!isTalentLoading && !talentError && visibleTalentProfiles.length === 0 && (
                   <div style={{ background: 'var(--white)', borderRadius: 12, border: '1px solid var(--border)', padding: '24px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>
-                    No students match these filters. Try lowering the TrustScore threshold or broadening your search.
+                    {showTalentDemo ? 'No students match these filters. Try lowering the TrustScore threshold or broadening your search.' : 'No real students match these filters. Try broadening your search or turn on Demo examples for read-only previews.'}
                   </div>
                 )}
               </div>
               {talentSearchMeta.total > 0 && (
                 <div className="responsive-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 16, color: 'var(--muted)', fontSize: 12, fontWeight: 600 }}>
-                  <span>Showing real students {((talentPage - 1) * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)) + 1}-{Math.min(talentPage * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE), talentSearchMeta.total)} of {talentSearchMeta.total}{talentPage === 1 && talentSearchMeta.demoTotal > 0 ? ` · ${talentSearchMeta.demoTotal} filtered demo examples` : ''}</span>
+                  <span>Showing real students {((talentPage - 1) * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE)) + 1}-{Math.min(talentPage * (talentSearchMeta.pageSize || TALENT_PAGE_SIZE), talentSearchMeta.total)} of {talentSearchMeta.total}{showTalentDemo && talentPage === 1 && talentSearchMeta.demoTotal > 0 ? ` · ${talentSearchMeta.demoTotal} filtered demo examples` : ''}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button type="button" title="Previous page" aria-label="Previous page" disabled={talentPage === 1 || isTalentLoading} onClick={() => setTalentPage(page => Math.max(1, page - 1))} style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--white)', color: 'var(--text)', cursor: talentPage === 1 ? 'not-allowed' : 'pointer', opacity: talentPage === 1 ? 0.45 : 1 }}>←</button>
                     <span>Page {talentPage} of {talentTotalPages}</span>

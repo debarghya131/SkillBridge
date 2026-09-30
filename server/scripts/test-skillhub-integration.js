@@ -93,7 +93,7 @@ async function main() {
     assert.equal(profile.trustScore, 60)
     assert.equal(profile.skillHubSkills[0].verified, true)
     assert.equal((await SkillAssessment.findById(submitted.id)).reviewHistory.length, 2)
-    await assert.rejects(reviewSkillAssessment(submitted.id, { status: 'approved', feedback: 'Duplicate.', reviewer: 'Integration reviewer' }), error => error.statusCode === 409)
+    await assert.rejects(reviewSkillAssessment(submitted.id, { status: 'approved', feedback: 'Duplicate.', reviewer: 'Integration reviewer', rubric: approvedRubric }), error => error.statusCode === 409)
     const upgrade = await submitSkillAssessment('integration-first', { ...evidence, mode: 'upgrade', targetStage: 'Intermediate' })
     await claimAssessment(firstReviewer.token, upgrade.id)
     await decideAssessment(firstReviewer.token, upgrade.id, { status: 'approved', feedback: 'Level evidence checked.', rubric: approvedRubric })
@@ -146,7 +146,7 @@ async function main() {
       return save.apply(this, args)
     }
     try {
-      await assert.rejects(reviewSkillAssessment(rollback.id, { status: 'approved', feedback: 'Rollback test.', reviewer: 'Integration reviewer' }), /Injected/)
+      await assert.rejects(reviewSkillAssessment(rollback.id, { status: 'approved', feedback: 'Rollback test.', reviewer: 'Integration reviewer', rubric: approvedRubric }), /Injected/)
     } finally { SkillAssessment.prototype.save = save }
     const unchanged = await Student.findById(first._id)
     assert.equal(unchanged.trustScore, 260)

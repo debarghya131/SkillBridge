@@ -43,12 +43,12 @@ function CompanyVerificationBadge({ contactMethod = 'email', verificationMethod 
 
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
-      <span aria-label="Verified business" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#10B981', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 100, cursor: 'default' }}>✓ Verified</span>
+      <span aria-label="Business registration reference on file" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#2563EB', color: 'white', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 100, cursor: 'default' }}>ID on file</span>
       {show && (
         <span style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 1200, minWidth: 190, background: 'white', color: 'var(--dark)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)', borderRadius: 8, padding: '8px 10px', fontSize: 12, pointerEvents: 'none' }}>
-          <strong style={{ display: 'block', color: '#059669', marginBottom: 5 }}>Business verification</strong>
+          <strong style={{ display: 'block', color: '#2563EB', marginBottom: 5 }}>Registration details</strong>
           <span style={{ display: 'block' }}>{registration.icon} Registered via {registration.label}</span>
-          <span style={{ display: 'block', marginTop: 3 }}>{verification.icon} Verified via {verification.label}</span>
+          <span style={{ display: 'block', marginTop: 3 }}>{verification.icon} {verification.label} reference on file</span>
         </span>
       )}
     </span>
@@ -186,6 +186,7 @@ export default function GigCenter() {
   const requestedTab = GIG_SUBNAV.some(item => item.key === tabFromUrl) ? tabFromUrl : 'opportunity'
   const [sub, setSub] = useState(requestedTab)
   const [isSubnavOpen, setIsSubnavOpen] = useState(false)
+  const [showDemo, setShowDemo] = useState(true)
   const [sessionToken] = useState(() => getStudentSessionToken())
   const [gigState, setGigState] = useState(() => readStudentSectionCache('gig', getStudentSessionToken()) || buildDemoGigState())
   const [selectedCompanyGig, setSelectedCompanyGig] = useState(null)
@@ -258,18 +259,18 @@ export default function GigCenter() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [sessionToken])
 
-  const browseGigs = useMemo(() => gigState.browseGigs || [], [gigState.browseGigs])
-  const opportunities = useMemo(() => gigState.opportunities || [], [gigState.opportunities])
+  const browseGigs = useMemo(() => (gigState.browseGigs || []).filter(item => showDemo || !item.demoData), [gigState.browseGigs, showDemo])
+  const opportunities = useMemo(() => (gigState.opportunities || []).filter(item => showDemo || !item.demoData), [gigState.opportunities, showDemo])
   const savedGigIds = useMemo(() => gigState.savedGigIds || [], [gigState.savedGigIds])
   const appliedGigIds = useMemo(() => gigState.appliedGigIds || [], [gigState.appliedGigIds])
   const appliedGigs = useMemo(
     () => Array.isArray(gigState.appliedGigs)
-      ? gigState.appliedGigs
+      ? gigState.appliedGigs.filter(item => showDemo || !item.demoData)
       : browseGigs.filter(gig => appliedGigIds.includes(gig.id)),
-    [gigState.appliedGigs, browseGigs, appliedGigIds],
+    [gigState.appliedGigs, browseGigs, appliedGigIds, showDemo],
   )
-  const completedGigs = useMemo(() => gigState.completedGigs || [], [gigState.completedGigs])
-  const activeGigBase = useMemo(() => gigState.activeGigBase || [], [gigState.activeGigBase])
+  const completedGigs = useMemo(() => (gigState.completedGigs || []).filter(item => showDemo || !item.demoData), [gigState.completedGigs, showDemo])
+  const activeGigBase = useMemo(() => (gigState.activeGigBase || []).filter(item => showDemo || !item.demoData), [gigState.activeGigBase, showDemo])
 
   const savedGigs = useMemo(
     () => browseGigs.filter(gig => savedGigIds.includes(gig.id)),
@@ -277,7 +278,7 @@ export default function GigCenter() {
   )
 
   const activeGigs = useMemo(() => activeGigBase, [activeGigBase])
-  const findGig = gigId => browseGigs.find(item => String(item.id) === String(gigId))
+  const findGig = gigId => (gigState.browseGigs || []).find(item => String(item.id) === String(gigId))
   const opportunityCount = useMemo(
     () => opportunities.filter(item => item.status !== 'declined'
       && !['selected', 'work_started', 'delivered', 'approved', 'completed'].includes(item.taskSubmissionStatus)
@@ -408,7 +409,8 @@ export default function GigCenter() {
   return (
     <div>
       {isLoading ? <DashboardSkeleton section="gig" /> : loadError ? <div role="alert" className="work-error">{loadError} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div> : <div className="student-tab-layout">
-      <div className="responsive-pill-nav responsive-pill-nav-menu gig-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="gig-toolbar">
+      <div className="responsive-pill-nav responsive-pill-nav-menu gig-subnav" style={{ display: 'flex', gap: 4, background: 'var(--white)', borderRadius: 12, padding: 6, border: '1px solid var(--border)', flexWrap: 'wrap' }}>
         <div className="responsive-pill-nav-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <span style={{ fontSize: 16, flexShrink: 0 }}>{activeSubnav.icon}</span>
@@ -488,12 +490,20 @@ export default function GigCenter() {
         ))}
         </div>
       </div>
+        <label className="gig-demo-toggle">
+          <input type="checkbox" checked={showDemo} onChange={event => {
+            setShowDemo(event.target.checked)
+            if (!event.target.checked) setSelectedCompanyGig(current => current?.demoData ? null : current)
+          }} />
+          Demo examples
+        </label>
+      </div>
 
-      <div key={sub} className="student-tab-content gig-tab-content">
+      <div key={`${sub}-${showDemo}`} className="student-tab-content gig-tab-content">
       {sub === 'browse' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>{browseGigs.length} GIGs available for you</div>
-          {browseGigs.map(gig => (
+          {browseGigs.length > 0 ? browseGigs.map(gig => (
             <GigCard
               key={gig.id}
               gig={gig}
@@ -505,7 +515,7 @@ export default function GigCenter() {
               onToggleSave={handleToggleSave}
               onViewCompany={setSelectedCompanyGig}
             />
-          ))}
+          )) : <EmptyState icon="🔍" msg={showDemo ? 'No GIGs are available right now.' : 'No real GIGs are available right now. Turn on Demo examples to view previews.'} />}
         </div>
       ) : null}
 
@@ -550,7 +560,7 @@ export default function GigCenter() {
 
       {sub === 'completed' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {completedGigs.map(gig => (
+          {completedGigs.length > 0 ? completedGigs.map(gig => (
             <GigCard
               key={gig.id}
               gig={gig}
@@ -562,7 +572,7 @@ export default function GigCenter() {
               onViewCompany={setSelectedCompanyGig}
               onOpenTask={handleOpenActiveTask}
             />
-          ))}
+          )) : <EmptyState icon="✅" msg={showDemo ? 'No completed GIGs yet.' : 'No real completed GIGs yet. Turn on Demo examples to view previews.'} />}
         </div>
       ) : null}
 

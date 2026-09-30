@@ -7,19 +7,24 @@ function readJsonBody(req, configuredLimit = Number.parseInt(process.env.MAX_REQ
 
   return new Promise((resolve, reject) => {
     let body = ''
+    let receivedBytes = 0
+    let tooLarge = false
 
     req.on('data', chunk => {
-      body += chunk
-
-      if (body.length > maxBytes) {
+      if (tooLarge) return
+      receivedBytes += Buffer.byteLength(chunk)
+      if (receivedBytes > maxBytes) {
+        tooLarge = true
         const error = new Error('Request body is too large')
         error.statusCode = 413
         reject(error)
-        req.destroy?.()
+        return
       }
+      body += chunk
     })
 
     req.on('end', () => {
+      if (tooLarge) return
       if (!body) {
         resolve({})
         return
@@ -48,7 +53,13 @@ function getBearerToken(req) {
   return header.slice(7).trim()
 }
 
+function getRequestUrl(req) {
+  // Only the path and query are used for routing; Host is untrusted input.
+  return new URL(req.url, 'http://localhost')
+}
+
 module.exports = {
   getBearerToken,
+  getRequestUrl,
   readJsonBody,
 }

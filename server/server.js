@@ -47,16 +47,10 @@ const {
   unsaveGig,
 } = require('./controllers/gigController')
 const { getStudentEarningState, requestStudentWithdrawal, updateStudentEarningState } = require('./controllers/earningController')
-const {
-  createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile,
-  getStudentNetworkState, inviteStudentToTeam, removeConnection, requestToJoinTeam, sendConnectionRequest,
-  updateTeamPost, withdrawTeamRequest, leaveTeam,
-} = require('./controllers/networkController')
-const { getStudentActivityHeatmap, getStudentSkillHub, recordStudentSkillHubEvent, setStudentSkillArchived, updateStudentSkillHub } = require('./controllers/skillHubController')
-const { listStudentAssessments, submitSkillAssessment } = require('./controllers/skillAssessmentController')
+const { handleStudentNetworkRoutes } = require('./routes/studentNetworkRoutes')
+const { handleStudentSkillHubRoutes } = require('./routes/studentSkillHubRoutes')
 const { claimAssessment, decideAssessment, getCurrentReviewer, listReviewQueue, logoutReviewer, releaseAssessment, signInReviewer } = require('./controllers/reviewerController')
 const { createAdminReviewer, createAdminSkill, decideAdminSkillRequest, getAdminOverview, listAdminReviewers, listAdminSkillRequests, listAdminSkills, updateAdminReviewer, updateAdminSkill } = require('./controllers/adminController')
-const { listPublishedSkillCatalog, listStudentSkillRequests, requestCatalogSkill } = require('./controllers/skillCatalogController')
 const { getStudentTrustScore, recordStudentTrustScoreEvent } = require('./controllers/trustScoreController')
 const {
   getCompanyTaskSubmissions,
@@ -68,7 +62,7 @@ const {
 const { getSiteViewCount, incrementSiteViewCount } = require('./controllers/siteMetricController')
 const { createRateLimiter } = require('./utils/rateLimit')
 const { createRequestId, serializeError, writeLog } = require('./utils/logger')
-const { getBearerToken, readJsonBody } = require('./utils/request')
+const { getBearerToken, getRequestUrl, readJsonBody } = require('./utils/request')
 const { getSessionTtlMs, resolveSessionSubject } = require('./utils/session')
 const { getCompanyPayments, recordExternalPayment } = require('./controllers/companyPaymentController')
 const { DEMO_READ_ONLY_MESSAGE, isProtectedDemoWrite } = require('./utils/demoProtection')
@@ -259,7 +253,7 @@ async function handleCompanyApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/company/talent') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const searchParams = getRequestUrl(req).searchParams
       const talentSearch = await getCompanyTalentProfiles(
         getBearerToken(req),
         Object.fromEntries(searchParams.entries()),
@@ -364,7 +358,7 @@ async function handleReviewerApi(req, res, pathname) {
       return true
     }
     if (req.method === 'GET' && pathname === '/api/reviewer/assessments') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const searchParams = getRequestUrl(req).searchParams
       sendJson(res, 200, await listReviewQueue(getBearerToken(req), Object.fromEntries(searchParams.entries())))
       return true
     }
@@ -398,7 +392,7 @@ async function handleAdminApi(req, res, pathname) {
       return true
     }
     if (pathname === '/api/admin/skills' && req.method === 'GET') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const searchParams = getRequestUrl(req).searchParams
       sendJson(res, 200, { skills: await listAdminSkills(token, Object.fromEntries(searchParams.entries())) })
       return true
     }
@@ -412,7 +406,7 @@ async function handleAdminApi(req, res, pathname) {
       return true
     }
     if (pathname === '/api/admin/skill-requests' && req.method === 'GET') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const searchParams = getRequestUrl(req).searchParams
       sendJson(res, 200, { requests: await listAdminSkillRequests(token, Object.fromEntries(searchParams.entries())) })
       return true
     }
@@ -462,7 +456,7 @@ async function handleStudentApi(req, res, pathname) {
     }
 
     if (req.method === 'GET' && pathname === '/api/student/me') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
+      const searchParams = getRequestUrl(req).searchParams
       const student = await getCurrentStudent(getBearerToken(req), { workspace: searchParams.get('view') === 'workspace' })
       sendJson(res, 200, { student })
       return true
@@ -514,84 +508,7 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'GET' && pathname === '/api/student/network') {
-      const networkState = await getStudentNetworkState(getBearerToken(req))
-      sendJson(res, 200, { networkState })
-      return true
-    }
-
-    const networkProfileMatch = pathname.match(/^\/api\/student\/network\/profiles\/([^/]+)$/)
-    if (req.method === 'GET' && networkProfileMatch) {
-      const profile = await getNetworkProfile(getBearerToken(req), decodeURIComponent(networkProfileMatch[1]))
-      sendJson(res, 200, { profile })
-      return true
-    }
-
-    const connectionTargetMatch = pathname.match(/^\/api\/student\/network\/connections\/([^/]+)$/)
-    if (req.method === 'POST' && connectionTargetMatch) {
-      sendJson(res, 201, { connection: await sendConnectionRequest(getBearerToken(req), decodeURIComponent(connectionTargetMatch[1])) })
-      return true
-    }
-    if (req.method === 'DELETE' && connectionTargetMatch) {
-      sendJson(res, 200, await removeConnection(getBearerToken(req), decodeURIComponent(connectionTargetMatch[1])))
-      return true
-    }
-
-    const connectionDecisionMatch = pathname.match(/^\/api\/student\/network\/connection-requests\/([^/]+)$/)
-    if (req.method === 'PATCH' && connectionDecisionMatch) {
-      const payload = await readJsonBody(req)
-      sendJson(res, 200, { connection: await decideConnectionRequest(getBearerToken(req), decodeURIComponent(connectionDecisionMatch[1]), payload.decision) })
-      return true
-    }
-
-    if (req.method === 'POST' && pathname === '/api/student/network/team-posts') {
-      sendJson(res, 201, { teamPost: await createTeamPost(getBearerToken(req), await readJsonBody(req)) })
-      return true
-    }
-
-    const teamPostMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)$/)
-    if (req.method === 'PATCH' && teamPostMatch) {
-      sendJson(res, 200, { teamPost: await updateTeamPost(getBearerToken(req), decodeURIComponent(teamPostMatch[1]), await readJsonBody(req)) })
-      return true
-    }
-    if (req.method === 'DELETE' && teamPostMatch) {
-      sendJson(res, 200, await deleteTeamPost(getBearerToken(req), decodeURIComponent(teamPostMatch[1])))
-      return true
-    }
-
-    const teamJoinMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/join$/)
-    if (req.method === 'POST' && teamJoinMatch) {
-      sendJson(res, 201, { teamPost: await requestToJoinTeam(getBearerToken(req), decodeURIComponent(teamJoinMatch[1]), await readJsonBody(req)) })
-      return true
-    }
-
-    const teamInviteMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/invitations\/([^/]+)$/)
-    if (req.method === 'POST' && teamInviteMatch) {
-      sendJson(res, 201, { teamPost: await inviteStudentToTeam(getBearerToken(req), decodeURIComponent(teamInviteMatch[1]), decodeURIComponent(teamInviteMatch[2]), await readJsonBody(req)) })
-      return true
-    }
-    if (req.method === 'PATCH' && teamInviteMatch) {
-      const payload = await readJsonBody(req)
-      sendJson(res, 200, { teamPost: await decideTeamInvitation(getBearerToken(req), decodeURIComponent(teamInviteMatch[1]), decodeURIComponent(teamInviteMatch[2]), payload.decision) })
-      return true
-    }
-    if (req.method === 'DELETE' && teamJoinMatch) {
-      sendJson(res, 200, await withdrawTeamRequest(getBearerToken(req), decodeURIComponent(teamJoinMatch[1])))
-      return true
-    }
-
-    const teamMembershipMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/membership$/)
-    if (req.method === 'DELETE' && teamMembershipMatch) {
-      sendJson(res, 200, await leaveTeam(getBearerToken(req), decodeURIComponent(teamMembershipMatch[1])))
-      return true
-    }
-
-    const teamDecisionMatch = pathname.match(/^\/api\/student\/network\/team-posts\/([^/]+)\/requests\/([^/]+)$/)
-    if (req.method === 'PATCH' && teamDecisionMatch) {
-      const payload = await readJsonBody(req)
-      sendJson(res, 200, { teamPost: await decideTeamRequest(getBearerToken(req), decodeURIComponent(teamDecisionMatch[1]), decodeURIComponent(teamDecisionMatch[2]), payload.decision) })
-      return true
-    }
+    if (await handleStudentNetworkRoutes(req, res, pathname, sendJson)) return true
 
     if (req.method === 'GET' && pathname === '/api/student/earning') {
       const earningState = await getStudentEarningState(getBearerToken(req))
@@ -599,67 +516,7 @@ async function handleStudentApi(req, res, pathname) {
       return true
     }
 
-    if (req.method === 'GET' && pathname === '/api/student/skillhub') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
-      const skillHub = await getStudentSkillHub(getBearerToken(req), {
-        includeSkillGap: searchParams.get('includeSkillGap') !== 'false',
-      })
-      sendJson(res, 200, { skillHub })
-      return true
-    }
-
-    if (req.method === 'GET' && pathname === '/api/student/skillhub/catalog') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
-      sendJson(res, 200, { skills: await listPublishedSkillCatalog(getBearerToken(req), Object.fromEntries(searchParams.entries())) })
-      return true
-    }
-
-    if (pathname === '/api/student/skillhub/skill-requests' && req.method === 'GET') {
-      sendJson(res, 200, { requests: await listStudentSkillRequests(getBearerToken(req)) })
-      return true
-    }
-
-    if (pathname === '/api/student/skillhub/skill-requests' && req.method === 'POST') {
-      sendJson(res, 201, { request: await requestCatalogSkill(getBearerToken(req), await readJsonBody(req)) })
-      return true
-    }
-
-    if (req.method === 'GET' && pathname === '/api/student/activity-heatmap') {
-      const searchParams = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams
-      const heatmap = await getStudentActivityHeatmap(getBearerToken(req), Object.fromEntries(searchParams.entries()))
-      sendJson(res, 200, { heatmap })
-      return true
-    }
-
-    if (req.method === 'PATCH' && pathname === '/api/student/skillhub') {
-      const payload = await readJsonBody(req)
-      const skillHub = await updateStudentSkillHub(getBearerToken(req), payload)
-      sendJson(res, 200, { skillHub })
-      return true
-    }
-
-    if (req.method === 'PATCH' && pathname === '/api/student/skillhub/skill-visibility') {
-      const payload = await readJsonBody(req)
-      const skillHub = await setStudentSkillArchived(getBearerToken(req), payload)
-      sendJson(res, 200, { skillHub })
-      return true
-    }
-
-    if (req.method === 'POST' && pathname === '/api/student/skillhub/events') {
-      const payload = await readJsonBody(req)
-      const skillHub = await recordStudentSkillHubEvent(getBearerToken(req), payload)
-      sendJson(res, 200, { skillHub })
-      return true
-    }
-
-    if (pathname === '/api/student/skillhub/assessments' && req.method === 'GET') {
-      sendJson(res, 200, { assessments: await listStudentAssessments(getBearerToken(req)) })
-      return true
-    }
-    if (pathname === '/api/student/skillhub/assessments' && req.method === 'POST') {
-      sendJson(res, 201, { assessment: await submitSkillAssessment(getBearerToken(req), await readJsonBody(req)) })
-      return true
-    }
+    if (await handleStudentSkillHubRoutes(req, res, pathname, sendJson)) return true
 
     if (req.method === 'PATCH' && pathname === '/api/student/earning') {
       const payload = await readJsonBody(req)
@@ -725,7 +582,7 @@ async function handleStudentApi(req, res, pathname) {
   } catch (error) {
     sendJson(res, error.statusCode || 500, {
       status: 'error',
-      message: error.message || 'Something went wrong',
+      message: error.statusCode ? error.message : 'The server could not complete this request.',
       requestId: res.requestId,
     })
     return true
@@ -739,7 +596,17 @@ const server = http.createServer(async (req, res) => {
   req.requestId = createRequestId()
   res.requestId = req.requestId
   res.requestOrigin = req.headers.origin || ''
-  const { pathname } = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+  let pathname
+  try {
+    ({ pathname } = getRequestUrl(req))
+  } catch {
+    sendJson(res, 400, {
+      status: 'error',
+      message: 'Invalid request URL',
+      requestId: req.requestId,
+    })
+    return
+  }
 
   res.on('finish', () => {
     writeLog('info', 'request.completed', {

@@ -14,6 +14,8 @@
 
 Students submit evidence through Skill Hub's assessment page. The server stores pending submissions, supports requested revisions, and exposes only the signed-in student's history. Pending submissions do not award skills or reputation. Client-reported completion events are rejected, and profile updates cannot set verification fields.
 
+The server captures catalog identity, version, renewal duration, and instructions at submission; client-supplied criteria cannot replace them. A stale displayed catalog version returns a conflict so the student can refresh. Revisions retain the original criteria and submission day even if the standard changes or is archived. Existing eligible submissions remain reviewable after verification expires, but new submissions require a published standard. Demo examples are visible by default in Skill Hub and the Admin review queue, can be switched off, and never earn real credit or practice dates. Reviews are human decisions, not camera monitoring or automatic cheating detection from typing speed, browser tabs, or developer tools.
+
 Reviewers use the private web workspace at `/reviewer`. There is no public reviewer registration route. Provision or rotate an account from `server/`, then deliver its credentials through the deployment's normal secret-sharing process:
 
 ```bash
@@ -22,7 +24,7 @@ npm run reviewers:create -- --name "Reviewer Name" --email reviewer@example.org 
 
 The reviewer queue is blind: it excludes student name, college, location, photo, and TrustScore. A reviewer claims one pending submission, scores the five-part evidence rubric, and approves, rejects, or requests a revision. Approval requires at least 70/100. Claim ownership prevents a second reviewer from deciding the same pending submission. Review records retain evidence snapshots, rubric, feedback, reviewer identity, and review time. Students can see their score and feedback, but cannot access reviewer endpoints.
 
-Approval and the resulting skill/TrustScore update commit in one MongoDB transaction. A replica set or MongoDB Atlas is required; standalone MongoDB cannot process approvals. Pending claims return to the available queue after `REVIEW_CLAIM_TTL_MINUTES` (240 minutes by default), and the original reviewer loses decision authority if another reviewer reclaims it. Restrict reviewer provisioning and database access and disable departed reviewer accounts. The legacy `assessments:review` command remains available for audited recovery work.
+Approval and the resulting skill/TrustScore update commit in one MongoDB transaction. A replica set or MongoDB Atlas is required; standalone MongoDB cannot process approvals. Pending claims return to the available queue after `REVIEW_CLAIM_TTL_MINUTES` (240 minutes by default), and the original reviewer loses decision authority if another reviewer reclaims it. Restrict reviewer provisioning and database access and disable departed reviewer accounts. The legacy `assessments:review` command remains available for audited recovery work; decisions through it must include `--correctness`, `--evidence`, `--understanding`, `--testing`, and `--communication` scores from 0 to 5.
 
 There is no automatic proof of skill, AI review, or instant verification. Previously stored demo verification data is not automatically deleted; audit historical records before deployment. Expired records lose their active badge on read. Legacy records without a review timestamp do not incur a new expiry penalty.
 
@@ -31,21 +33,22 @@ There is no automatic proof of skill, AI review, or instant verification. Previo
 | Event | TrustScore | Skill profile |
 | --- | --- | --- |
 | Add skill | 0 | Unverified, no assessed level percentage |
-| Initial verification approved | +60 once per normalized skill name | Verified for 365 days |
+| Initial verification approved | +60 once per normalized skill name | Verified for the catalog standard's renewal period (365 days by default) |
 | Next-level upgrade approved | +100 once per skill and target level | Beginner -> Intermediate -> Pro |
-| Renewal approved | +50 once per previous expiry cycle | New 365-day validity starting on review day |
+| Renewal approved | +50 once per previous expiry cycle | Adds the catalog renewal period to the existing due date if still valid, or starts from the review day if expired |
 | Verified skill expires | -80 once per expiry cycle | Expired, no active verified badge |
 | Challenge approved | Up to +80 per submission day across all challenges | Evidence and activity recorded |
 | Practice approved | Up to +20 per submission day across all skills | Consecutive approved practice days recorded |
 | Archive skill | 0 | Hide from public profile, talent search, GIG matching and new evidence actions; reviewed history remains private to the student |
 | Restore archived skill | 0 | Return the existing verification to public matching when it is still valid |
-| Pending, rejected, revision requested | 0 | No new verification or level |
+| Pending or revision requested | 0 | No new verification or level |
+| Rejected | No skill reward; a reviewer score below 40/100 can incur -10 once per submission day | No new verification or level |
 
 Dates and daily reward periods use Asia/Kolkata. The expiry day is inclusive; renewal opens 30 days before expiry. Daily rewards use the server-assigned original submission day, even when review happens later. Revisions retain that day and the assigned brief. Approval revalidates current eligibility. Streaks are derived from approved practice days, including reviews arriving out of order. Missing practice does not automatically deduct points or downgrade a skill. Archiving is reversible and does not remove evidence, TrustScore history, or existing GIG records; it prevents the archived skill from appearing in public/talent/GIG matching until restored.
 
 The existing TrustScore is clamped to 0..1000. New accounts start at 0, with no seeded skills or projects. Existing scores are not reset: audit and reconcile historical demo scores separately with a backup and explicit approval. Account activity retains nominal event points even if the score hits its floor or ceiling.
 
-Both browser-accessible event endpoints reject self-awarded points. Profile saves cannot overwrite Skill Hub records; adding skills uses an explicit Skill Hub save. Student profile and company talent badges use active verification, not a hard-coded skill-name list. A profile skill name alone is not verified proficiency. The gap report counts saved, browsable GIG skill requirements; it is not an external market-demand estimate or a hiring guarantee.
+Both browser-accessible event endpoints reject self-awarded points. Profile saves cannot overwrite Skill Hub records; adding skills uses an explicit Skill Hub save. Student profile and company talent badges use active verification, not a hard-coded skill-name list. A profile skill name alone is not verified proficiency. The gap report counts skill requirements from live company GIGs in Hiring, Reviewing, or In Progress; it is not an external market-demand estimate or a hiring guarantee.
 
 ### Expiry Maintenance
 
@@ -60,6 +63,16 @@ This command updates expired verification and records each eligible penalty once
 Do not truncate the stored TrustScore event list: those keys prevent replayed credit. Earlier releases retained only 250 entries; events already discarded by those releases cannot be reconstructed automatically. Before operating at a scale approaching MongoDB's document-size limit, migrate events into a uniquely indexed ledger collection in a transaction, retaining all deduplication keys. Back up both assessment and student records together.
 
 ## Release Checks
+
+From `server/`, run `npm test` and `npm run check`; from `client/`, run `npm run lint` and `npm run build`.
+
+To install the 24 starter published skill standards without overwriting admin edits, run from `server/`:
+
+```bash
+npm run seed:skill-catalog -- --admin-email admin@example.com --db-name skillbridge --confirm
+```
+
+Review the live verification requirements with reviewers before using them for assessment. Production operations also require reviewer capacity, backups, scheduled score reconciliation, and a documented appeal process; passing checks does not certify load capacity or establish misconduct detection.
 
 Run the isolated database integration test against a replica-set test server:
 

@@ -66,10 +66,10 @@ export default function BusinessOverview({ profile, stats, completion, activity,
         </div>
         <div className="business-heading-actions">
           <nav className="business-quick-actions" aria-label="Company shortcuts">
-            <button onClick={() => onNavigate('gig')}><BriefcaseBusiness size={17} />Manage GIGs</button>
-            <button onClick={() => onNavigate('tasks')}><ClipboardCheck size={17} />Task Center</button>
-            <button onClick={() => onNavigate('talent')}><Search size={17} />Find talent</button>
-            <button onClick={() => onNavigate('workspace')}><FolderKanban size={17} />Project workspace</button>
+            <button className="business-quick-gigs" onClick={() => onNavigate('gig')}><BriefcaseBusiness size={17} />Manage GIGs</button>
+            <button className="business-quick-tasks" onClick={() => onNavigate('tasks')}><ClipboardCheck size={17} />Task Center</button>
+            <button className="business-quick-talent" onClick={() => onNavigate('talent')}><Search size={17} />Find talent</button>
+            <button className="business-quick-workspace" onClick={() => onNavigate('workspace')}><FolderKanban size={17} />Project workspace</button>
           </nav>
           <button className="business-profile-progress" onClick={() => onNavigate('profile')}>
             <span><strong>{completion}%</strong> profile complete</span>

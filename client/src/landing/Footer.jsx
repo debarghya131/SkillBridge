@@ -28,6 +28,11 @@ export default function Footer() {
             <Link to="/login">Log in</Link>
             <Link to="/admin">Admin sign in</Link>
           </nav>
+          <nav aria-label="Legal links">
+            <h3>Legal</h3>
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/terms">Terms of Service</Link>
+          </nav>
           <nav aria-label="Contact links">
             <h3>Get in touch</h3>
             <a href="mailto:debarghyabandyopadhyay191@gmail.com">

@@ -36,10 +36,17 @@ const REDUNDANT_INDEXES = {
 }
 
 async function currentIndexReport(model) {
-  const indexes = await model.collection.indexes()
+  let indexes
+  try {
+    indexes = await model.collection.indexes()
+  } catch (error) {
+    if (error.code !== 26 && error.codeName !== 'NamespaceNotFound') throw error
+    indexes = []
+  }
   const names = indexes.map(index => index.name)
   return {
     collection: model.collection.name,
+    exists: indexes.length > 0,
     indexes: names,
     redundantIndexes: (REDUNDANT_INDEXES[model.collection.name] || []).filter(name => names.includes(name)),
   }
@@ -52,7 +59,9 @@ async function main() {
 
   const env = getEnvConfig()
   try {
-    await connectToDatabase(env.mongoUrl, env)
+    // A dry run must not create collections or indexes even when the caller's
+    // local NODE_ENV is development. --apply creates indexes explicitly below.
+    await connectToDatabase(env.mongoUrl, { ...env, autoCreate: false, autoIndex: false })
 
     if (applyChanges) {
       for (const model of models) await model.createIndexes()

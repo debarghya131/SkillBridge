@@ -11,15 +11,23 @@ const links = [
 export default function LandingNav() {
   const [open, setOpen] = useState(false)
   const [siteViews, setSiteViews] = useState(null)
+  const [metricUnavailable, setMetricUnavailable] = useState(false)
   const nav = useRef(null)
   const trigger = useRef(null)
   useEffect(() => {
     let active = true
     registerSiteView()
       .then(({ count }) => {
-        if (active) setSiteViews(Number(count) || 0)
+        const parsedCount = Number(count)
+        if (count === null || count === undefined || !Number.isFinite(parsedCount) || parsedCount < 0) {
+          if (active) setMetricUnavailable(true)
+          return
+        }
+        if (active) setSiteViews(parsedCount)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (active) setMetricUnavailable(true)
+      })
     return () => { active = false }
   }, [])
   useEffect(() => {
@@ -45,7 +53,7 @@ export default function LandingNav() {
     <header className="sb-nav" ref={nav}>
       <div className="sb-wrap sb-nav-inner">
         <SkillBridgeBrand linkTo="/" className="sb-brand" />
-        <div
+        {!metricUnavailable && <div
           className={`sb-site-metric${siteViews === null ? ' is-loading' : ''}`}
           aria-label={siteViews === null ? 'Loading page views' : `${siteViews.toLocaleString()} page views`}
           title="Page views"
@@ -53,7 +61,7 @@ export default function LandingNav() {
           <Eye size={15} aria-hidden="true" />
           {siteViews === null ? <span className="sb-site-metric-loader" aria-hidden="true" /> : <strong>{siteViews.toLocaleString()}</strong>}
           <span>views</span>
-        </div>
+        </div>}
         <nav className="sb-desktop-links" aria-label="Main navigation">
           {links.map(([label, href]) => (
             <a key={href} href={href}>

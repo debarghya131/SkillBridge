@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { setCompanySessionToken, signInCompany, signUpCompany } from './companyApi'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Info } from 'lucide-react'
+import { getCompanySessionToken, setCompanySessionToken, signInCompany, signUpCompany } from './companyApi'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 import { toast } from '../ui/toast'
 
@@ -59,6 +60,8 @@ export default function CompanyAuth() {
   const [serverError, setServerError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  if (getCompanySessionToken()) return <Navigate to="/company/dashboard" replace />
+
   const update = (key, val) => setForm(f => ({ ...f, [key]: val }))
   const focusAccent = (e) => { e.target.style.borderColor = 'var(--accent)' }
   const blurBorder = (e) => { e.target.style.borderColor = 'var(--border)' }
@@ -101,7 +104,7 @@ export default function CompanyAuth() {
 
       setCompanySessionToken(result.token)
       toast.success('Business account created successfully.', { title: 'Company Onboarded' })
-      window.location.assign('/company/dashboard')
+      navigate('/company/dashboard', { replace: true })
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -130,7 +133,7 @@ export default function CompanyAuth() {
 
       setCompanySessionToken(result.token)
       toast.success('Signed in successfully.', { title: 'Company Session Active' })
-      window.location.assign('/company/dashboard')
+      navigate('/company/dashboard', { replace: true })
     } catch (error) {
       setServerError(error.message)
     } finally {
@@ -164,7 +167,7 @@ export default function CompanyAuth() {
               {mode === 'signup' ? 'Register Your Business' : 'Company Sign In'}
             </h2>
             <p style={{ color: 'var(--muted)', fontSize: 12 }}>
-              {mode === 'signup' ? 'Find verified student talent for your MSME' : 'Welcome back! Access your talent dashboard'}
+              {mode === 'signup' ? 'Find student talent for your MSME' : 'Welcome back! Access your talent dashboard'}
             </p>
           </div>
 
@@ -173,7 +176,7 @@ export default function CompanyAuth() {
               {/* 1. Company Name */}
               <Field label="Company / Business Name" error={errors.companyName} required>
                 <input
-                  type="text" placeholder="e.g. Sharma Traders"
+                  type="text" aria-label="Company or business name" placeholder="e.g. Sharma Traders"
                   value={form.companyName} onChange={e => update('companyName', e.target.value)}
                   style={inputStyle} onFocus={focusAccent} onBlur={blurBorder}
                 />
@@ -187,7 +190,7 @@ export default function CompanyAuth() {
                 />
                 {contactMethod === 'email' ? (
                   <input
-                    type="email" placeholder="business@example.com"
+                    type="email" aria-label="Business email" placeholder="business@example.com"
                     value={form.email} onChange={e => update('email', e.target.value)}
                     style={inputStyle} onFocus={focusAccent} onBlur={blurBorder}
                   />
@@ -195,7 +198,7 @@ export default function CompanyAuth() {
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', fontSize: 14, fontWeight: 600 }}>+91</span>
                     <input
-                      type="tel" placeholder="10-digit mobile number"
+                      type="tel" aria-label="Phone number" placeholder="10-digit mobile number"
                       value={form.phone} onChange={e => update('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
                       style={{ ...inputStyle, paddingLeft: 46 }} onFocus={focusAccent} onBlur={blurBorder}
                     />
@@ -203,8 +206,8 @@ export default function CompanyAuth() {
                 )}
               </Field>
 
-              {/* 3. Business verification */}
-              <Field label="Business Verification" error={errors.gstin || errors.businessDoc} required>
+              {/* 3. Business registration reference */}
+              <Field label="Business Registration Reference" error={errors.gstin || errors.businessDoc} required>
                 <TogglePill
                   options={[{ value: 'gstin', label: '🏛️ GSTIN' }, { value: 'udyam', label: '📋 Udyam Reg.' }]}
                   value={bizVerifyMethod} onChange={setBizVerifyMethod}
@@ -212,7 +215,7 @@ export default function CompanyAuth() {
                 {bizVerifyMethod === 'gstin' ? (
                   <div>
                     <input
-                      type="text" placeholder="e.g. 29ABCDE1234F1Z5"
+                      type="text" aria-label="GSTIN reference" placeholder="e.g. 29ABCDE1234F1Z5"
                       value={form.gstin}
                       onChange={e => update('gstin', e.target.value.toUpperCase().slice(0, 15))}
                       style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.05em' }}
@@ -225,7 +228,7 @@ export default function CompanyAuth() {
                 ) : (
                   <div>
                     <input
-                      type="text" placeholder="Udyam Registration Number"
+                      type="text" aria-label="Udyam registration reference" placeholder="Udyam Registration Number"
                       value={form.businessDoc} onChange={e => update('businessDoc', e.target.value.toUpperCase())}
                       style={{ ...inputStyle, fontFamily: 'monospace' }}
                       onFocus={focusAccent} onBlur={blurBorder}
@@ -240,14 +243,14 @@ export default function CompanyAuth() {
                   padding: '6px 10px', background: 'var(--accent-light)',
                   borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}>
-                  🔒 Your business details are verified securely
+                  🔒 Your registration reference is stored securely; live registry verification is not connected.
                 </div>
               </Field>
 
               {/* 4. Location */}
               <Field label="Business Location" error={errors.location} required>
                 <input
-                  type="text" placeholder="City, State (e.g. Ranchi, Jharkhand)"
+                  type="text" aria-label="Business location" placeholder="City, State (e.g. Ranchi, Jharkhand)"
                   value={form.location} onChange={e => update('location', e.target.value)}
                   style={inputStyle} onFocus={focusAccent} onBlur={blurBorder}
                 />
@@ -257,13 +260,13 @@ export default function CompanyAuth() {
               <Field label="Password" error={errors.password} required>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? 'text' : 'password'} aria-label="Create password"
                     placeholder="Minimum 8 characters"
                     value={form.password} onChange={e => update('password', e.target.value)}
                     style={{ ...inputStyle, paddingRight: 44 }} onFocus={focusAccent} onBlur={blurBorder}
                   />
                   <button
-                    type="button" onClick={() => setShowPassword(v => !v)}
+                    type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, cursor: 'pointer', padding: 0 }}
                   >{showPassword ? '🙈' : '👁️'}</button>
                 </div>
@@ -294,15 +297,21 @@ export default function CompanyAuth() {
               {serverError && <p style={{ textAlign: 'center', fontSize: 12, color: '#EF4444', marginTop: 10 }}>{serverError}</p>}
 
               <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
-                By registering you agree to our Terms of Service and Privacy Policy
+                By registering, you agree to the <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Terms of Service</Link> and acknowledge the <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Privacy Policy</Link>.
               </p>
               <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>Already registered?{' '}<button onClick={() => navigate('/login')} style={{ background: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 700 }}>Log in</button></p>
             </div>
           ) : (
             <div>
+              <aside aria-label="About demo examples" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 12px', marginBottom: 18, border: '1px solid #FFE0C4', borderRadius: 8, background: '#FFF8F2', color: 'var(--text)' }}>
+                <Info size={17} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: 'var(--accent)' }} />
+                <p style={{ fontSize: 12, lineHeight: 1.5, margin: 0 }}>
+                  <strong>Demo examples are read-only, not company accounts.</strong> Sign in with your own company account. Demo talent and GIGs do not create real applicants or payment records.
+                </p>
+              </aside>
               <Field label="Email or Phone" error={errors.signInContact} required>
                 <input
-                  type="text" placeholder="Enter your registered email or phone"
+                  type="text" aria-label="Email or phone" placeholder="Enter your registered email or phone"
                   value={form.signInContact} onChange={e => update('signInContact', e.target.value)}
                   style={inputStyle} onFocus={focusAccent} onBlur={blurBorder}
                 />
@@ -311,25 +320,19 @@ export default function CompanyAuth() {
               <Field label="Password" error={errors.signInPassword} required>
                 <div style={{ position: 'relative' }}>
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? 'text' : 'password'} aria-label="Password"
                     placeholder="Your password"
                     value={form.signInPassword} onChange={e => update('signInPassword', e.target.value)}
                     style={{ ...inputStyle, paddingRight: 44 }} onFocus={focusAccent} onBlur={blurBorder}
                   />
                   <button
-                    type="button" onClick={() => setShowPassword(v => !v)}
+                    type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--muted)', fontSize: 16, cursor: 'pointer', padding: 0 }}
                   >{showPassword ? '🙈' : '👁️'}</button>
                 </div>
               </Field>
 
-              <div style={{ textAlign: 'right', marginBottom: 20 }}>
-                <button style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Forgot password?
-                </button>
-              </div>
-
-              <button className="btn-accent" style={{ width: '100%', justifyContent: 'center', padding: '13px', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'wait' : 'pointer' }}
+              <button className="btn-accent" style={{ width: '100%', justifyContent: 'center', padding: '13px', marginTop: 10, opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'wait' : 'pointer' }}
                 disabled={isSubmitting}
                 onClick={handleSignin}>
                 {isSubmitting ? 'Signing In...' : 'Sign In →'}

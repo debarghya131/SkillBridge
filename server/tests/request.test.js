@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
-const { readJsonBody } = require('../utils/request')
+const { getRequestUrl, readJsonBody } = require('../utils/request')
 
 function requestWithChunks(chunks) {
   const request = new EventEmitter()
@@ -18,8 +18,25 @@ test('readJsonBody accepts the configured media upload envelope', async () => {
 })
 
 test('readJsonBody rejects bodies over the configured limit', async () => {
+  const request = requestWithChunks(['{"value":"', 'x'.repeat(1_000_100), '"}'])
+  let destroyed = false
+  request.destroy = () => { destroyed = true }
   await assert.rejects(
-    readJsonBody(requestWithChunks(['{"value":"', 'x'.repeat(1_000_100), '"}']), 1_000_000),
+    readJsonBody(request, 1_000_000),
     error => error.statusCode === 413,
   )
+  assert.equal(destroyed, false, 'leave the connection open long enough to send the 413 response')
+})
+
+test('readJsonBody limits UTF-8 bytes rather than string characters', async () => {
+  await assert.rejects(
+    readJsonBody(requestWithChunks(['{"value":"', '₹'.repeat(400_000), '"}']), 1_000_000),
+    error => error.statusCode === 413,
+  )
+})
+
+test('request URL parsing does not trust the Host header', () => {
+  const url = getRequestUrl({ url: '/ready?probe=1', headers: { host: 'bad host' } })
+  assert.equal(url.pathname, '/ready')
+  assert.equal(url.searchParams.get('probe'), '1')
 })

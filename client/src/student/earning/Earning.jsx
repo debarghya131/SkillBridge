@@ -17,6 +17,7 @@ export default function Earning() {
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [tab, setTab] = useState('History')
+  const [showDemo, setShowDemo] = useState(true)
   const [page, setPage] = useState(0)
 
   function exportRecords() {
@@ -90,23 +91,28 @@ export default function Earning() {
   return <div className="student-external-earnings">
     {error && <div role="alert" className="work-error">{error} <button className="btn-secondary" onClick={() => setRefresh(value => value + 1)}>Retry</button></div>}
     <header className="earning-compact-header">
-      <h2>Earning</h2>
-    <div className="external-earning-summary" aria-label="Earning summary">
-      <div><Clock3 aria-hidden="true" /><strong>{pending.length}</strong><span>Awaiting payment</span></div>
-      <div><CircleCheck aria-hidden="true" /><strong>{transactions.length}</strong><span>Recorded payments</span></div>
-      <div><IndianRupee aria-hidden="true" /><strong>{money(state.totalRecorded)}</strong><span>Total recorded</span></div>
-    </div>
-      <div className="earning-header-actions" style={{ display: 'flex', gap: 8 }}><button className="btn-secondary" title="Export earning records" aria-label="Export earning records" disabled={!transactions.length} onClick={exportRecords}><Download size={18}/></button><button className="btn-secondary" title={loading ? 'Refreshing payment records' : 'Refresh payment records'} aria-label={loading ? 'Refreshing payment records' : 'Refresh payment records'} disabled={loading} onClick={() => setRefresh(value => value + 1)}><RefreshCw className={loading ? 'is-spinning' : ''} size={18} /></button></div>
+      <div className="earning-heading-row">
+        <h2>Earning</h2>
+        <div className="earning-header-actions"><button className="btn-secondary" title="Export earning records" aria-label="Export earning records" disabled={!transactions.length} onClick={exportRecords}><Download size={18}/></button><button className="btn-secondary" title={loading ? 'Refreshing payment records' : 'Refresh payment records'} aria-label={loading ? 'Refreshing payment records' : 'Refresh payment records'} disabled={loading} onClick={() => setRefresh(value => value + 1)}><RefreshCw className={loading ? 'is-spinning' : ''} size={18} /></button></div>
+      </div>
+      <div className="earning-summary-row">
+        <div className="external-earning-summary" aria-label="Earning summary">
+          <div><Clock3 aria-hidden="true" /><strong>{pending.length}</strong><span>Awaiting payment</span></div>
+          <div><CircleCheck aria-hidden="true" /><strong>{transactions.length}</strong><span>Recorded payments</span></div>
+          <div><IndianRupee aria-hidden="true" /><strong>{money(state.totalRecorded)}</strong><span>Total recorded</span></div>
+        </div>
+        <label className="earning-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => setShowDemo(event.target.checked)}/>Demo examples</label>
+      </div>
     </header>
     <p className="work-muted">Company-reported external payments. SkillBridge does not hold funds or process withdrawals.</p>
     <nav className="earning-tabs" aria-label="Earning views">{['History', 'Awaiting payment'].map(name => <button key={name} aria-pressed={tab === name} onClick={() => { setTab(name); setPage(0) }}>{name}</button>)}</nav>
-      <div className="external-earning-records">
+      <div className={`external-earning-records${rows.length ? '' : ' is-empty'}`}>
         {!rows.length ? <p className="work-empty">{tab === 'History' ? 'No external payments recorded yet.' : 'No approved work awaiting payment.'}</p> : <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / company</th><th>Status</th>{tab === 'History' ? <><th>Amount</th><th>Reference</th><th>Method</th><th>Paid on</th></> : <th>Agreed amount</th>}</tr></thead><tbody>
         {rows.slice(currentPage * 10, currentPage * 10 + 10).map(item => <tr key={item.id}><td className="earning-payment-title" data-label="GIG / company"><strong>{item.title}{item.demoData && <span className="demo-data-badge">Demo</span>}</strong><span>{item.company}</span></td><td data-label="Status">{tab === 'History' ? 'Company reported' : 'Payment pending'}</td>{tab === 'History' ? <><td data-label="Amount">{money(item.amount)}</td><td data-label="Reference">{item.reference || 'Not provided'}</td><td data-label="Method">{METHODS[item.method] || item.method}</td><td data-label="Paid on">{item.paidOn}</td></> : <td data-label="Agreed amount">{item.budget || 'Not specified'}</td>}</tr>)}
       </tbody></table></div>}
     </div>
     {pages > 1 && <footer className="earning-pagination"><button className="btn-secondary" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button><span aria-live="polite">{currentPage + 1} / {pages}</span><button className="btn-secondary" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}>Next</button></footer>}
-    {exampleRows.length > 0 && <section className="earning-demo-preview" aria-label={`Read-only ${tab.toLowerCase()} examples`}>
+    {showDemo && exampleRows.length > 0 && <section className="earning-demo-preview" aria-label={`Read-only ${tab.toLowerCase()} examples`}>
       <div className="earning-demo-heading"><div><span className="demo-data-badge">Read-only examples</span><h3>{tab === 'History' ? 'Example payment history' : 'Example approved work'}</h3><p className="work-muted">Examples are not part of your earnings, totals, or CSV export.</p></div><span>{exampleRows.length} examples</span></div>
       <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / company</th><th>Status</th>{tab === 'History' ? <><th>Amount</th><th>Reference</th><th>Method</th><th>Paid on</th></> : <th>Agreed amount</th>}</tr></thead><tbody>
         {exampleRows.map(item => <tr key={item.id}><td className="earning-payment-title" data-label="GIG / company"><strong>{item.title}<span className="demo-data-badge">Demo</span></strong><span>{item.company}</span></td><td data-label="Status">{tab === 'History' ? 'Example only' : 'Example only'}</td>{tab === 'History' ? <><td data-label="Amount">{money(item.amount)}</td><td data-label="Reference">{item.reference || 'Not provided'}</td><td data-label="Method">{METHODS[item.method] || item.method}</td><td data-label="Paid on">{item.paidOn}</td></> : <td data-label="Agreed amount">{item.budget || 'Not specified'}</td>}</tr>)}

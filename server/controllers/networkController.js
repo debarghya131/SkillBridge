@@ -117,7 +117,9 @@ function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none'
   const raw = post.toObject ? post.toObject() : post
   const accepted = (raw.requests || []).filter(item => item.status === 'accepted')
   const ownRequest = (raw.requests || []).find(item => idOf(item.student) === idOf(viewerId))
-  const peerProfile = (person, options = {}) => ({ ...profileFor(person, { compact: true, ...options }), relationship: relationshipFor(idOf(person)) })
+  // Team-Up cards never carry saved contact details; the full profile endpoint
+  // applies the owner/accepted-connection check before returning them.
+  const peerProfile = person => ({ ...profileFor(person, { compact: true }), relationship: relationshipFor(idOf(person)) })
   return {
     id: idOf(raw), title: raw.title, description: raw.description, type: raw.type,
     requiredSkills: raw.requiredSkills || [], slots: raw.slots, filled: accepted.length,
@@ -126,11 +128,11 @@ function serializePost(post, viewerId, relationshipFor = () => ({ status: 'none'
     requestSource: ownRequest?.source || null,
     requests: idOf(raw.owner) === idOf(viewerId) ? (raw.requests || []).map(item => ({
       id: idOf(item), message: item.message, status: item.status, source: item.source || 'application', createdAt: item.createdAt,
-      student: peerProfile(item.student, { includeContact: item.status === 'accepted' }),
+      student: peerProfile(item.student),
     })) : [],
     // A member never needs to receive their own card. The owner is returned separately.
     members: includeMembers
-      ? accepted.filter(item => idOf(item.student) !== idOf(viewerId)).map(item => peerProfile(item.student, { includeContact: idOf(raw.owner) === idOf(viewerId) }))
+      ? accepted.filter(item => idOf(item.student) !== idOf(viewerId)).map(item => peerProfile(item.student))
       : [],
   }
 }
@@ -177,7 +179,7 @@ async function getStudentNetworkState(token) {
   }
   const relationshipFor = personId => relationships.get(idOf(personId)) || { status: 'none' }
   const students = [...relationshipPeers, ...suggestions]
-  const people = students.map(item => ({ ...profileFor(item, { includeContact: relationships.get(idOf(item))?.status === 'connected', compact: true }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
+  const people = students.map(item => ({ ...profileFor(item, { compact: true }), relationship: relationships.get(idOf(item)) || { status: 'none' } }))
   const findPerson = id => people.find(person => person.id === idOf(id))
   const serializedPosts = [
     ...relatedPosts.map(post => serializePost(post, viewerId, relationshipFor)),
@@ -394,4 +396,4 @@ async function decideTeamInvitation(token, postId, requestId, decision) {
   return { id: idOf(post), status: request.status }
 }
 
-module.exports = { createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile, getStudentNetworkState, inviteStudentToTeam, leaveTeam, normalizeTeamPayload, pairKey, profileFor, removeConnection, requestToJoinTeam, sendConnectionRequest, updateTeamPost, withdrawTeamRequest }
+module.exports = { createTeamPost, decideConnectionRequest, decideTeamInvitation, decideTeamRequest, deleteTeamPost, getNetworkProfile, getStudentNetworkState, inviteStudentToTeam, leaveTeam, normalizeTeamPayload, pairKey, profileFor, removeConnection, requestToJoinTeam, sendConnectionRequest, serializePost, updateTeamPost, withdrawTeamRequest }

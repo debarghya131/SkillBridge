@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { normalizeTeamPayload, pairKey, profileFor } = require('../controllers/networkController')
+const { normalizeTeamPayload, pairKey, profileFor, serializePost } = require('../controllers/networkController')
 
 test('network pair keys are stable regardless of request direction', () => {
   const first = 'aaaaaaaaaaaaaaaaaaaaaaaa'
@@ -34,6 +34,22 @@ test('network profiles retain the public profile snapshot used by View profile',
   assert.equal(profile.githubLink[0].url, student.githubLink[0].url)
   assert.equal(profile.projects[0].name, student.projects[0].name)
   assert.equal(profile.videoUrl, student.videoUrl)
+})
+
+test('Team-Up cards never expose saved contact details, even to the owner or a connection', () => {
+  const owner = { _id: 'aaaaaaaaaaaaaaaaaaaaaaaa', name: 'Owner', skillHubSkills: [],
+    contactInfo: [{ label: 'Email', value: 'owner@example.com', saved: true }] }
+  const member = { _id: 'bbbbbbbbbbbbbbbbbbbbbbbb', name: 'Member', skillHubSkills: [],
+    contactInfo: [{ label: 'Email', value: 'member@example.com', saved: true }] }
+  const post = { _id: 'cccccccccccccccccccccccc', owner, requests: [{ _id: 'dddddddddddddddddddddddd', student: member, status: 'accepted', source: 'application' }] }
+  const relationshipFor = () => ({ status: 'connected' })
+  const ownerView = serializePost(post, owner._id, relationshipFor)
+  assert.deepEqual(ownerView.requests[0].student.contactInfo, [])
+  assert.deepEqual(ownerView.members[0].contactInfo, [])
+  assert.equal(ownerView.requests[0].student.contactVisible, false)
+  const memberView = serializePost(post, member._id, relationshipFor)
+  assert.deepEqual(memberView.owner.contactInfo, [])
+  assert.equal(memberView.owner.contactVisible, false)
 })
 
 test('team-up payload validation normalizes bounded production input', () => {

@@ -10,6 +10,7 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
   const [busy, setBusy] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [view, setView] = useState('Record payment')
+  const [showDemo, setShowDemo] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(0)
   const recording = useRef(false)
@@ -93,7 +94,12 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
           <div><strong>{money(totalRecorded)}</strong><span>Total recorded</span></div>
         </div>
       </div>
-
+        <div className="payment-demo-controls">
+          <label className="payment-demo-toggle">
+            <input type="checkbox" checked={showDemo} onChange={event => setShowDemo(event.target.checked)} />
+            Demo examples
+          </label>
+        </div>
         <div className="payment-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {onRefresh && <button type="button" className="btn-secondary" disabled={busy || refreshing} onClick={refreshRecords} title="Refresh payment records" aria-label="Refresh payment records"><RefreshCw className={refreshing ? 'is-spinning' : ''} size={16}/></button>}
           <button className="btn-secondary payment-export" disabled={!transactions.length} onClick={exportRecords} title="Export payment records"><Download size={16}/> Export CSV</button>
@@ -139,7 +145,7 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
             </div>
           </div>
         )}
-        {demoPending.length > 0 && <section className="payment-demo-preview" aria-label="Demo pending payments" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+        {showDemo && demoPending.length > 0 && <section className="payment-demo-preview" aria-label="Demo pending payments" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <div className="payment-panel-heading"><div><span className="demo-data-badge">Read-only demo</span><h3 style={{ marginTop: 7 }}>Approved work awaiting payment</h3><p className="work-muted">These examples show what appears here after work is approved. Real payment records remain separate.</p></div><span className="payment-count">{demoPending.length} examples</span></div>
           <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Budget</th><th>Approved</th><th>State</th></tr></thead><tbody>
             {demoPending.map(row => <tr key={row.id}><td data-label="GIG / student"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Budget">{row.budget}</td><td data-label="Approved">{row.approvedAt}</td><td data-label="State"><span className="payment-count">Awaiting payment</span></td></tr>)}
@@ -163,7 +169,7 @@ export default function PaymentSection({ paymentState, onRecordPayment, onRefres
         ) : (
           <div className="payment-history-empty"><span aria-hidden="true">▤</span><p>No real payment records yet.</p></div>
         )}
-        {demoTransactions.length > 0 && <section className="payment-demo-preview" aria-label="Demo payment history" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+        {showDemo && demoTransactions.length > 0 && <section className="payment-demo-preview" aria-label="Demo payment history" style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <div className="payment-panel-heading"><div><span className="demo-data-badge">Read-only demo</span><h3 style={{ marginTop: 7 }}>Example payment history</h3><p className="work-muted">Company-reported payment examples. They are excluded from live totals and CSV exports.</p></div><span className="payment-count">{demoTransactions.length} examples</span></div>
           <div className="work-table-scroll"><table className="work-table"><thead><tr><th>GIG / student</th><th>Amount</th><th>Reference</th><th>Paid on</th><th>Record</th></tr></thead><tbody>
             {demoTransactions.map(row => <tr key={row.id}><td data-label="GIG / student" className="payment-history-title"><strong>{row.title}</strong><br /><span className="work-muted">{row.studentName}</span></td><td data-label="Amount">{money(row.amount)}</td><td data-label="Reference">{row.reference}</td><td data-label="Paid on">{row.paidOn}</td><td data-label="Record"><span className="payment-count">Demo recorded</span></td></tr>)}

@@ -185,10 +185,9 @@ async function reviewSkillAssessment(id, { status, feedback, reviewer, reviewerI
   if (!['approved', 'rejected', 'needs_revision'].includes(status)) throw buildAuthError('Invalid review decision')
   if (typeof feedback !== 'string' || !feedback.trim() || feedback.length > 2000) throw buildAuthError('Review feedback is required (maximum 2000 characters)')
   if (typeof reviewer !== 'string' || !reviewer.trim() || reviewer.length > 100) throw buildAuthError('Reviewer identity is required')
-  const rubric = rubricInput ? normalizeRubric(rubricInput) : null
-  if (reviewerId && !rubric) throw buildAuthError('A completed review rubric is required')
-  if (status === 'approved' && rubric && rubric.total < 70) throw buildAuthError('Approval requires a rubric score of at least 70', 409)
-  if (status === 'approved' && rubric && ['correctness', 'evidence', 'understanding'].some(key => rubric[key] < 3)) {
+  const rubric = normalizeRubric(rubricInput)
+  if (status === 'approved' && rubric.total < 70) throw buildAuthError('Approval requires a rubric score of at least 70', 409)
+  if (status === 'approved' && ['correctness', 'evidence', 'understanding'].some(key => rubric[key] < 3)) {
     throw buildAuthError('Approval requires at least 3/5 for correctness, evidence, and understanding.', 409)
   }
   // Approval and reputation changes must either both commit or neither commit.

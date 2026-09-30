@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Award, Handshake, House, Rocket } from 'lucide-react'
 import DashboardSkeleton from '../../ui/DashboardSkeleton'
 import NetworkNav from './NetworkNav'
@@ -16,14 +16,28 @@ const NETWORK_NAV_ITEMS = [
   { key: 'team-up', icon: Rocket, label: 'Team Up' },
 ]
 const nextMilestone = (value, thresholds) => thresholds.find(threshold => value < threshold) || thresholds.at(-1)
+const DEMO_LIST_KEYS = [
+  'suggestions', 'connected', 'incomingConnections', 'outgoingConnections',
+  'openTeamPosts', 'myTeamPosts', 'sentTeamRequests',
+  'incomingTeamInvitations', 'memberships',
+]
 
 export default function Network() {
   const cachedState = readStudentSectionCache('network', getStudentSessionToken())
   const [activeTab, setActiveTab] = useState('home')
+  const [showDemo, setShowDemo] = useState(true)
   const [networkState, setNetworkState] = useState(cachedState)
   const [isLoading, setIsLoading] = useState(!cachedState)
   const [error, setError] = useState('')
   const token = getStudentSessionToken()
+  const visibleNetworkState = useMemo(() => {
+    if (!networkState || showDemo) return networkState
+    const filtered = { ...networkState }
+    for (const key of DEMO_LIST_KEYS) {
+      filtered[key] = (networkState[key] || []).filter(item => !item.demoData && !item.profile?.demoData)
+    }
+    return filtered
+  }, [networkState, showDemo])
 
   const reload = useCallback(async ({ quiet = false, useCache = false } = {}) => {
     if (!token) return
@@ -68,13 +82,14 @@ export default function Network() {
   const nextConnections = nextMilestone(progress.connections, [100, 500, 1000])
   const nextTeamUps = nextMilestone(progress.teamUps, [10, 50, 100])
 
-  return <NetworkProvider value={{ networkState, reload, token, setActiveTab, loadProfile }}>
+  return <NetworkProvider value={{ networkState: visibleNetworkState, reload, token, setActiveTab, loadProfile }}>
     <div className="network-workspace">
       <div className="network-topbar"><NetworkNav items={NETWORK_NAV_ITEMS} active={activeTab} onChange={setActiveTab} />
+        <label className="network-demo-toggle"><input type="checkbox" checked={showDemo} onChange={event => setShowDemo(event.target.checked)}/>Demo examples</label>
         <section className="network-trust-progress" aria-label="Network TrustScore achievements"><div><Award size={17}/><strong>Network TrustScore achievements</strong><p>Only accepted, real connections and Team-Ups count. Demo records never earn points.</p></div><div className="network-trust-milestone"><span>Connections</span><strong>{progress.connections}/{nextConnections}</strong><small>+{nextConnections === 100 ? 25 : nextConnections === 500 ? 75 : 150} at {nextConnections}</small></div><div className="network-trust-milestone"><span>Team-Ups</span><strong>{progress.teamUps}/{nextTeamUps}</strong><small>+{nextTeamUps === 10 ? 25 : nextTeamUps === 50 ? 75 : 150} at {nextTeamUps}</small></div></section>
       </div>
       {error && !networkState ? <div className="network-error" role="alert"><span>{error}</span><button type="button" onClick={() => reload().catch(() => {})}>Retry</button></div> :
-        <div key={activeTab} className="student-tab-content network-tab-content">
+        <div key={`${activeTab}-${showDemo}`} className="student-tab-content network-tab-content">
           {activeTab === 'home' && <NetworkHome />}
           {activeTab === 'my-network' && <MyNetwork />}
           {activeTab === 'team-up' && <NetworkTeamUp />}

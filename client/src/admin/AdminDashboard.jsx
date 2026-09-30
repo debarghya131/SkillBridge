@@ -1,10 +1,11 @@
 import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, BookOpenCheck, ChevronDown, ClipboardCheck, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Save, ScanSearch, Search, ShieldCheck, Users, X } from 'lucide-react'
+import { Archive, ArrowRight, BookOpenCheck, ChevronDown, ClipboardCheck, LayoutDashboard, LogOut, Menu, Plus, RefreshCw, Save, ScanSearch, Search, ShieldCheck, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import SkillBridgeBrand from '../ui/SkillBridgeBrand'
 import ReviewQueue from './ReviewQueue'
 import { clearAdminSession, createAdminReviewer, createAdminSkill, decideAdminSkillRequest, fetchAdminOverview, fetchAdminReviewers, fetchAdminSkillRequests, fetchAdminSkills, fetchCurrentAdminUser, getAdminSessionRole, getAdminSessionToken, logoutAdmin, setAdminSession, updateAdminReviewer, updateAdminSkill } from './adminApi'
-import { getAdminDemoSkillRequests } from './adminDemoData'
+import { getAdminDemoCatalogSkills, getAdminDemoSkillRequests } from './adminDemoData'
+import { toast } from '../ui/toast'
 import './Admin.css'
 
 const CATEGORIES = ['Frontend', 'Backend', 'Full Stack', 'Mobile Development', 'Cloud Computing', 'DevOps', 'Cybersecurity', 'AI & Machine Learning', 'Data Engineering', 'Databases', 'Design', 'Analytics', 'Marketing', 'Content & Writing', 'Video & Animation', 'Game Development', 'Quality Assurance', 'Business & Finance', 'Product Management', 'Other']
@@ -17,6 +18,21 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-IN', { da
 
 function Metric({ label, value, icon, tone }) {
   return <article className={`admin-metric admin-metric-${tone}`}>{createElement(icon, { size: 19 })}<strong>{value ?? 0}</strong><span>{label}</span></article>
+}
+
+function DemoCatalogExamples({ skills }) {
+  return <section className="admin-catalog-demo" aria-labelledby="admin-catalog-demo-title">
+    <header><div><span>READ-ONLY EXAMPLES</span><h2 id="admin-catalog-demo-title">Example skill standards</h2><p>These previews are not in the database or available to students. Real standards appear below.</p></div><small>{skills.length} {skills.length === 1 ? 'example' : 'examples'}</small></header>
+    {skills.length ? <div className="admin-catalog-demo-list">{skills.map(skill => <details key={skill.id}>
+      <summary><span><strong>{skill.name} <em>DEMO</em></strong><small>{skill.category} · {skill.dailyTasks.length} daily {skill.dailyTasks.length === 1 ? 'task' : 'tasks'}</small></span><span className={`admin-status admin-status-${skill.status}`}>{skill.status}</span><ChevronDown size={17}/></summary>
+      <div className="admin-catalog-demo-detail"><p>{skill.summary}</p><dl><div><dt>Aliases</dt><dd>{skill.aliases.join(', ') || 'None'}</dd></div><div><dt>Renewal period</dt><dd>{skill.renewalDays} days</dd></div></dl>
+        <section><h3>Verification requirements</h3><p>{skill.verificationInstructions}</p></section>
+        <section><h3>Upgrade requirements</h3>{skill.upgradeRequirements.length ? <ul>{skill.upgradeRequirements.map(item => <li key={item.stage}><strong>{item.stage}:</strong> {item.instructions}</li>)}</ul> : <p>Not configured in this example.</p>}</section>
+        <section><h3>Daily practice</h3>{skill.dailyTasks.length ? <ul>{skill.dailyTasks.map(task => <li key={task.title}><strong>{task.title}:</strong> {task.instructions}</li>)}</ul> : <p>No daily tasks configured.</p>}</section>
+        <p className="admin-catalog-demo-note">Preview only. This example cannot be edited, published, or used for verification.</p>
+      </div>
+    </details>)}</div> : <p className="admin-catalog-demo-empty">No examples match these filters.</p>}
+  </section>
 }
 
 function AdminSelect({ value, options, onChange, ariaLabel }) {
@@ -123,6 +139,7 @@ export default function AdminDashboard() {
   const [editing, setEditing] = useState(null)
   const [requestDrafts, setRequestDrafts] = useState({})
   const [showRequestDemo, setShowRequestDemo] = useState(true)
+  const [showCatalogDemo, setShowCatalogDemo] = useState(true)
   const [showReviewerForm, setShowReviewerForm] = useState(false)
   const [reviewerDraft, setReviewerDraft] = useState({ name: '', email: '', password: '' })
   const [loading, setLoading] = useState(true)
@@ -172,6 +189,7 @@ export default function AdminDashboard() {
   useEffect(() => { load() }, [load])
 
   const filteredSkills = useMemo(() => skills.filter(skill => !search || `${skill.name} ${skill.aliases.join(' ')}`.toLowerCase().includes(search.toLowerCase())), [search, skills])
+  const demoCatalogSkills = useMemo(() => showCatalogDemo ? getAdminDemoCatalogSkills(status, search) : [], [showCatalogDemo, status, search])
   async function saveSkill(payload) {
     setBusy(true); setError('')
     try {
@@ -182,8 +200,19 @@ export default function AdminDashboard() {
     finally { setBusy(false) }
   }
   async function decideRequest(request, decision) {
-    if (request.demoData) return
+    if (request.demoData) {
+      toast.error('This is a read-only example. No decision was saved.', { title: 'Demo request' })
+      return
+    }
     const draft = requestDrafts[request.id] || {}
+    if (!draft.feedback?.trim()) {
+      toast.error('Add a decision note before continuing.', { title: 'Decision note required' })
+      return
+    }
+    if (decision !== 'rejected' && !draft.skillCatalogId) {
+      toast.error('Select a published catalog skill before continuing.', { title: 'Catalog match required' })
+      return
+    }
     setBusy(true); setError('')
     try {
       await decideAdminSkillRequest(token, request.id, { status: decision, feedback: draft.feedback || '', skillCatalogId: draft.skillCatalogId })
@@ -209,27 +238,55 @@ export default function AdminDashboard() {
   async function signOutNow() { await signOut() }
 
   const metrics = overview?.metrics || {}
+  const recentPublishedSkills = overview?.recentPublishedSkills || []
+  const openSection = (nextTab, nextStatus = 'all', nextSearch = '') => {
+    setTab(nextTab)
+    setStatus(nextStatus)
+    setSearch(nextSearch)
+    setEditing(null)
+  }
   return <main className="admin-shell">
     <header className="admin-topbar"><div><button ref={menuRef} className="admin-icon-button admin-menu-toggle" aria-label="Open admin navigation" aria-expanded={navigationOpen} aria-controls="admin-navigation" onClick={() => setNavigationOpen(true)}><Menu size={19}/></button><SkillBridgeBrand size="compact"/><span>Admin Workspace</span></div><div><small>{isAdmin ? 'Administrator' : 'Review staff'}</small><strong>{operator?.name || overview?.admin?.name}</strong><button className="admin-icon-button" title="Sign out" aria-label="Sign out" onClick={signOutNow}><LogOut size={17}/></button></div></header>
     <div className="admin-body">
       {navigationOpen && <button className="admin-navigation-backdrop" aria-label="Dismiss admin navigation" tabIndex={-1} onClick={() => setNavigationOpen(false)}/>}
-      <aside ref={navigationRef} id="admin-navigation" className={`admin-sidebar${navigationOpen ? ' is-open' : ''}`}><button className="admin-icon-button admin-menu-toggle" aria-label="Close admin navigation" onClick={() => setNavigationOpen(false)}><X size={19}/></button><nav aria-label="Admin sections">{tabs.map(([key, label, icon]) => <button key={key} aria-pressed={tab === key} onClick={() => { setTab(key); setEditing(null); setStatus('all'); setNavigationOpen(false) }}>{createElement(icon, { size: 17 })}<span>{label}</span></button>)}</nav><div><ShieldCheck size={17}/><span>{isAdmin ? 'Standards are versioned. Review staff work inside this Admin workspace.' : 'Blind review hides student identity and applies the captured platform standard.'}</span></div></aside>
+      <aside ref={navigationRef} id="admin-navigation" className={`admin-sidebar${navigationOpen ? ' is-open' : ''}`}><header className="admin-sidebar-header"><strong>Admin sections</strong><button className="admin-icon-button admin-menu-toggle" aria-label="Close admin navigation" onClick={() => setNavigationOpen(false)}><X size={19}/></button></header><nav aria-label="Admin sections">{tabs.map(([key, label, icon]) => <button key={key} aria-pressed={tab === key} onClick={() => { setTab(key); setEditing(null); setStatus('all'); setNavigationOpen(false) }}>{createElement(icon, { size: 17 })}<span>{label}</span></button>)}</nav><div className="admin-sidebar-footer"><ShieldCheck size={17}/><span>{isAdmin ? 'Standards are versioned. Review staff work inside this Admin workspace.' : 'Blind review hides student identity and applies the captured platform standard.'}</span></div></aside>
       <section ref={contentRef} className={`admin-content${tab === 'reviews' ? ' admin-review-content' : ''}`}>
         {tab !== 'reviews' && <header className="admin-heading"><div><span>PLATFORM GOVERNANCE</span><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1></div><button className="admin-icon-button" title="Refresh" aria-label="Refresh" disabled={loading || busy} onClick={load}><RefreshCw size={17}/></button></header>}
         {error && <p className="admin-error" role="alert">{error}</p>}
-        {isAdmin && tab === 'overview' && <><div className="admin-metrics"><Metric label="Published skills" value={metrics.publishedSkills} icon={BookOpenCheck} tone="green"/><Metric label="Draft standards" value={metrics.draftSkills} icon={Archive} tone="blue"/><Metric label="Skill requests" value={metrics.pendingRequests} icon={ClipboardCheck} tone="amber"/><Metric label="Pending reviews" value={metrics.pendingAssessments} icon={ShieldCheck} tone="red"/><Metric label="Active reviewers" value={metrics.activeReviewers} icon={Users} tone="cyan"/></div><section className="admin-band"><h2>Governance boundary</h2><p>Admins publish the standard. Students submit evidence. Authorized review staff decide against the captured standard inside this workspace. TrustScore remains controlled by the platform policy engine.</p></section></>}
+        {isAdmin && tab === 'overview' && <>
+          <div className="admin-metrics"><Metric label="Published skills" value={metrics.publishedSkills} icon={BookOpenCheck} tone="green"/><Metric label="Draft standards" value={metrics.draftSkills} icon={Archive} tone="blue"/><Metric label="Skill requests" value={metrics.pendingRequests} icon={ClipboardCheck} tone="amber"/><Metric label="Pending reviews" value={metrics.pendingAssessments} icon={ShieldCheck} tone="red"/><Metric label="Active reviewers" value={metrics.activeReviewers} icon={Users} tone="cyan"/></div>
+          <div className="admin-overview-grid">
+            <section className="admin-overview-card" aria-labelledby="admin-attention-title">
+              <header><div><span>WORKFLOW</span><h2 id="admin-attention-title">Needs attention</h2><p>Open the live queue behind each count.</p></div></header>
+              <div className="admin-overview-links">
+                <button type="button" onClick={() => openSection('reviews')}><ShieldCheck size={19}/><span><strong>Evidence reviews</strong><small>{metrics.pendingAssessments ? 'Student submissions are waiting for a decision.' : 'No evidence reviews pending.'}</small></span><b>{metrics.pendingAssessments ?? 0}</b><ArrowRight size={17}/></button>
+                <button type="button" onClick={() => openSection('requests')}><ClipboardCheck size={19}/><span><strong>Skill requests</strong><small>{metrics.pendingRequests ? 'Review student requests for catalog skills.' : 'No new skill requests.'}</small></span><b>{metrics.pendingRequests ?? 0}</b><ArrowRight size={17}/></button>
+                <button type="button" onClick={() => openSection('catalog', 'draft')}><Archive size={19}/><span><strong>Draft standards</strong><small>{metrics.draftSkills ? 'Finish and publish standards when ready.' : 'No unpublished drafts.'}</small></span><b>{metrics.draftSkills ?? 0}</b><ArrowRight size={17}/></button>
+              </div>
+              {metrics.activeReviewers === 0 && !loading && <p className="admin-overview-notice">No active review staff. <button type="button" onClick={() => openSection('reviewers')}>Set up the review team <ArrowRight size={14}/></button></p>}
+            </section>
+            <section className="admin-overview-card" aria-labelledby="admin-recent-title">
+              <header><div><span>CATALOG</span><h2 id="admin-recent-title">Recently published</h2><p>Current standards available to students.</p></div><button type="button" className="admin-overview-header-link" onClick={() => openSection('catalog', 'published')}>View all <ArrowRight size={16}/></button></header>
+              {loading && !overview ? <p className="admin-overview-empty">Loading published standards...</p> : recentPublishedSkills.length ? <div className="admin-recent-skills">{recentPublishedSkills.map(skill => <button type="button" key={skill.id} onClick={() => openSection('catalog', 'published', skill.name)}><BookOpenCheck size={18}/><span><strong>{skill.name}</strong><small>{skill.category} · {formatDate(skill.publishedAt)}</small></span><ArrowRight size={16}/></button>)}</div> : <p className="admin-overview-empty">No published standards yet. <button type="button" onClick={() => openSection('catalog')}>Create the first skill <ArrowRight size={14}/></button></p>}
+            </section>
+          </div>
+          <section className="admin-band"><h2>Governance boundary</h2><p>Admins publish the standard. Students submit evidence. Authorized review staff decide against the captured standard inside this workspace. TrustScore remains controlled by the platform policy engine.</p></section>
+        </>}
         {tab === 'reviews' && <ReviewQueue token={token} onUnauthorized={handleFailure}/>}
         {tab === 'catalog' && <>
           {editing ? <SkillEditor value={editing} busy={busy} onCancel={() => setEditing(null)} onSave={saveSkill}/> : <>
-            <div className="admin-toolbar">
+            <div className="admin-toolbar admin-catalog-toolbar">
               <label><Search size={16}/><input type="search" placeholder="Search skills or aliases" value={search} onChange={event => setSearch(event.target.value)}/></label>
               <AdminSelect ariaLabel="Catalog status" value={status} options={[["all", "All statuses"], ["draft", "Draft"], ["published", "Published"], ["archived", "Archived"]]} onChange={setStatus}/>
+              <label className="admin-demo-toggle"><input type="checkbox" checked={showCatalogDemo} onChange={event => setShowCatalogDemo(event.target.checked)}/>Demo examples</label>
               <button className="btn-primary" onClick={() => setEditing(emptySkill())}><Plus size={16}/>New skill</button>
             </div>
-            <div className="admin-table"><div className="admin-table-head"><span>Skill</span><span>Standard</span><span>Status</span><span></span></div>{loading ? <p>Loading catalog...</p> : filteredSkills.map(skill => <button key={skill.id} className="admin-table-row" onClick={() => setEditing(skill)}><span><strong>{skill.name}</strong><small>{skill.category}</small></span><span><small>{skill.dailyTasks.length} daily {skill.dailyTasks.length === 1 ? 'task' : 'tasks'} · {skill.renewalDays} day renewal</small></span><span className={`admin-status admin-status-${skill.status}`}>{skill.status}</span><span>Edit</span></button>)}{!loading && !filteredSkills.length && <p>No catalog skills match this view.</p>}</div>
+            {showCatalogDemo && <DemoCatalogExamples skills={demoCatalogSkills}/>}
+            <div className="admin-catalog-real-heading"><strong>Live catalog</strong><span>{loading ? 'Loading...' : `${filteredSkills.length} real ${filteredSkills.length === 1 ? 'standard' : 'standards'}`}</span></div>
+            <div className="admin-table"><div className="admin-table-head"><span>Skill</span><span>Standard</span><span>Status</span><span></span></div>{loading ? <p>Loading catalog...</p> : filteredSkills.map(skill => <button key={skill.id} className="admin-table-row" onClick={() => setEditing(skill)}><span><strong>{skill.name}</strong><small>{skill.category}</small></span><span><small>{skill.dailyTasks.length} daily {skill.dailyTasks.length === 1 ? 'task' : 'tasks'} · {skill.renewalDays} day renewal</small></span><span className={`admin-status admin-status-${skill.status}`}>{skill.status}</span><span>Edit</span></button>)}{!loading && !filteredSkills.length && <p>No real catalog skills match this view.</p>}</div>
           </>}
         </>}
-        {tab === 'requests' && <><div className="admin-toolbar"><AdminSelect ariaLabel="Request status" value={status} options={[['all', 'Pending requests'], ['approved', 'Approved'], ['merged', 'Merged'], ['rejected', 'Rejected']]} onChange={setStatus}/><label className="admin-demo-toggle"><input type="checkbox" checked={showRequestDemo} onChange={event => setShowRequestDemo(event.target.checked)}/>Demo examples</label></div><div className="admin-request-list">{loading ? <p>Loading requests...</p> : visibleRequests.map(request => { const draft = requestDrafts[request.id] || {}; return <article key={request.id} data-demo={request.demoData ? "true" : undefined}><header><div><strong>{request.requestedName}</strong><span>{request.category}</span></div><time>{formatDate(request.createdAt)}</time></header>{request.note && <p>{request.note}</p>}{request.status === 'pending' ? <div className="admin-request-decision"><label>Published catalog match<AdminSelect ariaLabel="Published catalog match" value={draft.skillCatalogId || ''} options={[['', 'Select skill'], ...skills.map(skill => [skill.id, skill.name])]} onChange={skillCatalogId => setRequestDrafts(current => ({ ...current, [request.id]: { ...draft, skillCatalogId } }))}/></label><label>Decision note<textarea rows={2} maxLength={1000} value={draft.feedback || ''} onChange={event => setRequestDrafts(current => ({ ...current, [request.id]: { ...draft, feedback: event.target.value } }))}/></label><div><button className="btn-secondary" disabled={busy || request.demoData || !draft.feedback?.trim()} onClick={() => decideRequest(request, 'rejected')}>Reject</button><button className="btn-secondary" disabled={busy || request.demoData || !draft.feedback?.trim() || !draft.skillCatalogId} onClick={() => decideRequest(request, 'merged')}>Merge with skill</button><button className="btn-primary" disabled={busy || request.demoData || !draft.feedback?.trim() || !draft.skillCatalogId} onClick={() => decideRequest(request, 'approved')}>Approve</button></div></div> : <p className="admin-request-result">{request.status}: {request.adminFeedback}</p>}</article> })}{!loading && !visibleRequests.length && <p>No requests in this view.</p>}</div></>}
+        {tab === 'requests' && <><div className="admin-toolbar"><AdminSelect ariaLabel="Request status" value={status} options={[['all', 'Pending requests'], ['approved', 'Approved'], ['merged', 'Merged'], ['rejected', 'Rejected']]} onChange={setStatus}/><label className="admin-demo-toggle"><input type="checkbox" checked={showRequestDemo} onChange={event => setShowRequestDemo(event.target.checked)}/>Demo examples</label></div><div className="admin-request-list">{loading ? <p>Loading requests...</p> : visibleRequests.map(request => { const draft = requestDrafts[request.id] || {}; return <article key={request.id} data-demo={request.demoData ? "true" : undefined}><header><div><strong>{request.requestedName}</strong><span>{request.category}</span></div><time>{formatDate(request.createdAt)}</time></header>{request.note && <p>{request.note}</p>}{request.status === 'pending' ? <details className="admin-request-workflow"><summary>{request.demoData ? 'Preview decision workflow' : 'Review request'}<ChevronDown size={16}/></summary><div className="admin-request-decision"><label>Published catalog match<AdminSelect ariaLabel="Published catalog match" value={draft.skillCatalogId || ''} options={[['', 'Select skill'], ...skills.map(skill => [skill.id, skill.name])]} onChange={skillCatalogId => setRequestDrafts(current => ({ ...current, [request.id]: { ...draft, skillCatalogId } }))}/></label><label>Decision note<textarea rows={2} maxLength={1000} value={draft.feedback || ''} onChange={event => setRequestDrafts(current => ({ ...current, [request.id]: { ...draft, feedback: event.target.value } }))}/></label><div><button type="button" className="btn-secondary" disabled={busy} onClick={() => decideRequest(request, 'rejected')}>Reject</button><button type="button" className="btn-secondary" disabled={busy} onClick={() => decideRequest(request, 'merged')}>Merge with skill</button><button type="button" className="btn-primary" disabled={busy} onClick={() => decideRequest(request, 'approved')}>Approve</button></div></div></details> : <p className="admin-request-result">{request.status}: {request.adminFeedback}</p>}</article> })}{!loading && !visibleRequests.length && <p>No requests in this view.</p>}</div></>}
         {tab === 'reviewers' && <><div className="admin-toolbar admin-reviewer-toolbar"><div><strong>Assessment review staff</strong><span>Provision queue-only staff accounts and immediately revoke access when needed.</span></div><button className="btn-primary" onClick={() => setShowReviewerForm(current => !current)}><Plus size={16}/>{showReviewerForm ? 'Close form' : 'New reviewer'}</button></div>
           {showReviewerForm && <form className="admin-reviewer-form" onSubmit={addReviewer}><label>Name<input required maxLength={100} value={reviewerDraft.name} onChange={event => setReviewerDraft(current => ({ ...current, name: event.target.value }))}/></label><label>Email<input required type="email" maxLength={160} value={reviewerDraft.email} onChange={event => setReviewerDraft(current => ({ ...current, email: event.target.value }))}/></label><label>Temporary password<input required type="password" minLength={12} maxLength={200} value={reviewerDraft.password} onChange={event => setReviewerDraft(current => ({ ...current, password: event.target.value }))}/><small>Minimum 12 characters. Share it through a secure channel.</small></label><button className="btn-primary" disabled={busy}>{busy ? 'Creating...' : 'Create reviewer'}</button></form>}
           <div className="admin-table"><div className="admin-table-head admin-reviewer-columns"><span>Reviewer</span><span>Account</span><span>Last sign-in</span><span></span></div>{loading ? <p>Loading reviewers...</p> : reviewers.map(reviewer => <div className="admin-table-row admin-reviewer-columns" key={reviewer.id}><span><strong>{reviewer.name}</strong><small>{reviewer.email}</small></span><span className={`admin-status admin-status-${reviewer.active ? 'published' : 'archived'}`}>{reviewer.active ? 'Active' : 'Inactive'}</span><span>{formatDate(reviewer.lastSignedInAt)}</span><button className="btn-secondary" disabled={busy} onClick={() => setReviewerActive(reviewer)}>{reviewer.active ? 'Suspend' : 'Activate'}</button></div>)}</div></>}

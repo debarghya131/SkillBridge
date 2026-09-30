@@ -8,7 +8,8 @@ import {
   Search,
   ListChecks,
   Receipt,
-  ChevronRight
+  ChevronRight,
+  Info
 } from 'lucide-react'
 const features = [
   [
@@ -139,8 +140,45 @@ export default function Features() {
                 <ChevronRight size={18} />
               </summary>
               <p>
-                No. A platform reviewer must approve your assessment. A project
-                link or a self-declared skill alone does not award TrustScore.
+                No. Verification requires a published skill standard and an
+                assessment approved by a platform reviewer. A project link or
+                a self-declared skill alone does not award TrustScore.
+              </p>
+            </details>
+            <details>
+              <summary>
+                Are student and organization identities independently verified?
+                <ChevronRight size={18} />
+              </summary>
+              <p>
+                Registration requires an Aadhaar or DigiLocker reference for
+                students and a GSTIN or Udyam reference for organizations.
+                SkillBridge stores a protected fingerprint of the supplied
+                reference, but does not check it with DigiLocker or a government
+                registry. Skill verification is a separate, human-reviewed process.
+              </p>
+            </details>
+            <details>
+              <summary>
+                Why does my TrustScore start at 0?
+                <ChevronRight size={18} />
+              </summary>
+              <p>
+                New accounts start at 0, and demo scores never count. Approved
+                skill evidence and completed GIGs earn eligible credit; accepted
+                Network and Team-Up milestones can also contribute. A low-scoring
+                reviewed rejection or expired verification may lower the score.
+                Individual connections and profile updates earn no points.
+              </p>
+            </details>
+            <details>
+              <summary>
+                Can I apply to a demo GIG?
+                <ChevronRight size={18} />
+              </summary>
+              <p>
+                No. Demo GIGs and talent profiles are read-only previews.
+                Applications and opportunities work with real records only.
               </p>
             </details>
             <details>
@@ -197,6 +235,7 @@ export default function Features() {
               <ArrowUpRight size={18} />
             </Link>
           </div>
+          <p className="sb-demo-note"><Info size={16} aria-hidden="true" /><span><strong>Demo examples are read-only.</strong> Your account shows only real TrustScore, applications, and payment records.</span></p>
         </div>
       </section>
     </>
